@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>dynamic_probe</NativeProbeName></PropertyGroup>
+  <Import Project="DictionaryProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="dictionary_probe.cpp" /><ClCompile Remove="..\native\Dictionary.cpp" />
+    <ClCompile Include="..\native\DynamicText.cpp" /><ClCompile Include="..\native\Text.cpp" /><ClCompile Include="dynamic_probe.cpp" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>lexicon_decode_probe</NativeProbeName></PropertyGroup>
+  <Import Project="DictionaryProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="dictionary_probe.cpp" /><ClCompile Remove="..\native\Dictionary.cpp" />
+    <ClCompile Include="..\native\LexiconDecode.cpp" /><ClCompile Include="lexicon_decode_probe.cpp" />
+  </ItemGroup>
+</Project>

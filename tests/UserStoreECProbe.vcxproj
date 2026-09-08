@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>user_store_probe</NativeProbeName></PropertyGroup>
+  <Import Project="ArchitectureLoadProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" />
+    <ClCompile Include="..\native\Dictionary.cpp" /><ClCompile Include="..\native\Lexicon.cpp" />
+    <ClCompile Include="..\native\Text.cpp" /><ClCompile Include="..\native\UserStore.cpp" />
+    <ClCompile Include="user_store_probe.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\native;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile></ItemDefinitionGroup>
+  <Target Name="RequireECProbe" BeforeTargets="PrepareForBuild"><Error Condition="'$(Platform)'!='ARM64EC'" Text="Build this probe with Platform=ARM64EC." /></Target>
+</Project>

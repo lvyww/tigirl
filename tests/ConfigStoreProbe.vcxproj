@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>config_store_probe</NativeProbeName></PropertyGroup>
+  <Import Project="EngineProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="engine_probe.cpp" /><ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" /><ClCompile Include="config_store_probe.cpp" /></ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+</Project>

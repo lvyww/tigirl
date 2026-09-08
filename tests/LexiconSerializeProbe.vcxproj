@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>lexicon_serialize_probe</NativeProbeName></PropertyGroup>
+  <Import Project="DictionaryProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="dictionary_probe.cpp" />
+    <ClCompile Include="..\native\LexiconSerialize.cpp" /><ClCompile Include="lexicon_serialize_probe.cpp" />
+  </ItemGroup>
+</Project>

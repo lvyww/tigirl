@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="EngineProbe.vcxproj" />
+  <PropertyGroup><NativeProbeName>settings_probe</NativeProbeName><TargetName>settings_probe</TargetName><IntDir>$(MSBuildProjectDirectory)\..\build\obj\settings-probe\</IntDir></PropertyGroup>
+  <ItemGroup><ClCompile Remove="engine_probe.cpp" /><ClCompile Include="settings_probe.cpp" /></ItemGroup>
+</Project>

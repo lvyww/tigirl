@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>reminder_stall_probe</NativeProbeName></PropertyGroup>
+  <Import Project="DictionaryProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="..\native\Dictionary.cpp" /><ClCompile Remove="dictionary_probe.cpp" /><ClCompile Include="reminder_stall_probe.cpp" /></ItemGroup>
+</Project>

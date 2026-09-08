@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>原生虎码 · 浏览器输入验收</title>
+<style>
+body{font:18px/1.6 system-ui,sans-serif;max-width:880px;margin:32px auto;padding:0 20px;color:#222}
+label{display:block;margin:20px 0 6px}input,textarea,[contenteditable]{box-sizing:border-box;width:100%;font:inherit;border:1px solid #777;border-radius:4px;padding:10px;background:white}
+textarea,[contenteditable]{min-height:130px}button{font:inherit;margin:12px 12px 12px 0;padding:6px 16px}pre{font:13px/1.5 monospace;max-height:300px;overflow:auto;background:#eee;padding:12px;white-space:pre-wrap}
+</style>
+<h1>浏览器输入验收</h1>
+<p>选择“原生虎码”及内置虎码字词方案。此页只记录本页三个测试区域的输入事件，无网络请求；请使用测试文字。</p>
+<ol>
+<li>在每个区域输入 <code>ab</code>，检查候选窗口；空格上屏应得到“交”。</li>
+<li>输入 <code>dk</code>，空格上屏应得到“口”。再输入 <code>ab</code>，按 Escape，已有“交口”应保留。</li>
+<li>输入 <code>ab</code> 后切换到另一个区域，输入并提交 <code>dk</code>，再返回原区域，检查两处文字和候选是否各自正确。</li>
+<li>分别检查数字选词、鼠标选词、Shift 切换中英文，以及多行区域回车后的候选位置。导出记录，并另行记录视觉结果。</li>
+</ol>
+<label for="single">普通输入框</label><input id="single" autocomplete="off" spellcheck="false" aria-label="普通输入框">
+<label for="multi">多行文本框</label><textarea id="multi" spellcheck="false" aria-label="多行文本框"></textarea>
+<label id="rich-label">富文本区域</label><div id="rich" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="rich-label" spellcheck="false"></div>
+<button id="export" type="button">导出事件记录</button><button id="clear" type="button">清空测试</button>
+<p id="status" role="status">尚未记录输入事件。</p><pre id="log"></pre>
+<script>
+'use strict';
+const fields = ['single', 'multi', 'rich'].map(id => document.getElementById(id));
+const records = [];
+const value = field => field.isContentEditable ? field.innerText : field.value;
+const snapshot = () => Object.fromEntries(fields.map(field => [field.id, value(field)]));
+for (const field of fields) {
+  for (const type of ['focus', 'blur', 'compositionstart', 'compositionupdate', 'compositionend', 'beforeinput', 'input']) {
+    field.addEventListener(type, event => {
+      records.push({time: performance.now(), field: field.id, type, data: event.data ?? null,
+        inputType: event.inputType ?? null, isComposing: event.isComposing ?? null,
+        value: value(field), selectionStart: field.selectionStart ?? null,
+        selectionEnd: field.selectionEnd ?? null});
+      document.getElementById('log').textContent = records.slice(-20).map(row => JSON.stringify(row)).join('\n');
+      document.getElementById('status').textContent = `已记录 ${records.length} 个事件；事件记录本身不代表验收通过。`;
+    });
+  }
+}
+document.getElementById('clear').onclick = () => {
+  fields.forEach(field => field.isContentEditable ? field.replaceChildren() : field.value = '');
+  records.length = 0;
+  document.getElementById('log').textContent = '';
+  document.getElementById('status').textContent = '已清空测试。';
+};
+document.getElementById('export').onclick = () => {
+  const report = {created: new Date().toISOString(), userAgent: navigator.userAgent,
+    devicePixelRatio, values: snapshot(), events: records,
+    architectureVerified: false, installedDllVerified: false, visualAcceptance: 'not recorded'};
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'}));
+  const link = document.createElement('a');link.href = url;link.download = 'native-tiger-browser-input.json';link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+</script>
+</html>
