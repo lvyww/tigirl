@@ -20,6 +20,7 @@ public:
     void update(bool chinese,bool enabled);
     void userWordFailure(bool failed);
     void management(std::filesystem::path root,std::function<void()> addWord);
+    void menuParent(HWND window) { menuParent_=window; }
     STDMETHODIMP QueryInterface(REFIID,void**) override;
     STDMETHODIMP_(ULONG) AddRef() override;
     STDMETHODIMP_(ULONG) Release() override;
@@ -37,6 +38,7 @@ public:
 private:
     ~LanguageBar();
     void notify(DWORD);
+    void traceMenu(const char* stage,HRESULT result=S_OK) const noexcept;
     struct MenuEntry {
         UINT id=0; std::wstring text,action,value; bool checked=false;
         std::vector<MenuEntry> children;
@@ -45,6 +47,7 @@ private:
     std::vector<MenuEntry> menu_;
     std::filesystem::path root_;
     std::function<void()> addWord_;
+    HWND menuParent_=nullptr;
     LONG refs_=1;
     HINSTANCE module_;
     TF_LANGBARITEMINFO info_{};

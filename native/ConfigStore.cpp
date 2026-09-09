@@ -28,6 +28,17 @@ struct Temporary {
     std::filesystem::path path;
     ~Temporary() { if(!path.empty()) DeleteFileW(path.c_str()); }
 };
+DWORD configurationReplaceFlags() {
+    Handle token;
+    if(!OpenThreadToken(GetCurrentThread(),TOKEN_QUERY,TRUE,&token.value)) {
+        if(GetLastError()!=ERROR_NO_TOKEN || !OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token.value))return 0;
+    }
+    DWORD container=0,size=0;
+    // A restricted writer can modify shared data but cannot copy a DACL.
+    // Its same-directory temporary already inherits the data directory ACL.
+    return GetTokenInformation(token.value,TokenIsAppContainer,&container,sizeof(container),&size) && container
+        ? REPLACEFILE_IGNORE_ACL_ERRORS : 0;
+}
 }
 std::u16string readConfiguration(const std::filesystem::path& path) {
     return decodeUnicodeText(readConfigurationBytes(path));
@@ -82,7 +93,7 @@ static void mutateConfiguration(const std::filesystem::path& path,
     }
     if(std::filesystem::exists(path)) {
         const auto backup=std::filesystem::path(temporary.path.native()+L".backup");
-        if(!ReplaceFileW(path.c_str(),temporary.path.c_str(),backup.c_str(),0,nullptr,nullptr)) {
+        if(!ReplaceFileW(path.c_str(),temporary.path.c_str(),backup.c_str(),configurationReplaceFlags(),nullptr,nullptr)) {
             const auto error=GetLastError();
             if(!std::filesystem::exists(path) && std::filesystem::exists(backup))
                 MoveFileExW(backup.c_str(),path.c_str(),MOVEFILE_WRITE_THROUGH);

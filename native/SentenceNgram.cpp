@@ -1,4 +1,5 @@
 #include "SentenceNgram.h"
+#include "FileCachePath.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -30,7 +31,7 @@ std::uint64_t triple(std::uint32_t a,std::uint32_t b,std::uint32_t c){return (st
 }
 std::shared_ptr<const SentenceNgram> SentenceNgram::Open(const std::filesystem::path& path) {
     static std::mutex mutex;static std::map<std::filesystem::path,std::weak_ptr<const SentenceNgram>> cache;
-    const auto canonical=std::filesystem::canonical(path);
+    const auto canonical=fileCachePath(path);
     std::lock_guard<std::mutex> lock(mutex);
     if(auto live=cache[canonical].lock())return live;
     auto model=std::shared_ptr<SentenceNgram>(new SentenceNgram);

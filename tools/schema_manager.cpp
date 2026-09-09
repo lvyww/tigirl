@@ -398,7 +398,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
             if(length)app.root=path;
             else {
                 PWSTR local=nullptr;
-                if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local)))throw std::runtime_error("Cannot locate user configuration");
+                if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local)))throw std::runtime_error("Cannot locate user configuration");
                 app.root=std::filesystem::path(local)/L"NativeTiger";CoTaskMemFree(local);
             }
             app.bundled=app.tools/L"tiger-v2.tcd";

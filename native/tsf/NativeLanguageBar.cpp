@@ -12,13 +12,14 @@
 #include "../CandidateTheme.h"
 #include "../OrdinalCase.h"
 #include <algorithm>
+#include <cstdio>
 extern void DllAddRef();
 extern void DllRelease();
 namespace tiger::tsf {
 LanguageBar::LanguageBar(HINSTANCE module,REFCLSID service,bool secure):module_(module),secure_(secure) {
     DllAddRef();
     info_.clsidService=service; info_.guidItem=ItemId;
-    info_.dwStyle=TF_LBI_STYLE_BTN_BUTTON;
+    info_.dwStyle=TF_LBI_STYLE_BTN_BUTTON|TF_LBI_STYLE_BTN_MENU;
     wcscpy_s(info_.szDescription,L"原生虎码 · 中英文切换");
 }
 LanguageBar::~LanguageBar(){DllRelease();}
@@ -33,6 +34,7 @@ HRESULT LanguageBar::open(ITfThreadMgr* manager,TfClientId client) {
     return hr;
 }
 void LanguageBar::close() {
+    menuParent_=nullptr;
     enabled_=false; addWord_={}; menu_.clear(); compartment_.Reset(); client_=TF_CLIENTID_NULL;
     auto manager=manager_; manager_.Reset();
     if(manager) manager->RemoveItem(this);
@@ -88,6 +90,18 @@ HRESULT LanguageBar::GetIcon(HICON* icon) {
 void LanguageBar::management(std::filesystem::path root,std::function<void()> addWord) {
     root_=std::move(root);addWord_=std::move(addWord);
 }
+void LanguageBar::traceMenu(const char* stage,HRESULT result) const noexcept {
+    try {
+        if(root_.empty() || GetFileAttributesW((root_/L"menu-trace.enabled").c_str())==INVALID_FILE_ATTRIBUTES)return;
+        const auto file=CreateFileW((root_/L"menu-trace.log").c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,
+            nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if(file==INVALID_HANDLE_VALUE)return;
+        char line[256];const auto size=sprintf_s(line,"%llu pid=%lu tid=%lu %s hr=%08lx parent=%p\r\n",
+            GetTickCount64(),GetCurrentProcessId(),GetCurrentThreadId(),stage,static_cast<unsigned long>(result),static_cast<void*>(menuParent_));
+        DWORD written=0;if(size>0)WriteFile(file,line,static_cast<DWORD>(size),&written,nullptr);
+        CloseHandle(file);
+    }catch(...){}
+}
 void LanguageBar::refreshMenu() {
     menu_={{1,L"方案管理"},{2,L"输入设置"}};
     if(root_.empty())return;
@@ -116,6 +130,7 @@ void LanguageBar::refreshMenu() {
         {8,L"切换到英文"}};
 }
 HRESULT LanguageBar::InitMenu(ITfMenu* menu) {
+    traceMenu("InitMenu");
     if(!menu)return E_POINTER;
     if(secure_ || !manager_)return S_FALSE;
     try {
@@ -152,6 +167,14 @@ HRESULT LanguageBar::OnMenuSelect(UINT id) {
             if(!selected || selected->action.empty())return E_INVALIDARG;
             action=selected->action;value=selected->value;
         }
+        if(action==L"theme") {
+            const std::u16string theme(reinterpret_cast<const char16_t*>(value.data()),value.size());
+            if(std::find(candidateThemeNames.begin(),candidateThemeNames.end(),theme)==candidateThemeNames.end())return E_INVALIDARG;
+            // A UWP host cannot reliably launch the desktop manager. Theme
+            // changes are data-only and use the same atomic writer here.
+            updateConfigurationValues(root_/L"config.txt",{{u"主题",theme}});
+            return S_OK;
+        }
         wchar_t modulePath[32768];const auto length=GetModuleFileNameW(module_,modulePath,32768);
         if(!length || length>=32768)return E_FAIL;
         const auto directory=std::filesystem::path(modulePath).parent_path();
@@ -171,6 +194,7 @@ HRESULT LanguageBar::OnMenuSelect(UINT id) {
     }catch(...){return E_FAIL;}
 }
 HRESULT LanguageBar::showMenu(POINT point,HWND candidateOwner) {
+    traceMenu(candidateOwner?"CandidateMenu":"TaskbarMenu");
     if(!secure_ && manager_) {
         Microsoft::WRL::ComPtr<ITfLangBarItemButton> alive(this);
         HMENU menu=CreatePopupMenu();if(!menu)return E_FAIL;
@@ -192,21 +216,31 @@ HRESULT LanguageBar::showMenu(POINT point,HWND candidateOwner) {
                 return true;
             };
             if(!append(menu,menu_)){DestroyMenu(menu);return E_FAIL;}
-        }catch(...){DestroyMenu(menu);return E_FAIL;}
-        HWND owner=candidateOwner?candidateOwner:CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"",WS_POPUP,0,0,0,0,nullptr,nullptr,module_,nullptr);
-        if(!owner){DestroyMenu(menu);return E_FAIL;}
-        if(!candidateOwner)SetForegroundWindow(owner);
+        }catch(...){traceMenu("BuildMenuFailed",E_FAIL);DestroyMenu(menu);return E_FAIL;}
+        // Use the input context's window as the owner, just as the candidate
+        // window does. A disconnected hidden desktop popup is unreliable in
+        // an immersive host when the click originates on the system taskbar.
+        HWND parent=IsWindow(menuParent_)?menuParent_:nullptr;
+        HWND owner=candidateOwner?candidateOwner:CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,L"STATIC",L"",WS_POPUP,point.x,point.y,0,0,parent,nullptr,module_,nullptr);
+        if(!owner){const auto hr=HRESULT_FROM_WIN32(GetLastError());traceMenu("CreateMenuOwnerFailed",hr);DestroyMenu(menu);return hr;}
+        if(!candidateOwner) {
+            if(parent)SetForegroundWindow(parent);
+            else SetForegroundWindow(owner);
+        }
+        SetLastError(ERROR_SUCCESS);
         const auto selected=TrackPopupMenuEx(menu,TPM_RETURNCMD|TPM_NONOTIFY|TPM_RIGHTBUTTON,point.x,point.y,owner,nullptr);
+        traceMenu(selected?"PopupSelected":"PopupEnded",selected?S_OK:HRESULT_FROM_WIN32(GetLastError()));
         if(!candidateOwner)DestroyWindow(owner);
         DestroyMenu(menu);
         const auto hr=selected?OnMenuSelect(selected):S_FALSE;
-        if(FAILED(hr))MessageBoxW(nullptr,L"无法打开管理程序，请检查原生虎码安装是否完整。",L"原生虎码",MB_OK|MB_ICONERROR);
+        if(FAILED(hr))MessageBoxW(nullptr,L"操作失败，请检查用户数据权限；当前应用也可能不允许启动管理程序。",L"原生虎码",MB_OK|MB_ICONERROR);
         return hr;
     }
     return S_FALSE;
 }
-HRESULT LanguageBar::OnClick(TfLBIClick click,POINT point,const RECT* area) {
-    if(click==TF_LBI_CLK_RIGHT && area)return showMenu(point);
+HRESULT LanguageBar::OnClick(TfLBIClick click,POINT point,const RECT*) {
+    traceMenu(click==TF_LBI_CLK_RIGHT?"RightClick":"LeftClick");
+    if(click==TF_LBI_CLK_RIGHT)return showMenu(point);
     if(click!=TF_LBI_CLK_LEFT || !enabled_ || !compartment_)return S_FALSE;
     // Keep the compartment alive if its notification deactivates the service.
     auto compartment=compartment_; const auto client=client_;

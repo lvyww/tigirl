@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'shortcut_arm64.ps1')
 . (Join-Path $PSScriptRoot 'sentence_package.ps1')
+. (Join-Path $PSScriptRoot 'appcontainer_data.ps1')
 Assert-NativeTigerShortcutAvailable ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME"
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 $transcribing = $false
@@ -102,6 +103,7 @@ try {
         }
     }
     $installedLoadChecks = Test-NativeTigerDeployment $destination $hashes -Arm64X:$Arm64X
+    Set-NativeTigerAppContainerAccess (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'NativeTiger')
     $registration = Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList @('/s', ('"' + $dll + '"')) -Wait -PassThru
     if ($registration.ExitCode -ne 0) { throw "regsvr32 failed: $($registration.ExitCode)" }
     $registered = (Get-Item "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32").GetValue('')

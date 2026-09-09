@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "PrivateFonts.h"
+#include "../FileCachePath.h"
 #include <algorithm>
 #include <map>
 #include <mutex>
@@ -11,7 +12,7 @@ namespace { constexpr DWORD flags=FR_PRIVATE|FR_NOT_ENUM; }
 std::shared_ptr<PrivateFonts> PrivateFonts::Open(const std::filesystem::path& directory) {
     static std::mutex mutex;
     static std::map<std::filesystem::path,std::weak_ptr<PrivateFonts>> cache;
-    const auto path=std::filesystem::weakly_canonical(directory);
+    const auto path=fileCachePath(directory);
     std::lock_guard<std::mutex> lock(mutex);
     for(auto it=cache.begin();it!=cache.end();) { if(it->second.expired()) it=cache.erase(it); else ++it; }
     if(auto found=cache.find(path);found!=cache.end()) if(auto fonts=found->second.lock()) return fonts;

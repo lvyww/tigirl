@@ -33,7 +33,9 @@ std::filesystem::path userRoot() {
         return root;
     }
     PWSTR local=nullptr;
-    if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local))) return {};
+    // The NativeTiger child is shared, but LocalAppData itself need not be.
+    // Resolve the path without probing the inaccessible parent directory.
+    if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local))) return {};
     std::filesystem::path root;
     try { root=std::filesystem::path(local)/L"NativeTiger"; }
     catch(...) { CoTaskMemFree(local); throw; }
@@ -116,6 +118,7 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         fontDirectory_=std::filesystem::path(path).parent_path()/L"字体";
         lexicon_=std::make_shared<Lexicon>(dictionary);
         secure_=(flags&TF_TMAE_SECUREMODE)!=0;
+        stage=L"Resolve user data directory";
         if(!secure_) {
             const auto root=userRoot(); userRoot_=root;
             if(!root.empty()) {
@@ -123,6 +126,7 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
                 settingsPath_=root/L"config.txt";
             }
         }
+        stage=L"Load user settings";
         reloadSettings();
         chinese_=config_.defaultChinese;
         manager_=manager; client_=client; active_=true;
@@ -160,6 +164,7 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         check(languageBar_->open(manager_.Get(),client_));
         OnSetThreadFocus();
         if(!secure_ && !userRoot_.empty()) {
+            stage=L"Create user data refresh timer";
             dataChanges_.open(userRoot_);
             nextDataWatch_=0; dataDirty_=true;
             dataTimer_=ManualTimer::create(Global::dllInstanceHandle,[this] {
@@ -171,6 +176,7 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
             dataTimer_->schedule(250);
         }
         if(!secure_) {
+            stage=L"Create sentence timer";
             sentenceTimer_=ManualTimer::create(Global::dllInstanceHandle,[this] {
                 ComPtr<ITfTextInputProcessorEx> alive(this);pollSentence();
             },L"NativeTiger.Sentence.");
@@ -178,6 +184,8 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         }
         return S_OK;
     } catch(HRESULT hr) {
+        OutputDebugStringW(L"NativeTiger activation failed: ");
+        OutputDebugStringW(stage);
         Deactivate();
         ComPtr<ICreateErrorInfo> create;
         if(SUCCEEDED(CreateErrorInfo(&create))) {
@@ -186,7 +194,26 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         }
         return hr;
     }
-      catch(const std::exception& error) { report(error.what()); Deactivate(); return E_FAIL; }
+      catch(const std::exception& error) {
+        report(error.what());
+        // Preserve the failing stage for callers even when a file operation
+        // throws a C++ exception instead of returning an HRESULT.
+        std::wstring description=stage;
+        description+=L": ";
+        const auto count=MultiByteToWideChar(CP_UTF8,0,error.what(),-1,nullptr,0);
+        if(count>0) {
+            std::wstring detail(count,L'\0');
+            MultiByteToWideChar(CP_UTF8,0,error.what(),-1,detail.data(),count);
+            detail.resize(count-1);description+=detail;
+        }
+        Deactivate();
+        ComPtr<ICreateErrorInfo> create;
+        if(SUCCEEDED(CreateErrorInfo(&create))) {
+            create->SetDescription(description.data());
+            ComPtr<IErrorInfo> info;if(SUCCEEDED(create.As(&info)))SetErrorInfo(0,info.Get());
+        }
+        return E_FAIL;
+      }
 }
 HRESULT Service::Deactivate() {
     if(sentenceTimer_){sentenceTimer_->close();sentenceTimer_.reset();}
@@ -704,6 +731,10 @@ void Service::refreshFocus(ITfContext* context) {
     hideUI();
     if(!active_ || !context) return;
     try {
+        if(languageBar_) {
+            ComPtr<ITfContextView> view;HWND window=nullptr;
+            if(SUCCEEDED(context->GetActiveView(&view)) && SUCCEEDED(view->GetWnd(&window)))languageBar_->menuParent(window);
+        }
         reloadSettings();
         if(store_ && userDataRootAvailable()) lexicon_=store_->refresh();
         auto current=state(context,true);

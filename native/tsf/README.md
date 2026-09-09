@@ -6,6 +6,42 @@ process. No resident Core or per-key IPC is involved. A context owns its engine
 and TSF composition; immutable dictionary storage is reused within a process
 and mapping-backed pages are shared across processes.
 
+Windows file caches use absolute lexical paths, not `canonical()`: under
+AppContainer, canonicalization can fail with access denied even when the same
+Program Files dictionary can be opened and mapped. File opens still enforce
+the original ACLs. `tests/AppContainerReadProbe.vcxproj` builds a read-only
+regression probe accepting an existing AppContainer PID, a dictionary path,
+and a sentence-model path. It impersonates that token to validate mapping,
+cache reuse and missing-file rejection; it does not test foreground UWP input.
+The service and manager resolve LocalAppData with
+`KF_FLAG_NO_PACKAGE_REDIRECTION | KF_FLAG_DONT_VERIFY`, so packaged hosts use the same NativeTiger
+root as desktop hosts. Installation grants AppContainer Modify access and a
+low integrity label only to that data tree, including existing children.
+External scheme sources and Program Files executables are not made writable.
+New files inherit this policy. AppContainer configuration replacement retains
+the inherited directory ACL when Windows cannot merge the old file's ACL;
+desktop writers retain the original strict replacement behavior.
+
+Theme menu actions write the shared configuration directly, without launching
+a desktop manager from the restricted host. The existing data watcher applies
+the change to other instances. The mode item declares both button and menu
+capabilities and accepts right-click callbacks without a rectangle.
+`AppContainerConfigProbe.vcxproj` tests shared known-folder resolution,
+bidirectional config visibility, actual menu theme selection, repeated atomic
+replacement and preservation of unrelated settings in a marked test directory.
+The lookup test runs after impersonation with a null token argument, matching
+the service call. Without DONT_VERIFY the shared child can be accessible while
+the parent LocalAppData existence probe fails and returns an empty user root.
+Taskbar popups use the current TSF context window as their owner. Foreground
+behavior still requires a real UWP acceptance test. Creating
+`menu-trace.enabled` in NativeTiger enables `menu-trace.log` with menu callback
+stages and HRESULTs (no composed text); remove the marker to disable it.
+
+2026-09-09 acceptance: the user confirmed the UWP/Start-menu fixes passed
+foreground testing after installation, including the reported skin and menu
+issues. ARM64, x64 and Win32 input regressions, restricted-token configuration
+and theme-menu tests, and the desktop popup/focus fixture also passed.
+
 Key preview copies the engine. Actual consumed keys request a synchronous TSF
 write edit session, replace the composition or insert committed text, and publish
 the new engine state. Unconsumed keys may still end an existing composition;

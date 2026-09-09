@@ -1,4 +1,5 @@
 #include "Dictionary.h"
+#include "FileCachePath.h"
 #include <cstring>
 #include <limits>
 #include <map>
@@ -29,7 +30,7 @@ std::size_t slot(Section section) noexcept {
 std::shared_ptr<const Dictionary> Dictionary::Open(const std::filesystem::path& path) {
     static std::mutex mutex;
     static std::map<std::filesystem::path, std::weak_ptr<const Dictionary>> cache;
-    const auto canonical = std::filesystem::canonical(path);
+    const auto canonical = fileCachePath(path);
     std::lock_guard<std::mutex> guard(mutex);
     auto found = cache.find(canonical);
     if (found != cache.end()) if (auto live = found->second.lock()) return live;
