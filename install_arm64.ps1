@@ -1,6 +1,7 @@
 ﻿param([switch]$Elevated, [switch]$CheckOnly, [switch]$Arm64X)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'shortcut_arm64.ps1')
+. (Join-Path $PSScriptRoot 'sentence_package.ps1')
 Assert-NativeTigerShortcutAvailable ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME"
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 $transcribing = $false
@@ -39,7 +40,8 @@ try {
     }
     $executables = @('SampleIME.dll', 'schema_select.exe', 'lexicon_import.exe', 'schema_manager.exe', 'timer_reminder.exe')
     if ($Arm64X) { $executables += @('verify_load_arm64.exe', 'verify_load_x64.exe') }
-    $artifacts = $executables + @('tiger-v2.tcd') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
+    Assert-NativeTigerSentenceModel (Join-Path $source 'Models\sentence-ngram-v2.bin')
+    $artifacts = $executables + @('tiger-v2.tcd', 'Models\sentence-ngram-v2.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
     $hashes = [ordered]@{}
     foreach ($file in $artifacts) {
         if (!(Test-Path "$source\$file")) { throw "Missing build artifact: $file" }

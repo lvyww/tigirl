@@ -1,12 +1,13 @@
 """Validate a real prepared schema before the native selector publishes config."""
 import hashlib,json,shutil,subprocess,tempfile
 from pathlib import Path
+from windows_process import run_windows
 ROOT=Path(__file__).resolve().parents[1];EXE=ROOT/'build/tests/ARM64/schema_select.exe'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='schema-selector-',dir=ROOT/'build') as tmp:
  root=Path(tmp);dictionary=ROOT/'data/tiger-v2.tcd';schema=root/'schemas/测试方案Ab';schema.mkdir(parents=True)
  shutil.copyfile(dictionary,schema/'tiger-v2.tcd')
- def select(name):return subprocess.run([str(EXE),win(root),win(dictionary),name],text=True,capture_output=True)
+ def select(name):return run_windows([str(EXE),win(root),win(dictionary),name],text=True,capture_output=True)
  assert select('虎码字词').returncode==0
  assert select('测试方案ab').returncode==0
  config=root/'config.txt';text=config.read_text(encoding='utf-8-sig')

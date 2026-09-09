@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import shutil
 import argparse
 from tsf_architectures import ROOT, variants
 
 PS = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 COMMAND = [PS] if Path('/proc/sys/fs/binfmt_misc/WSLInterop').exists() else ['/init', PS]
 parser = argparse.ArgumentParser()
+parser.add_argument('--builtin-override', action='store_true')
 parser.add_argument('--selection-race', action='store_true')
 parser.add_argument('--architecture', choices=['ARM64', 'x64'])
 parser.add_argument('--arm64x-only', action='store_true')
@@ -30,7 +32,7 @@ def registered():
 
 
 before = registered()
-output = ROOT / ('build/staged-tsf-selection-race.json' if args.selection_race else 'build/staged-tsf-activation.json')
+output = ROOT / ('build/staged-tsf-selection-race.json' if args.selection_race else 'build/staged-tsf-builtin-override.json' if args.builtin_override else 'build/staged-tsf-activation.json')
 report = {'status': 'running', 'checks': [], 'physical_input_tested': False,
           'real_applications_tested': False, 'installed': False}
 if args.selection_race:
@@ -44,6 +46,12 @@ try:
                 continue
             with tempfile.TemporaryDirectory(prefix='staged-activation-', dir=ROOT/'build') as temporary:
                 user = Path(temporary)
+                if args.builtin_override:
+                    (user/'.builtin-override-tsf-test').touch()
+                    schema=user/'schemas/虎码字词'
+                    generation=schema/'generations'/('a'*32);generation.mkdir(parents=True)
+                    shutil.copyfile(dll.parent/'tiger-v2.tcd',generation/'tiger-v2.tcd')
+                    (schema/'current.txt').write_text('generation\t'+'a'*32+'\n')
                 (user/'config.txt').write_text('最大码长\t4\n', encoding='utf-8-sig')
                 command = ('$env:NATIVE_TIGER_USER_ROOT=' + quote(win(user)) + '; & ' +
                            ' '.join(quote(value) for value in (win(host), win(dll), '-', win(manifest), '--selection-race' if args.selection_race else '--activation-only')) +

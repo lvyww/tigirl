@@ -65,6 +65,7 @@ void Engine::setLexicon(std::shared_ptr<const Lexicon> lexicon) {
     if (!lexicon) throw std::invalid_argument("Engine requires a lexicon");
     lexicon_ = std::move(lexicon);
     ++lexiconRevision_;
+    sentence_.invalidatePending(true);
     if(!mixedRaw_.empty()) rebuildMixed();
     refreshPage();
 }
@@ -83,6 +84,7 @@ void Engine::switchSchema(std::shared_ptr<const Lexicon> lexicon,Config config) 
     lexicon_=std::move(lexicon); ++lexiconRevision_;
     if(reload)return;
     mode_=previousMode; raw_=code; pageRaw_.clear(); page_=0;
+    if(mode_==Mode::Sentence) {sentence_.start(code,sentenceResources_);syncSentenceRaw();}
     // Original schema refresh preserves all raw keys. Long ordinary input
     // becomes a temporary mixed session even if the target disables mixed mode.
     if(mode_==Mode::Composing && !code.empty() &&
@@ -107,11 +109,13 @@ void Engine::configure(Config config) {
     pageRaw_.clear(); page_ = 0;
 }
 void Engine::cancel() {
+    sentence_.clear();
     mixedRaw_.clear(); mixedPreferred_.clear(); mixedResult_={};
     raw_.clear(); pageRaw_.clear(); page_ = 0;
     mode_ = chinese() ? Mode::Idle : Mode::English;
 }
 void Engine::focusChanged() {
+    sentence_.invalidatePending();
     oneShotActionKey_ = 0;
     schemaAwaitingModifierRelease_ = false;
     leftShift_ = rightShift_ = shiftChord_ = false;
@@ -137,7 +141,7 @@ void Engine::rebuildMixed() {
 }
 KeyResult Engine::setChinese(bool enabled) {
     if (enabled == chinese()) return {};
-    std::u16string text = enabled ? std::u16string{} : mixedRaw_.empty()?raw_:mixedRaw_;
+    std::u16string text = enabled ? std::u16string{} : mode_==Mode::Sentence?sentence_.liveRaw():mixedRaw_.empty()?raw_:mixedRaw_;
     cancel();
     mode_ = enabled ? Mode::Idle : Mode::English;
     return {!text.empty(), false, std::move(text)};
@@ -167,6 +171,10 @@ std::u16string Engine::resolve(std::u16string_view code) const {
     return found.count ? convert(output(lexicon_->value(found, 0))) : std::u16string(code);
 }
 KeyResult Engine::selectRaw(int index) {
+    if(mode_==Mode::Sentence) {
+        auto text=sentence_.commitCandidate(index);
+        return text?finish(std::move(*text)):KeyResult{true,false,{}};
+    }
     refreshPage();
     return finishMixed(selected(index));
 }
@@ -235,12 +243,12 @@ bool Engine::controlSpace(const KeyEvent& key, KeyResult& result) {
     cleanup();
     return handled;
 }
-KeyResult Engine::process(const KeyEvent& key) {
-    auto result = dispatch(key);
+KeyResult Engine::process(const KeyEvent& key,const SentencePathQueries& queries) {
+    auto result = dispatch(key,queries);
     postprocess(key, result);
     return result;
 }
-KeyResult Engine::dispatch(KeyEvent key) {
+KeyResult Engine::dispatch(KeyEvent key,const SentencePathQueries& queries) {
     if(!key.down && modifier(key.vk) && !key.shift && !key.ctrl && !key.alt && !key.win)
         schemaAwaitingModifierRelease_ = false;
     if (!key.down && key.vk == oneShotActionKey_) oneShotActionKey_ = 0;
@@ -328,6 +336,7 @@ KeyResult Engine::dispatch(KeyEvent key) {
     if (key.vk == Caps && composing()) {
         std::u16string commit;
         if (mode_ == Mode::Pinyin) { refreshPage(); auto all = entry(); commit = all.count ? convert(output(lexicon_->value(all, 0))) : raw_; }
+        else if(mode_==Mode::Sentence)commit=sentence_.liveRaw();
         else commit = mixedResult_.prefix+resolve(raw_);
         cancel(); mode_ = Mode::Idle;
         return {false, false, std::move(commit)};
@@ -336,6 +345,7 @@ KeyResult Engine::dispatch(KeyEvent key) {
     refreshPage();
     if (mode_ == Mode::Idle) return idle(key);
     if (mode_ == Mode::Uppercase) return uppercase(key);
+    if (mode_ == Mode::Sentence) return sentence(key,queries);
     return composition(key);
 }
 
@@ -397,6 +407,7 @@ KeyResult Engine::idle(const KeyEvent& key) {
     if (!text.empty()) return {true, false, std::move(text)};
     if (letter(vk)) {
         raw_ = static_cast<char16_t>(key.shift ? vk : vk + 32);
+        if(sentenceEnabled_ && !key.shift) {sentence_.start(raw_,sentenceResources_);mode_=Mode::Sentence;return {true,false,{}};}
         mode_ = key.shift ? Mode::Uppercase : Mode::Composing;
         if(!key.shift && config_.mixedInput) { mixedRaw_=raw_; rebuildMixed(); return {true,false,{}}; }
         if (!key.shift && config_.maxCodeLength == 1 && config_.maxCodeAutoCommit && entry().unique()) return finish(resolve(raw_));
@@ -408,6 +419,58 @@ KeyResult Engine::idle(const KeyEvent& key) {
     if (vk == Return) return {false, false, u"\n"};
     return {};
 }
+void Engine::enableSentenceInput(bool enabled,std::uint64_t revision,bool automatic,int retainedRaw) {
+    if(sentenceAutomatic_!=automatic || sentenceRetainedRaw_!=retainedRaw)sentence_.resetAutomaticState();
+    sentenceAutomatic_=automatic;sentenceRetainedRaw_=retainedRaw;
+    sentenceEnabled_=enabled;sentenceResources_=revision;
+    if(mode_==Mode::Sentence) {
+        if(!enabled)cancel();
+        else {sentence_.changeResources(revision);syncSentenceRaw();}
+    }
+}
+KeyResult Engine::autoCommitSentence() {
+    if(mode_!=Mode::Sentence)return {};
+    auto commit=sentence_.tryAutoCommit(sentenceAutomatic_,sentenceRetainedRaw_);
+    if(!commit)return {};
+    syncSentenceRaw();return {true,false,std::move(*commit)};
+}
+std::optional<SentenceDecodeTicket> Engine::sentenceRequest() const {
+    return mode_==Mode::Sentence?sentence_.request():std::optional<SentenceDecodeTicket>{};
+}
+bool Engine::applySentenceResult(const SentenceDecodeTicket& ticket,SentenceDecodeResult result) {
+    if(mode_!=Mode::Sentence)return false;
+    bool applied=sentence_.apply(ticket,std::move(result));if(applied)syncSentenceRaw();return applied;
+}
+void Engine::syncSentenceRaw(){raw_=sentence_.liveRaw();if(!sentence_.active())mode_=Mode::Idle;}
+KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& queries) {
+    const int vk=key.vk;
+    if(vk==Back){sentence_.backspace();syncSentenceRaw();return {true,false,{}};}
+    if(vk==Escape)return finish();
+    if(vk==Return)return finish(sentence_.commitRaw(config_.enterClear));
+    const bool selector=!key.shift && (digitKey(vk) || (vk==Semi && config_.semicolonSecond) || (vk==Quote && config_.quoteThird));
+    if(letter(vk) || selector) {
+        char16_t c=letter(vk)?static_cast<char16_t>(vk+32):vk==Semi?u';':vk==Quote?u'\'':static_cast<char16_t>(vk>=96?'0'+vk-96:vk);
+        auto commit=sentence_.appendAutomatic(c,sentenceAutomatic_,sentenceRetainedRaw_,queries);
+        syncSentenceRaw();return {true,false,commit?std::move(*commit):std::u16string{}};
+    }
+    auto suffix=vk==Quote?std::u16string{}:symbol(vk,key.shift,config_.englishPunctuation);
+    const bool needsCurrent=vk==Tab || vk==Space || vk==38 || vk==40 || vk==Quote || !suffix.empty();
+    if(vk==Tab || vk==Space || vk==38 || vk==40)sentence_.resetEmptyCodePending();
+    if(needsCurrent && !sentence_.current()) {
+        KeyResult pending;pending.handled=true;pending.awaitSentenceDecode=true;return pending;
+    }
+    if(vk==Tab || vk==38 || vk==40) {
+        if(vk==Tab && sentence_.result().candidates.empty() && config_.tabClear)return finish();
+        sentence_.moveSelection(vk==38 || (vk==Tab && key.shift)?-1:1,config_.pageSize);return {true,false,{}};
+    }
+    if(vk==Space) {
+        auto text=sentence_.commitCandidate(sentence_.selectedIndex());return text?finish(std::move(*text)):KeyResult{true,false,{}};
+    }
+    if(vk==Quote)suffix=quote(key.shift);
+    if(!suffix.empty())return finish(sentence_.commitWithSuffix(suffix));
+    return {};
+}
+
 KeyResult Engine::composition(const KeyEvent& key) {
     const int vk = key.vk;
     const bool pinyin = mode_ == Mode::Pinyin;
@@ -548,6 +611,15 @@ std::u16string Engine::annotation(std::u16string_view packed) const {
     return result;
 }
 Candidate Engine::candidateAt(std::uint32_t index) const {
+    if(mode_==Mode::Sentence) {
+        // A pending result may still contain a candidate already committed in
+        // full. Original published candidates omit its empty remaining text.
+        for(int i=0;i<static_cast<int>(sentence_.result().candidates.size());++i) {
+            auto text=sentence_.candidateText(i);if(text.empty())continue;
+            if(index--==0)return {convert(text),convert(text),annotation(text)};
+        }
+        return {};
+    }
     const auto all = entry();
     if (index >= all.count) return {};
     const auto packed = lexicon_->value(all, index);
@@ -559,7 +631,15 @@ Snapshot Engine::snapshot() {
     refreshPage();
     Snapshot result;
     result.chinese = chinese(); result.mode = mode_; result.raw = raw_; result.page = page_;
-    if(!mixedRaw_.empty()) { result.raw=mixedRaw_; result.surface=mixedResult_.surface; }
+    if(!mixedRaw_.empty()) { result.raw=mixedRaw_; result.surface=mixedResult_.surface; result.displayPrefixLength=mixedResult_.prefix.size(); }
+    if(mode_==Mode::Sentence) {
+        result.raw=sentence_.liveRaw();result.surface=sentence_.displayCode();
+        for(int i=0;i<static_cast<int>(sentence_.result().candidates.size());++i)
+            if(!sentence_.candidateText(i).empty())++result.total;
+        for(std::uint32_t i=0;i<std::min(result.total,static_cast<std::uint32_t>(config_.pageSize));++i)result.candidates.push_back(candidateAt(i));
+        result.selectedCandidate=sentence_.selectedIndex()<static_cast<int>(result.candidates.size())?sentence_.selectedIndex():-1;
+        return result;
+    }
     const auto all = entry(); result.total = all.count;
     for (int i = 0; i < config_.pageSize; ++i) {
         const auto n = static_cast<std::uint32_t>(page_ * config_.pageSize + i);

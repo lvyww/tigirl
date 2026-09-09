@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include "LanguageBar.h"
 #include "../../SampleIME/resource.h"
 #include <cwchar>
@@ -5,6 +6,12 @@
 #include <string>
 #include <ctffunc.h>
 #include <olectl.h>
+#include "../ConfigStore.h"
+#include "../Settings.h"
+#include "../SchemaCatalog.h"
+#include "../CandidateTheme.h"
+#include "../OrdinalCase.h"
+#include <algorithm>
 extern void DllAddRef();
 extern void DllRelease();
 namespace tiger::tsf {
@@ -26,7 +33,7 @@ HRESULT LanguageBar::open(ITfThreadMgr* manager,TfClientId client) {
     return hr;
 }
 void LanguageBar::close() {
-    enabled_=false; compartment_.Reset(); client_=TF_CLIENTID_NULL;
+    enabled_=false; addWord_={}; menu_.clear(); compartment_.Reset(); client_=TF_CLIENTID_NULL;
     auto manager=manager_; manager_.Reset();
     if(manager) manager->RemoveItem(this);
     sink_.Reset();
@@ -78,42 +85,128 @@ HRESULT LanguageBar::GetIcon(HICON* icon) {
     } else *icon=static_cast<HICON>(LoadImageW(module_,MAKEINTRESOURCEW(chinese_?IDI_IME_MODE_ON:IDI_IME_MODE_OFF),IMAGE_ICON,size,size,0));
     return *icon?S_OK:E_FAIL;
 }
+void LanguageBar::management(std::filesystem::path root,std::function<void()> addWord) {
+    root_=std::move(root);addWord_=std::move(addWord);
+}
+void LanguageBar::refreshMenu() {
+    menu_={{1,L"方案管理"},{2,L"输入设置"}};
+    if(root_.empty())return;
+    const auto text=readConfiguration(root_/L"config.txt");
+    const auto current=currentSchemaSetting(text);
+    auto source=configurationValue(text,u"码表存储位置");
+    auto folder=source.empty()?root_/L"码表":std::filesystem::path(source);
+    if(folder.is_relative())folder=root_/folder;
+    auto names=schemaNames(root_);
+    std::error_code error;
+    for(std::filesystem::directory_iterator it(folder,error),end;!error && it!=end;it.increment(error)) {
+        const auto name=it->path().filename().u16string();
+        if(it->is_directory(error) && validSchemaName(name))names.push_back(name);
+    }
+    std::sort(names.begin(),names.end(),[](const auto& a,const auto& b){return ordinalCompareIgnoreCase(a,b)<0;});
+    names.erase(std::unique(names.begin(),names.end(),[](const auto& a,const auto& b){return ordinalCompareIgnoreCase(a,b)==0;}),names.end());
+    auto wide=[](std::u16string_view value){return std::wstring(reinterpret_cast<const wchar_t*>(value.data()),value.size());};
+    MenuEntry schemas{10,L"方案"},themes{11,L"主题"};
+    UINT id=100;
+    for(const auto& name:names)schemas.children.push_back({id++,wide(name),L"use",wide(name),ordinalCompareIgnoreCase(name,current.empty()?u"虎码字词":current)==0});
+    const auto theme=parseCandidateStyle(text).theme;
+    for(const auto name:candidateThemeNames)themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
+    menu_={{7,L"虎爪 Github 页面",L"official"},{},
+        {3,L"方案文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
+        {5,L"加词"},std::move(schemas),std::move(themes),{1,L"方案管理"},{2,L"输入设置"},{},
+        {8,L"切换到英文"}};
+}
 HRESULT LanguageBar::InitMenu(ITfMenu* menu) {
     if(!menu)return E_POINTER;
     if(secure_ || !manager_)return S_FALSE;
-    auto hr=menu->AddMenuItem(1,0,nullptr,nullptr,L"方案管理",4,nullptr);
-    if(SUCCEEDED(hr))hr=menu->AddMenuItem(2,0,nullptr,nullptr,L"输入设置",4,nullptr);
-    return hr;
+    try {
+        refreshMenu();
+        std::function<HRESULT(ITfMenu*,const std::vector<MenuEntry>&)> append;
+        append=[&](ITfMenu* target,const std::vector<MenuEntry>& entries) {
+            for(const auto& entry:entries) {
+                Microsoft::WRL::ComPtr<ITfMenu> child;
+                ITfMenu* rawChild=nullptr;
+                DWORD flags=entry.id==0?TF_LBMENUF_SEPARATOR:entry.children.empty()?0:TF_LBMENUF_SUBMENU;
+                if(entry.checked)flags|=TF_LBMENUF_CHECKED;
+                const auto hr=target->AddMenuItem(entry.id,flags,nullptr,nullptr,entry.text.c_str(),static_cast<ULONG>(entry.text.size()),entry.children.empty()?nullptr:&rawChild);
+                child.Attach(rawChild);
+                if(FAILED(hr))return hr;
+                if(child){const auto nested=append(child.Get(),entry.children);if(FAILED(nested))return nested;}
+            }
+            return S_OK;
+        };
+        return append(menu,menu_);
+    }catch(...){return E_FAIL;}
 }
 HRESULT LanguageBar::OnMenuSelect(UINT id) {
-    if(id!=1 && id!=2)return E_INVALIDARG;
     if(secure_ || !manager_)return S_FALSE;
     try {
+        if(id==5){if(!addWord_)return S_FALSE;auto callback=addWord_;callback();return S_OK;}
+        if(id==8){if(!compartment_)return S_FALSE;VARIANT value;VariantInit(&value);value.vt=VT_I4;value.lVal=0;return compartment_->SetValue(client_,&value);}
+        std::wstring action,value;
+        if(id!=1 && id!=2) {
+            const MenuEntry* selected=nullptr;
+            for(const auto& entry:menu_) {
+                if(entry.id==id)selected=&entry;
+                for(const auto& child:entry.children)if(child.id==id)selected=&child;
+            }
+            if(!selected || selected->action.empty())return E_INVALIDARG;
+            action=selected->action;value=selected->value;
+        }
         wchar_t modulePath[32768];const auto length=GetModuleFileNameW(module_,modulePath,32768);
         if(!length || length>=32768)return E_FAIL;
         const auto directory=std::filesystem::path(modulePath).parent_path();
         const auto executable=directory/L"schema_manager.exe";
-        auto command=L"\""+executable.wstring()+L"\""+(id==2?L" --settings":L"");
+        // Windows command-line quoting, including trailing backslashes.
+        auto quote=[](std::wstring_view arg) {
+            std::wstring out=L"\"";std::size_t slashes=0;
+            for(auto ch:arg){if(ch==L'\\'){++slashes;continue;}out.append(slashes*(ch==L'"'?2:1),L'\\');slashes=0;if(ch==L'"')out+=L'\\';out+=ch;}
+            out.append(slashes*2,L'\\');return out+L"\"";
+        };
+        auto command=quote(executable.wstring())+(id==2?L" --settings":L"");
+        if(id!=1 && id!=2)command+=L" --menu-action "+quote(action)+L" "+quote(value);
         STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
         if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,directory.c_str(),&startup,&process))
             return HRESULT_FROM_WIN32(GetLastError());
         CloseHandle(process.hThread);CloseHandle(process.hProcess);return S_OK;
     }catch(...){return E_FAIL;}
 }
-HRESULT LanguageBar::OnClick(TfLBIClick click,POINT point,const RECT* area) {
-    if(click==TF_LBI_CLK_RIGHT && area && !secure_ && manager_) {
+HRESULT LanguageBar::showMenu(POINT point,HWND candidateOwner) {
+    if(!secure_ && manager_) {
         Microsoft::WRL::ComPtr<ITfLangBarItemButton> alive(this);
         HMENU menu=CreatePopupMenu();if(!menu)return E_FAIL;
-        AppendMenuW(menu,MF_STRING,1,L"方案管理");AppendMenuW(menu,MF_STRING,2,L"输入设置");
-        HWND owner=CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"",WS_POPUP,0,0,0,0,nullptr,nullptr,module_,nullptr);
+        try {
+            refreshMenu();
+            std::function<bool(HMENU,const std::vector<MenuEntry>&)> append;
+            append=[&](HMENU target,const std::vector<MenuEntry>& entries) {
+                for(const auto& entry:entries) {
+                    if(entry.id==0){if(!AppendMenuW(target,MF_SEPARATOR,0,nullptr))return false;continue;}
+                    UINT flags=MF_STRING|(entry.checked?MF_CHECKED:0);
+                    UINT_PTR item=entry.id;HMENU child=nullptr;
+                    if(!entry.children.empty()) {
+                        child=CreatePopupMenu();if(!child)return false;
+                        if(!append(child,entry.children)){DestroyMenu(child);return false;}
+                        flags|=MF_POPUP;item=reinterpret_cast<UINT_PTR>(child);
+                    }
+                    if(!AppendMenuW(target,flags,item,entry.text.c_str())){if(child)DestroyMenu(child);return false;}
+                }
+                return true;
+            };
+            if(!append(menu,menu_)){DestroyMenu(menu);return E_FAIL;}
+        }catch(...){DestroyMenu(menu);return E_FAIL;}
+        HWND owner=candidateOwner?candidateOwner:CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"",WS_POPUP,0,0,0,0,nullptr,nullptr,module_,nullptr);
         if(!owner){DestroyMenu(menu);return E_FAIL;}
-        SetForegroundWindow(owner);
+        if(!candidateOwner)SetForegroundWindow(owner);
         const auto selected=TrackPopupMenuEx(menu,TPM_RETURNCMD|TPM_NONOTIFY|TPM_RIGHTBUTTON,point.x,point.y,owner,nullptr);
-        DestroyWindow(owner);DestroyMenu(menu);
+        if(!candidateOwner)DestroyWindow(owner);
+        DestroyMenu(menu);
         const auto hr=selected?OnMenuSelect(selected):S_FALSE;
         if(FAILED(hr))MessageBoxW(nullptr,L"无法打开管理程序，请检查原生虎码安装是否完整。",L"原生虎码",MB_OK|MB_ICONERROR);
         return hr;
     }
+    return S_FALSE;
+}
+HRESULT LanguageBar::OnClick(TfLBIClick click,POINT point,const RECT* area) {
+    if(click==TF_LBI_CLK_RIGHT && area)return showMenu(point);
     if(click!=TF_LBI_CLK_LEFT || !enabled_ || !compartment_)return S_FALSE;
     // Keep the compartment alive if its notification deactivates the service.
     auto compartment=compartment_; const auto client=client_;

@@ -34,6 +34,14 @@ public:
     std::shared_ptr<const Lexicon> changed(const UserChange& change, bool* didChange = nullptr) const;
     std::uint32_t quickSymbols() const;
     std::size_t editedCodes() const { return edits_.size(); }
+    // Exact codes introduced by user operations, in first-insertion order.
+    // Empty codes retain their place after deleting their last candidate.
+    const std::vector<std::u16string>& addedCodes() const { return addedCodes_; }
+    // Visit only the small user overlay, in deterministic key order. References
+    // remain owned by this immutable snapshot; no base-table expansion occurs.
+    template<class Visitor> void visitUserEdits(Visitor visitor) const {
+        for(const auto& edit:edits_)visitor(std::u16string_view(edit.first),*edit.second);
+    }
     bool equivalent(const Lexicon& other) const;
     const std::shared_ptr<const Dictionary>& dictionary() const { return dictionary_; }
 
@@ -49,6 +57,7 @@ private:
     void rebuildQuickSymbols(std::u16string_view addedKey);
     std::shared_ptr<const Dictionary> dictionary_;
     Edits edits_;
+    std::vector<std::u16string> addedCodes_;
     std::uint32_t quick_ = 0;
     bool quickReady_ = false, hasA_ = false, zInside_ = false;
 };

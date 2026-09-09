@@ -41,3 +41,88 @@ ARM64 pass. The TSF host's native mouse test now locates the rendered highlight
 instead of assuming a fixed font/row/header size; execution against the pending
 installed DLL is still required. Previous installed popup screenshots do not
 validate this new layout.
+
+## Delayed reveal
+
+The appearance settings accept TigerClaw's original keys:
+
+| Key | Default | Range |
+| --- | --- | --- |
+| 延时显示候选(毫秒) | 0 | 0–60000 ms |
+| 延时展开注释和拆分(毫秒) | 0 | 0–60000 ms |
+
+Blank/invalid config values mean zero; signed integer values clamp to the range
+(int32 overflow is invalid). The settings dialog accepts blank as zero and rejects
+out-of-range or non-integer edits without saving.
+
+Both clocks start with the candidate display session, not with every keystroke.
+Once revealed, content stays expanded through further typing, paging and selection.
+Annotations cannot appear before candidates; their delay is measured from the same
+start, not added to the candidate delay. Pinyin reverse-lookup annotations bypass
+the annotation delay. As in TigerClaw, an absent candidate/annotation list latches
+that part as expanded. A positive candidate delay overrides 隐藏候选 after the wait;
+with zero delay, 隐藏候选 continues to hide candidates permanently. Before reveal,
+encoding appears only when 候选窗显示编码 is enabled.
+
+The UI owns a Win32 timer on its nonactivating candidate window, including when
+that window is temporarily hidden awaiting reveal. Commit/cancel/focus teardown
+removes the window and timer. Missing caret geometry prevents display; a timer
+never reuses stale geometry to show the window. TSF UI-less candidate enumeration,
+selection and commit remain available during the visual delay.
+
+Validation: `python3 tests/candidate_reveal_test.py` covers clock boundaries,
+independent deadlines, latching, reset, hidden/code-only display, pinyin and parsing.
+`python3 tests/input_settings_test.py` exercises save/reopen/cancel, eight invalid
+delay edits and native settings layouts at 96/144/192 DPI on an inactive desktop.
+
+## Candidate mouse controls
+
+Right-button down opens the same schema/theme/management menu as the language-bar
+button. The candidate HWND owns this popup; unlike the taskbar entry point, this
+path does not create and activate a temporary owner window. Cancelling the menu
+therefore leaves the application's composition and focus in place.
+
+A vertical mouse-wheel delta of +120 increases font size by 0.5; negative deltas
+shrink it. No Ctrl modifier is required. Fractional deltas are proportional; the
+saved value is rounded to two decimal places and clamped to 3–200. The stable
+configuration lock protects read/modify/write against other TSF instances, and
+only 字体大小 is changed, without an input-settings reload request. The current
+candidate renderer is replaced and relaid out immediately, retaining selection
+and reveal-session state. Other instances pick up the saved style through the
+existing configuration watcher. Wheel delivery uses normal Windows messages;
+no global mouse hook or Core process is introduced.
+
+`tests/candidate_mouse_test.py` drives actual TSF candidate windows in a temporary foreground
+host: enlarge/shrink, persisted value, popup contents/cancel, retained focus
+and composition, and subsequent Space commit. `tests/candidate_font_wheel_test.py`
+checks bounds, fractional deltas, preservation of unrelated fields, and concurrent
+writers. Neither test injects global input or switches the input desktop.
+
+## TigerClaw mode layout (2026-09-09)
+
+This section supersedes the former uniform 6-DIP padding and 10-DIP spacing.
+Middle-button release cycles horizontal → vertical → code-only → horizontal.
+Horizontal and vertical show-code preferences are remembered separately for the
+service lifetime, as the reference Overlay remembers them for its lifetime. Each
+cycle atomically saves the three public display flags together, without resetting
+composition. A positive reveal delay retains the original hide/delay interaction.
+
+Padding (left/top/right/bottom, DIP): vertical 12/8/8/7; horizontal 8/8/8/8;
+code-only round(fontSize×0.4)/2/round(fontSize×0.4)/2. Theme border width is outside
+this padding. Line heights are ceil(fontSize×1.5) vertically and ceil(fontSize)
+horizontally/code-only. Minimum text-control widths are ceil(fontSize×3.76+15)
+vertically and ceil(fontSize×2.88+15) horizontally; code-only has no minimum.
+Horizontal gaps use actual font widths for two spaces; after input code, append
+max(0,7-codeLength) spaces. No horizontal wrapping; the work-area width cap trims
+long text and prevents clipped-away candidates from retaining mouse targets.
+
+Placement now uses the reference's 5 physical-pixel caret gap and 2 physical-pixel
+right/bottom reserve. If below does not fit, choose above when it fits or has more
+space, and retain above placement as content shrinks during the session. Reset on
+monitor change or UI teardown. Continue using the actual TSF caret and existing
+PMv2 conversion rather than the Overlay's IPC anchor cache/Start-menu heuristics.
+
+Validation includes three architectures, nine themes, DPI roundtrips, mode padding,
+minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work areas
+at 96/120/144/192 DPI. These simulated placement checks do not establish physical
+multi-monitor dragging behavior in Word or WeChat; that remains user acceptance.

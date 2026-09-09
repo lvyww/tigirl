@@ -2,6 +2,7 @@
 #include "../../SampleIME/Private.h"
 #include "../../SampleIME/Globals.h"
 #include "CandidateUI.h"
+#include "CandidateDpi.h"
 #include <algorithm>
 #include <cmath>
 #include "../CandidateTheme.h"
@@ -10,24 +11,32 @@
 
 namespace tiger::tsf {
 namespace {
-std::wstring wide(std::u16string_view text) { return {reinterpret_cast<const wchar_t*>(text.data()),text.size()}; }
 constexpr wchar_t windowClass[]=L"NativeTiger.Candidate.v1";
+
 }
 CandidateUI::CandidateUI(Service* owner,std::shared_ptr<Context> state,CandidateStyle style,std::shared_ptr<PrivateFonts> fonts)
     :owner_(owner),state_(std::move(state)),engine_(state_->engine),snapshot_(engine_.snapshot()),style_(std::move(style)),fonts_(std::move(fonts)) {
-    selected_=static_cast<UINT>(snapshot_.page*engine_.pageSize());
+    selected_=snapshot_.selectedCandidate>=0?static_cast<UINT>(snapshot_.selectedCandidate):static_cast<UINT>(snapshot_.page*engine_.pageSize());
     for(UINT i=0;i<snapshot_.total;i+=static_cast<UINT>(engine_.pageSize())) pages_.push_back(i);
     DllAddRef();
 }
 CandidateUI::~CandidateUI() { detach(); DllRelease(); }
+void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts) {
+    if(style_==style && fonts_==fonts)return;
+    // Construct before replacing the working renderer; font errors keep the old UI.
+    auto renderer=std::make_unique<CandidateRenderer>(style,fonts?fonts->paths():std::vector<std::filesystem::path>{});
+    style_=style;fonts_=std::move(fonts);renderer_=std::move(renderer);
+    refreshReveal();
+}
 void CandidateUI::detach() {
-    owner_=nullptr; shown_=false;
+    owner_=nullptr; shown_=false; reveal_.reset(); placement_.reset();
     if(window_) {
+        KillTimer(window_,1);
         const auto window=window_; window_=nullptr;
         SetWindowLongPtrW(window,GWLP_USERDATA,0);
         DestroyWindow(window);
     }
-    if(font_) { DeleteObject(font_); font_=nullptr; }
+    renderer_.reset();
     fonts_.reset();
     state_.reset();
 }
@@ -46,7 +55,8 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(window_) ShowWindow(window_,shown_?SW_SHOWNOACTIVATE:SW_HIDE);
+    if(!shown_) { reveal_.reset(); placement_.reset(); if(window_) { KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
+    else if(window_)refreshReveal();
     return S_OK;
 }
 HRESULT CandidateUI::IsShown(BOOL* value) { if(!value) return E_POINTER; *value=shown_?TRUE:FALSE; return S_OK; }
@@ -108,103 +118,90 @@ HRESULT CandidateUI::Abort() {
 void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
     if(!owner_ || !state_) return;
     engine_=state_->engine; snapshot_=engine_.snapshot();
-    selected_=static_cast<UINT>(snapshot_.page*engine_.pageSize());
+    selected_=snapshot_.selectedCandidate>=0?static_cast<UINT>(snapshot_.selectedCandidate):static_cast<UINT>(snapshot_.page*engine_.pageSize());
     pages_.clear();
     for(UINT i=0;i<snapshot_.total;i+=static_cast<UINT>(engine_.pageSize())) pages_.push_back(i);
+    if(shown_)reveal_.update(snapshot_,style_,GetTickCount64());
     // The candidate model must advance even while the application has no layout.
     // Hide stale geometry until a subsequent layout notification supplies it.
+    hasCaret_=caret!=nullptr;
     if(!caret) {
         if(window_) ShowWindow(window_,SW_HIDE);
         return;
     }
-    caret_=*caret;
+    caret_=candidatePhysicalCaret(*caret,ownerWindow);
+    CandidateDpiScope dpiScope;
     if(!shown_) return;
-    presentation_=presentCandidates(snapshot_,style_);
-    if(presentation_.code.empty() && presentation_.items.empty()) {
-        if(window_) ShowWindow(window_,SW_HIDE);
-        return;
-    }
     if(!window_) {
         WNDCLASSEXW klass{}; klass.cbSize=sizeof(klass); klass.lpfnWndProc=windowProc;
         klass.hInstance=Global::dllInstanceHandle; klass.lpszClassName=windowClass;
         klass.hCursor=LoadCursor(nullptr,IDC_ARROW);
         if(!RegisterClassExW(&klass) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return;
         window_=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TOPMOST|WS_EX_LAYERED,windowClass,L"虎码字词",
-            WS_POPUP,0,0,1,1,ownerWindow,nullptr,Global::dllInstanceHandle,this);
+            WS_POPUP,caret_.left,caret_.bottom,1,1,ownerWindow,nullptr,Global::dllInstanceHandle,this);
         if(!window_) return;
     }
-    const UINT dpi=GetDpiForWindow(window_);
-    if(!font_ || dpi_!=dpi) {
-        if(font_) DeleteObject(font_);
-        dpi_=dpi;
-        auto family=wide(style_.font);
-        if(!family.empty() && family.front()==L'#') family.erase(0,1);
-        const int pixels=std::max(1,static_cast<int>(std::lround(style_.fontSize*dpi/96.0)));
-        font_=CreateFontW(-pixels,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
-            DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,family.c_str());
+    try {
+    if(!renderer_)renderer_=std::make_unique<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});
+    // Move to the caret monitor first, so GetDpiForWindow returns its DPI.
+    if(MonitorFromWindow(window_,MONITOR_DEFAULTTONEAREST)!=MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST)) {
+        layingOut_=true;
+        SetWindowPos(window_,nullptr,caret_.left,caret_.bottom,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER);
+        layingOut_=false;
     }
-    HDC dc=GetDC(window_); const auto old=SelectObject(dc,font_);
-    TEXTMETRICW metrics{}; GetTextMetricsW(dc,&metrics);
-    const int padding=std::max(2,MulDiv(6,static_cast<int>(dpi),96));
-    const int gap=std::max(2,MulDiv(10,static_cast<int>(dpi),96));
-    rowHeight_=std::max(static_cast<int>(metrics.tmHeight)+2,static_cast<int>(std::lround(style_.fontSize*dpi/96.0*(style_.vertical?1.5:1.0))));
-    MONITORINFO monitor{}; monitor.cbSize=sizeof(monitor);
-    GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor);
-    const int maxWidth=std::max(1,static_cast<int>(monitor.rcWork.right-monitor.rcWork.left)-2);
-    auto measure=[&](std::u16string_view text) {
-        SIZE size{}; const auto value=wide(text);
-        GetTextExtentPoint32W(dc,value.c_str(),static_cast<int>(value.size()),&size);
-        return std::min(std::max(1,static_cast<int>(size.cx)),std::max(1,maxWidth-padding*2));
-    };
-    int x=padding,y=padding,right=padding;
-    codeRect_={}; itemRects_.clear();
-    if(!presentation_.code.empty()) {
-        const int width=measure(presentation_.code);
-        codeRect_={x,y,x+width,y+rowHeight_}; right=codeRect_.right;
-        if(style_.vertical) y+=rowHeight_; else x+=width+gap;
+    refreshReveal();
+    } catch(...) {
+        ShowWindow(window_,SW_HIDE);
+        OutputDebugStringW(L"NativeTiger: DirectWrite candidate layout failed\n");
     }
-    for(const auto& item:presentation_.items) {
-        const int width=measure(item);
-        if(!style_.vertical && x>padding && x+width+padding>maxWidth) { x=padding; y+=rowHeight_; }
-        itemRects_.push_back(RECT{x,y,x+width,y+rowHeight_});
-        right=std::max(right,x+width);
-        if(style_.vertical) y+=rowHeight_; else x+=width+gap;
+}
+void CandidateUI::refreshReveal() {
+    if(!window_)return;
+    KillTimer(window_,1);
+    if(!owner_ || !state_ || !shown_)return;
+    const auto now=GetTickCount64();
+    reveal_.update(snapshot_,style_,now);
+    presentation_=reveal_.presentation(snapshot_,style_);
+    const auto remaining=reveal_.remaining(style_,now);
+    if(remaining)SetTimer(window_,1,remaining,nullptr);
+    itemRects_.clear();
+    if(!hasCaret_ || (presentation_.code.empty() && presentation_.items.empty())) {
+        ShowWindow(window_,SW_HIDE);return;
     }
-    width_=std::min(maxWidth,std::max(right+padding,padding*2+1));
-    height_=y+padding+(style_.vertical?0:rowHeight_);
-    if(style_.vertical && presentation_.items.empty() && presentation_.code.empty()) height_+=rowHeight_;
-    SelectObject(dc,old); ReleaseDC(window_,dc);
-    place(); paint(nullptr);
+    layoutAndPaint();
+}
+void CandidateUI::layoutAndPaint() {
+    if(!window_ || !renderer_ || layingOut_ || !shown_ || !hasCaret_ ||
+       (presentation_.code.empty() && presentation_.items.empty()))return;
+    CandidateDpiScope scope;
+    struct Guard {bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}} guard(layingOut_);
+    for(int attempt=0;attempt<2;++attempt) {
+        dpi_=GetDpiForWindow(window_);if(!dpi_)dpi_=96;
+        MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
+        if(!GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor))return;
+        renderer_->layout(presentation_,std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_));
+        width_=static_cast<int>(renderer_->pixelWidth(dpi_));height_=static_cast<int>(renderer_->pixelHeight(dpi_));
+        itemRects_.clear();const float scale=dpi_/96.f;
+        for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
+            static_cast<LONG>(std::floor(r.left*scale)),static_cast<LONG>(std::floor(r.top*scale)),
+            static_cast<LONG>(std::ceil(r.right*scale)),static_cast<LONG>(std::ceil(r.bottom*scale))});
+        const auto laidOutDpi=dpi_;place();
+        if(GetDpiForWindow(window_)==laidOutDpi)break;
+    }
+    paint(nullptr);
 }
 void CandidateUI::place() {
     MONITORINFO monitor{}; monitor.cbSize=sizeof(monitor);
     GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor);
     width_=std::min(width_,static_cast<int>(monitor.rcWork.right-monitor.rcWork.left));
-    int x=std::clamp(static_cast<int>(caret_.left),static_cast<int>(monitor.rcWork.left),static_cast<int>(monitor.rcWork.right)-width_);
-    int y=static_cast<int>(caret_.bottom)+2;
-    if(y+height_>monitor.rcWork.bottom) y=static_cast<int>(caret_.top)-height_-2;
-    y=std::max(y,static_cast<int>(monitor.rcWork.top));
-    SetWindowPos(window_,HWND_TOPMOST,x,y,width_,height_,SWP_NOACTIVATE|SWP_SHOWWINDOW);
-}
-void CandidateUI::textMask(HDC dc) {
-    RECT bounds; GetClientRect(window_,&bounds);
-    FillRect(dc,&bounds,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
-    const auto old=SelectObject(dc,font_); SetBkMode(dc,TRANSPARENT);
-    SetTextColor(dc,RGB(255,255,255));
-    if(!presentation_.code.empty()) {
-        auto code=wide(presentation_.code); auto rect=codeRect_;
-        DrawTextW(dc,code.c_str(),static_cast<int>(code.size()),&rect,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);
-    }
-    for(std::size_t i=0;i<presentation_.items.size() && i<itemRects_.size();++i) {
-        auto row=itemRects_[i];
-
-        auto text=wide(presentation_.items[i]);
-        DrawTextW(dc,text.c_str(),static_cast<int>(text.size()),&row,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);
-    }
-    SelectObject(dc,old);
+    const auto monitorId=MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST);
+    if(placementMonitor_!=monitorId){placement_.reset();placementMonitor_=monitorId;}
+    const auto point=placement_.place(caret_,monitor.rcWork,width_,height_);
+    SetWindowPos(window_,HWND_TOPMOST,point.x,point.y,width_,height_,SWP_NOACTIVATE|SWP_SHOWWINDOW);
 }
 void CandidateUI::paint(HDC target) {
-    if(!window_ || width_<=0 || height_<=0) return;
+    if(!window_ || !renderer_ || width_<=0 || height_<=0) return;
+    CandidateDpiScope dpiScope;
     HDC memory=CreateCompatibleDC(nullptr);
     if(!memory) return;
     BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
@@ -215,18 +212,11 @@ void CandidateUI::paint(HDC target) {
     if(!bitmap) { DeleteDC(memory); return; }
     auto old=SelectObject(memory,bitmap);
     try {
-        const auto count=static_cast<std::size_t>(width_)*height_;
-        std::memset(bits,0,count*sizeof(std::uint32_t));
-        textMask(memory);
-        GdiFlush();
-        const auto pixels=static_cast<const std::uint32_t*>(bits);
-        std::vector<std::uint32_t> mask(pixels,pixels+count);
-        std::vector<PixelRect> selection;
-        for(std::size_t i=0;i<itemRects_.size();++i) if(selected_==static_cast<UINT>(snapshot_.page*engine_.pageSize())+i) {
-            const auto& r=itemRects_[i]; selection.push_back({r.left,r.top,r.right,r.bottom});
-        }
-        auto rendered=renderCandidateTheme(width_,height_,dpi_/96.0,candidateTheme(style_.theme),selection,mask);
-        std::memcpy(bits,rendered.data(),count*sizeof(std::uint32_t));
+        std::vector<std::uint32_t> rendered;
+        const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
+        renderer_->render(dpi_,selected_>=first?selected_-first:UINT_MAX,rendered);
+        if(rendered.size()!=static_cast<std::size_t>(width_)*height_)throw std::runtime_error("Candidate surface/layout mismatch");
+        std::memcpy(bits,rendered.data(),rendered.size()*sizeof(std::uint32_t));
         if(target) BitBlt(target,0,0,width_,height_,memory,0,0,SRCCOPY);
         else {
             RECT rect; GetWindowRect(window_,&rect);
@@ -247,6 +237,21 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
     if(!self) return DefWindowProcW(window,message,w,l);
     ComPtr<CandidateUI> keepAlive=self;
     try {
+        if(message==WM_TIMER && w==1) {self->refreshReveal();return 0;}
+        if(message==WM_DPICHANGED) {
+            self->dpi_=HIWORD(w);self->layoutAndPaint();return 0;
+        }
+        if(message==WM_DISPLAYCHANGE || message==WM_SETTINGCHANGE) {self->layoutAndPaint();return 0;}
+        if(message==WM_MBUTTONUP) {if(self->owner_)self->owner_->candidateCycle();return 0;}
+        if(message==WM_RBUTTONDOWN) {
+            POINT point{};GetCursorPos(&point);
+            if(self->owner_)self->owner_->candidateMenu(point,window);
+            return 0;
+        }
+        if(message==WM_MOUSEWHEEL) {
+            if(self->owner_)self->owner_->candidateWheel(static_cast<short>(HIWORD(w)));
+            return 0;
+        }
         if(message==WM_MOUSEACTIVATE) return MA_NOACTIVATE;
         if(message==WM_ERASEBKGND) return 1;
         if(message==WM_PRINTCLIENT) { self->paint(reinterpret_cast<HDC>(w)); return 0; }

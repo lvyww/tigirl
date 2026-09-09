@@ -1,16 +1,17 @@
 """Actual Win32 manager controls/worker completion in a hidden isolated window."""
 import hashlib,json,shutil,subprocess,tempfile
 from pathlib import Path
+from windows_process import run_windows
 ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build';MANAGER=BUILD/'tests/ARM64/schema_manager.exe';IMPORT=BUILD/'tests/ARM64/lexicon_import.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='schema-manager-',dir=BUILD) as temporary:
  root=Path(temporary);user=root/'中文 用户目录';user.mkdir();(user/'.schema-manager-test').touch()
  source=root/'中文 码表';source.mkdir();(source/'rows.txt').write_text('ab 界面测试\n',encoding='utf-8')
  bundled=ROOT/'data/tiger-v2.tcd'
- result=subprocess.run([str(IMPORT),'--schema',win(source),win(root/'没有拼音'),win(user),'界面方案','zh-CN'],capture_output=True,text=True,timeout=30)
+ result=run_windows([str(IMPORT),'--schema',win(source),win(root/'没有拼音'),win(user),'界面方案','zh-CN'],capture_output=True,text=True,timeout=30)
  assert result.returncode==0,result.stderr
  def select(name,exe=MANAGER,target=user,mode='--test-select'):
-  return subprocess.run([str(exe),win(target),win(bundled),mode,name],capture_output=True,text=True,timeout=30)
+  return run_windows([str(exe),win(target),win(bundled),mode,name],capture_output=True,text=True,timeout=30)
  result=select('界面方案');assert result.returncode==0,(result.stdout,result.stderr)
  config=user/'config.txt';saved=config.read_bytes();assert '当前码表\t界面方案' in config.read_text(encoding='utf-8-sig')
  corrupt=user/'schemas/损坏方案';corrupt.mkdir();(corrupt/'tiger-v2.tcd').write_bytes(b'broken')

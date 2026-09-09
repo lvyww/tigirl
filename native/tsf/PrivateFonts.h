@@ -10,6 +10,7 @@ public:
     ~PrivateFonts();
     PrivateFonts(const PrivateFonts&)=delete;
     PrivateFonts& operator=(const PrivateFonts&)=delete;
+    const std::vector<std::filesystem::path>& paths() const { return files_; }
     unsigned faces() const { return faces_; }
     std::size_t files() const { return files_.size(); }
 private:

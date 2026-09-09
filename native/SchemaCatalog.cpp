@@ -46,6 +46,18 @@ std::vector<std::u16string> schemaGenerations(const std::filesystem::path& direc
     std::sort(result.begin(),result.end());
     return result;
 }
+std::filesystem::path activeSchemaDictionaryPath(const std::filesystem::path& root,
+    const std::filesystem::path& bundled,std::u16string_view name) {
+    if(!validSchemaName(name))throw std::runtime_error("Invalid schema name");
+    const auto directory=root/L"schemas"/std::filesystem::path(name);
+    if(name==u"虎码字词" && !std::filesystem::exists(directory/L"current.txt") &&
+        !std::filesystem::exists(directory/L"tiger-v2.tcd"))return bundled;
+    return schemaDictionaryPath(directory);
+}
+std::filesystem::path schemaJournalPath(const std::filesystem::path& root,std::u16string_view name) {
+    if(!validSchemaName(name))throw std::runtime_error("Invalid schema name");
+    return name==u"虎码字词"?root/L"user"/L"tiger-words.tcu":root/L"schemas"/std::filesystem::path(name)/L"user.tcu";
+}
 std::vector<std::u16string> schemaNames(const std::filesystem::path& userRoot) {
     std::vector<std::u16string> names{u"虎码字词"};
     const auto directory=userRoot/L"schemas";

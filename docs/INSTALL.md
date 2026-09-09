@@ -1,7 +1,7 @@
 # 原生虎码 ARM64 开发版
 
 当前是开发验收版本，完整体验尚未完成。普通 ARM64 DLL 仅通过 ARM64
-宿主加载；ARM64X 包已通过 ARM64 和 x64 宿主加载与 TSF 测试，x86 未验证。
+宿主加载；ARM64X 包已通过 ARM64 和 x64 宿主加载与 TSF 测试，x86 补充组件已通过 COM 激活检查。
 具体证据见 [验收记录](ACCEPTANCE.md)。不要把“Windows 是 ARM64”
 理解成当前 DLL 已覆盖系统上所有架构的应用。
 
@@ -38,6 +38,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 方案管理、导入、选择和一次性计时提醒工具。`-CheckOnly` 检查架构、文件和
 哈希并显示拟安装目录，不执行注册。
 
+开发版构建现在还包含 `Models\sentence-ngram-v2.bin` 和来源记录。
+默认从项目旁的 `bime_codex_src_20260513\release_arm64\Models` 读取已验证模型；
+其他目录可通过 `build_arm64.ps1` 或 `build_arm64x.ps1` 的
+`-SentenceModelPath '完整路径\sentence-ngram-v2.bin'` 参数指定。
+构建和安装预检均核对固定模型的长度与 SHA256，缺失或不匹配时停止。
+模型属于非神经整句功能，包内不包含 Qwen。整句选项见
+[整句输入设置](SENTENCE_SETTINGS.md)。这些开发版资源尚未更新到当前安装代。
+
 ## 安装与使用
 
 ```powershell
@@ -56,12 +64,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1
 
 此项目沿用 SampleIME 的配置标识，但与日用虎爪目录
 `C:\Users\yc\Desktop\bime_codex_src_20260513\release_arm64` 分开。
-当前已注册 ARM64X 代 `8005a14ee64cefc0`，DLL 哈希为
-`4085138f657dfe2eaa02a2ead99c9f106e390ab9044c4b8dc9e19e53af9331ce`。
-旧代 `09d5f4f5445d1891` 的回退快照位于
-`build\previous-install-8005a14ee64cefc0.json`。
-安装后 ARM64 和 x64 均已通过系统注册激活检查，报告为
-`build\registered-tsf-validation.json`；实际应用输入验收仍未完成。
+当前已注册 ARM64X 代 `5aa4bd69945cfb9c`，包含 DirectWrite / Direct2D 候选窗、
+Ctrl+空格修复和目录式方案管理。32 位补充组件也已同步更新。
+安装完整性和系统注册检查见 `build/folder-installed-validation.json`。
+
+方案管理现在直接选择码表根目录下的方案文件夹，自动准备二进制缓存。
+使用方式见 [目录式方案管理](FOLDER_SCHEMAS.md)。首次使用原虎爪目录时，选择
+`C:\Users\yc\Desktop\bime_codex_src_20260513\release_arm64\码表`。
+此前用户已确认普通应用输入和新版字体大致正常；当前安装的真实应用及跨屏
+验收应与历史自动测试记录区分，不能仅凭注册检查宣称全部通过。
 
 ## 回退和卸载
 
@@ -105,6 +116,7 @@ ARM64X 覆盖 ARM64 和 x64；32 位程序另外使用 x86 DLL。当前已安装
 32 位 DLL 使用独立版本目录；码表和伴随工具通过硬链接共用主包文件。
 主安装升级后应重新构建并更新 x86 补充组件。x86 安装脚本会核验旧代
 注册与安装记录、保存回退记录，再将注册切到新的独立目录。不会覆盖已加载的 DLL。
+主包新增的模型也通过同一硬链接流程共用，保持相同的文件后端。
 
 完整卸载顺序为 `uninstall_x86.ps1`，再执行 `uninstall_arm64.ps1`；两者均有
 `-CheckOnly`。x86 卸载只移除匹配记录的 32 位 COM 注册，保留共享输入法

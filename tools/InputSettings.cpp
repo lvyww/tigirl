@@ -5,6 +5,10 @@
 #include "ConfigStore.h"
 #include "Settings.h"
 #include "CandidateTheme.h"
+#include "SentenceSettings.h"
+#include "FontChooser.h"
+#include "Text.h"
+#include <memory>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -27,13 +31,16 @@ const Flag flags[]={
 constexpr int MaxCode=200,PageSize=201,Save=202,Cancel=203,Notice=204,PageKeys=205,InputPage=206,AppearancePage=207,FontName=208,FontSize=209,Theme=210,ShortcutPage=211,AddEnabled=212,AddShortcut=213,RecentEnabled=214,RecentShortcut=215,SelectionEditor=216;
 struct StyleFlag {const char16_t* key;bool tiger::CandidateStyle::*member;};
 const StyleFlag styleFlags[]={{u"竖排候选",&tiger::CandidateStyle::vertical},{u"显示候选序号",&tiger::CandidateStyle::showIndex},{u"候选窗显示编码",&tiger::CandidateStyle::showCode},{u"隐藏候选",&tiger::CandidateStyle::hideCandidates}};
-constexpr wchar_t bundledFontLabel[]=L"内置：霞鹜文楷 GB 屏幕阅读版";
+constexpr int CandidateDelay=218,AnnotationDelay=219,CodeMask=220;
+constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405;
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
 struct Dialog {
     HWND window=nullptr;HFONT font=nullptr;std::filesystem::path path;
     std::vector<std::u16string> themes;
+    std::unique_ptr<FontChooser> fonts;
     tiger::Config initial;tiger::CandidateStyle initialStyle;int buildingPage=-1;bool saved=false;std::wstring error;
+    tiger::SentenceSettings initialSentence;
     struct Control {HWND window;int x,y,w,h,page;};std::vector<Control> controls;
     ~Dialog(){if(IsWindow(window))DestroyWindow(window);if(font)DeleteObject(font);}
     HWND item(int id){return GetDlgItem(window,id);}
@@ -48,6 +55,7 @@ struct Dialog {
         if(!next)throw std::runtime_error("Cannot create input settings font");
         for(auto c:controls){SendMessageW(c.window,WM_SETFONT,reinterpret_cast<WPARAM>(next),TRUE);MoveWindow(c.window,px(c.x),px(c.y),px(c.w),px(c.h),TRUE);}
         if(font)DeleteObject(font);font=next;
+        if(fonts)fonts->scale(dpi);
         RECT bounds{0,0,px(620),px(500)};
         if(!AdjustWindowRectExForDpi(&bounds,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,WS_EX_CONTROLPARENT,GetDpiForWindow(window)))throw std::runtime_error("Cannot size input settings window");
         SetWindowPos(window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
@@ -55,12 +63,39 @@ struct Dialog {
     void page(int selected) {
         for(auto c:controls)ShowWindow(c.window,c.page<0 || c.page==selected?SW_SHOW:SW_HIDE);
     }
+    // Render the real controls without showing or activating the test window.
+    void captureSentence(const std::filesystem::path& destination,int selectedPage=3) {
+        HWND list=nullptr;
+        if(selectedPage==4){COMBOBOXINFO info{sizeof(info)};if(!GetComboBoxInfo(item(FontName),&info))throw std::runtime_error("Cannot inspect font dropdown");list=info.hwndList;}
+        RECT client{};GetClientRect(list?list:window,&client);
+        BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth=client.right;info.bmiHeader.biHeight=-client.bottom;
+        info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+        void* pixels=nullptr;HDC dc=CreateCompatibleDC(nullptr);
+        HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,nullptr,0);
+        if(!dc || !bitmap){if(bitmap)DeleteObject(bitmap);if(dc)DeleteDC(dc);throw std::runtime_error("Cannot create settings capture");}
+        const auto previous=SelectObject(dc,bitmap);FillRect(dc,&client,reinterpret_cast<HBRUSH>(COLOR_WINDOW+1));
+        if(list)SendMessageW(list,WM_PRINT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT|PRF_NONCLIENT|PRF_ERASEBKGND);
+        else for(auto c:controls)if(c.page<0 || c.page==selectedPage) {
+            RECT rect{};GetWindowRect(c.window,&rect);MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
+            SetViewportOrgEx(dc,rect.left,rect.top,nullptr);
+            SendMessageW(c.window,WM_PRINT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT|PRF_NONCLIENT|PRF_ERASEBKGND);
+        }
+        GdiFlush();
+        BITMAPFILEHEADER header{};header.bfType=0x4d42;header.bfOffBits=sizeof(header)+sizeof(BITMAPINFOHEADER);
+        const auto bytes=static_cast<DWORD>(client.right*client.bottom*4);header.bfSize=header.bfOffBits+bytes;
+        std::ofstream file(destination,std::ios::binary);
+        file.write(reinterpret_cast<const char*>(&header),sizeof(header));file.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof(info.bmiHeader));
+        file.write(static_cast<const char*>(pixels),bytes);const bool ok=file.good();
+        SelectObject(dc,previous);DeleteObject(bitmap);DeleteDC(dc);
+        if(!ok)throw std::runtime_error("Cannot write settings capture");
+    }
     static std::wstring sizeText(double value) {
         std::wostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(17)<<value;return out.str();
     }
     std::u16string text(int id) {
         const auto control=item(id);const int length=GetWindowTextLengthW(control);
-        if(length>256)throw std::runtime_error("Setting is too long");
+        if(length>4*1024*1024)throw std::runtime_error("Setting is too long");
         std::wstring value(static_cast<std::size_t>(length)+1,L'\0');
         value.resize(GetWindowTextW(control,value.data(),length+1));
         return {reinterpret_cast<const char16_t*>(value.data()),value.size()};
@@ -83,6 +118,7 @@ struct Dialog {
         control(InputPage,L"BUTTON",L"输入行为",WS_TABSTOP,18,10,140,30);
         control(AppearancePage,L"BUTTON",L"候选外观",WS_TABSTOP,170,10,140,30);
         control(ShortcutPage,L"BUTTON",L"操作快捷键",WS_TABSTOP,322,10,140,30);
+        control(SentencePage,L"BUTTON",L"整句输入",WS_TABSTOP,474,10,128,30);
         buildingPage=0;
         for(int i=0;i<static_cast<int>(std::size(flags));++i) {
             control(100+i,L"BUTTON",wide(flags[i].key),BS_AUTOCHECKBOX|WS_TABSTOP,18+(i/8)*302,18+(i%8)*32,290,27);
@@ -97,24 +133,33 @@ struct Dialog {
         for(auto keys:pageKeys)SendMessageW(item(PageKeys),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(keys)));
         SendMessageW(item(PageKeys),CB_SETCURSEL,initial.pageKeys,0);
         buildingPage=1;
-        control(0,L"STATIC",L"候选字体（也可输入已安装的字体名称）",0,18,20,570,25);
-        const auto displayFont=initialStyle.font==tiger::CandidateStyle{}.font?std::wstring(bundledFontLabel):std::wstring(wide(initialStyle.font.c_str()));
-        control(FontName,L"COMBOBOX",displayFont.c_str(),CBS_DROPDOWN|WS_TABSTOP|WS_VSCROLL,18,55,570,150);
-        for(auto name:{bundledFontLabel,L"Microsoft YaHei UI",L"Segoe UI"})SendMessageW(item(FontName),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));
-        SetWindowTextW(item(FontName),displayFont.c_str());
+        control(0,L"STATIC",L"候选字体（内置字体在前，列表按字体本身预览）",0,18,20,570,25);
+        wchar_t executable[32768]{};const auto length=GetModuleFileNameW(nullptr,executable,32768);
+        if(!length || length>=32768)throw std::runtime_error("Cannot locate bundled fonts");
+        fonts=std::make_unique<FontChooser>(std::filesystem::path(executable).parent_path()/L"字体",initialStyle.fontSize);
+        control(FontName,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,18,55,570,300);
+        fonts->attach(item(FontName),wide(initialStyle.font.c_str()));
         control(0,L"STATIC",L"字号（3–200，支持小数）",0,18,105,310,25);
         control(FontSize,L"EDIT",sizeText(initialStyle.fontSize).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,340,101,130,28);
         for(int i=0;i<4;++i) {
-            control(300+i,L"BUTTON",wide(styleFlags[i].key),BS_AUTOCHECKBOX|WS_TABSTOP,18,155+i*35,570,28);
+            control(300+i,L"BUTTON",wide(styleFlags[i].key),BS_AUTOCHECKBOX|WS_TABSTOP,18+(i%2)*300,145+(i/2)*30,280,28);
             SendMessageW(item(300+i),BM_SETCHECK,initialStyle.*styleFlags[i].member?BST_CHECKED:BST_UNCHECKED,0);
         }
-        control(0,L"STATIC",L"候选主题",0,18,319,170,25);
-        control(Theme,L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,205,315,385,220);
+        control(0,L"STATIC",L"候选主题",0,18,215,170,25);
+        control(Theme,L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,205,211,385,220);
         int themeIndex=-1;
         for(auto name:tiger::candidateThemeNames){if(name==initialStyle.theme)themeIndex=static_cast<int>(themes.size());themes.emplace_back(name);}
         if(themeIndex<0){themeIndex=static_cast<int>(themes.size());themes.push_back(initialStyle.theme);}
         for(const auto& name:themes)SendMessageW(item(Theme),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(name.c_str())));
         SendMessageW(item(Theme),CB_SETCURSEL,themeIndex,0);
+        control(0,L"STATIC",L"候选延时（毫秒）",0,18,251,170,25);
+        control(CandidateDelay,L"EDIT",std::to_wstring(initialStyle.candidateDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,190,247,85,28);
+        control(0,L"STATIC",L"注释／拆分延时",0,300,251,175,25);
+        control(AnnotationDelay,L"EDIT",std::to_wstring(initialStyle.annotationDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,490,247,100,28);
+        control(0,L"STATIC",L"范围 0–60000；0 为立即显示，从本次输入开始分别计时。",0,18,281,580,20);
+        control(0,L"STATIC",L"编码伪装（留空关闭）",0,18,311,190,25);
+        control(CodeMask,L"EDIT",wide(initialStyle.codeMask.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,215,307,375,28);
+        control(0,L"STATIC",L"如填 ●，ab 显示为 ●●；不改变实际查码和上屏文字。",0,18,341,580,20);
         buildingPage=2;
         control(AddEnabled,L"BUTTON",L"启用手动加词",BS_AUTOCHECKBOX|WS_TABSTOP,18,20,570,28);
         control(AddShortcut,HOTKEY_CLASSW,L"",WS_TABSTOP,18,60,570,32);
@@ -127,6 +172,22 @@ struct Dialog {
         SendMessageW(item(RecentEnabled),BM_SETCHECK,initial.recentSchemaEnabled?BST_CHECKED:BST_UNCHECKED,0);
         SendMessageW(item(AddShortcut),HKM_SETHOTKEY,hotkey(initial.addWordShortcut),0);
         SendMessageW(item(RecentShortcut),HKM_SETHOTKEY,hotkey(initial.recentSchemaShortcut),0);
+        buildingPage=3;
+        control(SentenceEnabled,L"BUTTON",L"方案名称包含“整句”时自动启用整句模式",BS_AUTOCHECKBOX|WS_TABSTOP,18,16,580,28);
+        control(SentenceAuto,L"BUTTON",L"自动提前上屏已确定的句子前缀",BS_AUTOCHECKBOX|WS_TABSTOP,18,52,580,28);
+        control(SentenceDuplicate,L"BUTTON",L"允许单字重码组句",BS_AUTOCHECKBOX|WS_TABSTOP,18,88,580,28);
+        SendMessageW(item(SentenceEnabled),BM_SETCHECK,initialSentence.autoEnableBySchema?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(item(SentenceAuto),BM_SETCHECK,initialSentence.autoCommit?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(item(SentenceDuplicate),BM_SETCHECK,initialSentence.allowDuplicateSingleCharacters?BST_CHECKED:BST_UNCHECKED,0);
+        control(0,L"STATIC",L"提前上屏后最少保留编码（0–32）",0,18,134,380,28);
+        control(SentenceRetained,L"EDIT",std::to_wstring(initialSentence.minimumRetainedRaw).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,430,130,155,28);
+        control(0,L"STATIC",L"仅使用最优码组句的高频字数量",0,18,180,390,28);
+        control(SentenceCommon,L"EDIT",std::to_wstring(initialSentence.commonCharacterLimit).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,430,176,155,28);
+        control(0,L"STATIC",L"默认 1500；设为 0 时不按高频字限制全码。",0,18,214,580,28);
+        control(0,L"STATIC",L"允许全码组句的例外字符（可留空）",0,18,258,580,28);
+        control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,18,292,567,30);
+        SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
+        control(0,L"STATIC",L"直接填写汉字，无需分隔；这些字不受上方的最优码限制。",0,18,332,580,28);
         buildingPage=-1;
         control(Notice,L"STATIC",L"保存更改后自动更新设置，清除未完成编码，并应用默认中英文模式。",0,18,403,582,40);
         control(Save,L"BUTTON",L"保存",BS_DEFPUSHBUTTON|WS_TABSTOP,390,452,95,30);
@@ -138,6 +199,12 @@ struct Dialog {
         if(!n || n>2)throw std::runtime_error("数字超出允许范围。");
         for(int i=0;i<n;++i){if(value[i]<L'0'||value[i]>L'9')throw std::runtime_error("请输入整数。");result=result*10+value[i]-L'0';}
         if(result<1 || result>limit)throw std::runtime_error("数字超出允许范围。");return result;
+    }
+    int delay(int id) {
+        const auto value=text(id);if(value.empty())return 0;
+        if(value.size()>5)throw std::runtime_error("延时必须为 0–60000 毫秒。");
+        int result=0;for(auto c:value){if(c<u'0' || c>u'9')throw std::runtime_error("延时必须为整数。");result=result*10+c-u'0';}
+        if(result>60000)throw std::runtime_error("延时必须为 0–60000 毫秒。");return result;
     }
     void save() {
         std::vector<std::pair<std::u16string,std::u16string>> changes;
@@ -156,16 +223,21 @@ struct Dialog {
             const bool value=SendMessageW(item(300+i),BM_GETCHECK,0,0)==BST_CHECKED;
             if(value!=initialStyle.*styleFlags[i].member)changes.emplace_back(styleFlags[i].key,value?u"是":u"否");
         }
-        auto name=text(FontName);
+        const auto mask=text(CodeMask);
+        if(mask!=initialStyle.codeMask)changes.emplace_back(u"编码伪装",mask);
+        const auto selectedFont=fonts->selected();
+        auto name=std::u16string(reinterpret_cast<const char16_t*>(selectedFont.data()),selectedFont.size());
         name=tiger::configurationValue(u"字体\t"+name,u"字体");
         if(name.empty())throw std::runtime_error("Font name is empty");
-        if(name==std::u16string(reinterpret_cast<const char16_t*>(bundledFontLabel)))name=tiger::CandidateStyle{}.font;
         if(name!=initialStyle.font)changes.emplace_back(u"字体",name);
         const auto sizeValue=text(FontSize);
         std::string ascii;for(auto c:sizeValue){if(c>127)throw std::runtime_error("Invalid font size");ascii+=static_cast<char>(c);}
         std::istringstream input(ascii);input.imbue(std::locale::classic());double size=0;
         if(!(input>>size) || input.peek()!=std::char_traits<char>::eof() || !std::isfinite(size) || size<3 || size>200)
             throw std::runtime_error("Font size must be between 3 and 200");
+        const auto candidateDelay=delay(CandidateDelay),annotationDelay=delay(AnnotationDelay);
+        if(candidateDelay!=initialStyle.candidateDelayMs)changes.emplace_back(u"延时显示候选(毫秒)",numberText(candidateDelay));
+        if(annotationDelay!=initialStyle.annotationDelayMs)changes.emplace_back(u"延时展开注释和拆分(毫秒)",numberText(annotationDelay));
         if(size!=initialStyle.fontSize)changes.emplace_back(u"字体大小",sizeValue);
         const auto selectedTheme=SendMessageW(item(Theme),CB_GETCURSEL,0,0);
         if(selectedTheme<0 || static_cast<std::size_t>(selectedTheme)>=themes.size())throw std::runtime_error("Select a theme");
@@ -178,6 +250,27 @@ struct Dialog {
         if(recent!=initial.recentSchemaEnabled)changes.emplace_back(u"Ctrl+m切换最近码表",recent?u"是":u"否");
         if(addValue!=hotkey(initial.addWordShortcut))changes.emplace_back(u"手动加词快捷键",shortcut(AddShortcut));
         if(recentValue!=hotkey(initial.recentSchemaShortcut))changes.emplace_back(u"切换最近码表快捷键",shortcut(RecentShortcut));
+        for(auto entry:{std::make_pair(SentenceEnabled,std::make_pair(u"自动启用整句模式",initialSentence.autoEnableBySchema)),
+                        std::make_pair(SentenceAuto,std::make_pair(u"整句自动提前上屏",initialSentence.autoCommit)),
+                        std::make_pair(SentenceDuplicate,std::make_pair(u"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters))}) {
+            const bool value=SendMessageW(item(entry.first),BM_GETCHECK,0,0)==BST_CHECKED;
+            if(value!=entry.second.second)changes.emplace_back(entry.second.first,value?u"是":u"否");
+        }
+        auto nonnegative=[&](int id,unsigned limit) {
+            const auto value=text(id);unsigned result=0;
+            if(value.empty())throw std::runtime_error("整句参数不能为空，请输入非负整数。");
+            for(auto ch:value) {
+                if(ch<u'0' || ch>u'9' || result>limit/10 || (result==limit/10 && static_cast<unsigned>(ch-u'0')>limit%10))
+                    throw std::runtime_error("整句参数超出范围：保留编码为 0–32，高频字数量为 0–2147483647。");
+                result=result*10+ch-u'0';
+            }
+            return static_cast<int>(result);
+        };
+        const auto retained=nonnegative(SentenceRetained,32),common=nonnegative(SentenceCommon,2147483647);
+        if(retained!=initialSentence.minimumRetainedRaw)changes.emplace_back(u"保留最少编码数量",numberText(retained));
+        if(common!=initialSentence.commonCharacterLimit)changes.emplace_back(u"高频字仅使用最优码组句",numberText(common));
+        const auto whitelist=text(SentenceWhitelist);
+        if(whitelist!=initialSentence.fullCodeWhitelist)changes.emplace_back(u"整句允许全码组句白名单",whitelist);
         tiger::saveInputConfiguration(path,changes,[&](std::u16string_view updated) {
             const auto effective=tiger::parseEngineSettings(updated);
             if((add && !effective.addWordEnabled) || (recent && !effective.recentSchemaEnabled))
@@ -193,6 +286,10 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
     if(message==WM_NCCREATE){self=static_cast<Dialog*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);self->window=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     if(!self)return DefWindowProcW(window,message,w,l);
     try {
+        if(message==WM_DRAWITEM && w==FontName && self->fonts){self->fonts->draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
+        if(message==WM_MEASUREITEM && w==FontName && self->fonts){self->fonts->measure(*reinterpret_cast<MEASUREITEMSTRUCT*>(l));return TRUE;}
+        if(message==WM_COMMAND && LOWORD(w)==FontName && HIWORD(w)==CBN_SELCHANGE){InvalidateRect(self->item(FontName),nullptr,TRUE);return 0;}
+        if(message==WM_COMMAND && LOWORD(w)==SentencePage){self->page(3);return 0;}
         if(message==WM_COMMAND){if(LOWORD(w)==SelectionEditor){showSelectionSettings(window,self->path.parent_path()/L"自定义选重键.txt");return 0;}if(LOWORD(w)==ShortcutPage){self->page(2);return 0;}if(LOWORD(w)==InputPage){self->page(0);return 0;}if(LOWORD(w)==AppearancePage){self->page(1);return 0;}if(LOWORD(w)==Save || LOWORD(w)==IDOK)self->save();else if(LOWORD(w)==Cancel || LOWORD(w)==IDCANCEL)DestroyWindow(window);return 0;}
         if(message==WM_DPICHANGED){const auto r=reinterpret_cast<RECT*>(l);SetWindowPos(window,nullptr,r->left,r->top,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);self->scale(HIWORD(w));return 0;}
         if(message==WM_CLOSE){DestroyWindow(window);return 0;}
@@ -211,12 +308,39 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
     Dialog dialog;dialog.path=path;
     const auto settings=tiger::readConfiguration(path);
     dialog.initial=tiger::parseEngineSettings(settings);dialog.initialStyle=tiger::parseCandidateStyle(settings);
+    dialog.initialSentence=tiger::parseSentenceSettings(settings);
     WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerInputSettings";type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&type) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)throw std::runtime_error("Cannot register input settings window");
     if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"原生虎码 · 输入设置",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create input settings window");
     dialog.create();
     if(testMode) {
         const auto original=tiger::readConfiguration(path);
+        wchar_t desktopName[256]{},inputName[256]{};DWORD needed=0;
+        GetUserObjectInformationW(GetThreadDesktop(GetCurrentThreadId()),UOI_NAME,desktopName,sizeof(desktopName),&needed);
+        const auto inputDesktop=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);
+        if(inputDesktop){GetUserObjectInformationW(inputDesktop,UOI_NAME,inputName,sizeof(inputName),&needed);CloseDesktop(inputDesktop);}
+        const bool isolatedCapture=std::wstring_view(desktopName).find(L"NativeTigerSettingsCapture_")==0 &&
+            inputName[0] && std::wstring_view(desktopName)!=inputName;
+        if(isolatedCapture){ShowWindow(dialog.window,SW_SHOWNOACTIVATE);UpdateWindow(dialog.window);}
+        if(testMode==1) {
+            const auto originalFont=dialog.fonts->selected();
+            bool systemSeen=false;std::vector<std::wstring> names;
+            std::ofstream catalog(path.parent_path()/L"font-catalog.tsv",std::ios::binary);
+            for(const auto& item:dialog.fonts->items()) {
+                if(item.bundled && systemSeen)throw std::runtime_error("Bundled fonts are not first");
+                systemSeen=systemSeen || !item.bundled;
+                for(const auto& alias:item.aliases) {
+                    if(!dialog.fonts->select(alias) || dialog.fonts->selected()!=item.label)throw std::runtime_error("Font alias mismatch");
+                }
+                for(const auto& prior:names)if(CompareStringOrdinal(prior.c_str(),-1,item.label.c_str(),-1,TRUE)==CSTR_EQUAL)throw std::runtime_error("Duplicate font label");
+                names.push_back(item.label);
+                catalog<<tiger::utf8(std::u16string(reinterpret_cast<const char16_t*>(item.label.data()),item.label.size()))<<'\t'<<item.bundled<<'\n';
+            }
+            dialog.fonts->attach(dialog.item(FontName),L"NativeTiger missing font fixture");
+            if(dialog.fonts->selected()!=dialog.fonts->items().front().label)throw std::runtime_error("Missing font did not fall back to first choice");
+            dialog.fonts->select(originalFont);
+        }
+        if(dialog.fonts->previewSize()!=dialog.initialStyle.fontSize)throw std::runtime_error("Preview did not use saved font size");
         for(UINT dpi:{96u,144u,192u}) {
             dialog.scale(dpi);RECT client{};GetClientRect(dialog.window,&client);
             for(auto control:dialog.controls) {
@@ -225,12 +349,31 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
                 if(bounds.left<0 || bounds.top<0 || bounds.right>client.right || bounds.bottom>client.bottom)
                     throw std::runtime_error("Input settings control exceeds client bounds");
             }
+            if(testMode==1){
+                if(dialog.fonts->items().size()<=3)throw std::runtime_error("System font catalog is incomplete");
+                const auto originalFont=dialog.fonts->selected();
+                if(!dialog.fonts->select(L"Segoe UI"))throw std::runtime_error("System font alias not recognized");
+                if(dialog.fonts->selected()!=L"Segoe UI")throw std::runtime_error("System font alias resolves incorrectly");
+                dialog.fonts->select(originalFont);
+                dialog.page(1);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"font-settings-"+std::to_wstring(dpi)+L".bmp"),1);
+                if(isolatedCapture){SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,TRUE,0);dialog.captureSentence(path.parent_path()/(L"font-dropdown-"+std::to_wstring(dpi)+L".bmp"),4);SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,FALSE,0);}
+                dialog.page(3);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"sentence-settings-"+std::to_wstring(dpi)+L".bmp"));dialog.page(0);}
         }
         if(testMode==2) {
+            if(dialog.initialStyle.codeMask!=u"甲😀乙")throw std::runtime_error("Mask setting did not reopen");
+            SetWindowTextW(dialog.item(CodeMask),L"");
+            if(dialog.initialStyle.candidateDelayMs!=250 || dialog.initialStyle.annotationDelayMs!=60000)
+                throw std::runtime_error("Saved reveal delays did not reopen");
+            SetWindowTextW(dialog.item(CandidateDelay),L"0");SetWindowTextW(dialog.item(AnnotationDelay),L"0");
+            if(dialog.initialSentence.autoEnableBySchema || !dialog.initialSentence.autoCommit || dialog.initialSentence.allowDuplicateSingleCharacters ||
+               dialog.text(SentenceRetained)!=u"32" || dialog.text(SentenceCommon)!=u"0" || !dialog.text(SentenceWhitelist).empty())
+                throw std::runtime_error("Saved sentence settings did not reopen correctly");
+            SetWindowTextW(dialog.item(SentenceRetained),L"5");SetWindowTextW(dialog.item(SentenceWhitelist),L"测试");
+            SendMessageW(dialog.item(SentenceAuto),BM_SETCHECK,BST_UNCHECKED,0);
             SendMessageW(dialog.item(100),BM_SETCHECK,dialog.initial.defaultChinese?BST_UNCHECKED:BST_CHECKED,0);
             SetWindowTextW(dialog.item(MaxCode),L"2");
             SendMessageW(dialog.item(AddShortcut),HKM_SETHOTKEY,MAKEWORD('Z',HOTKEYF_CONTROL|HOTKEYF_ALT),0);
-            SetWindowTextW(dialog.item(FontName),bundledFontLabel);SetWindowTextW(dialog.item(FontSize),L"20");
+            dialog.fonts->select(dialog.fonts->items().front().label);SetWindowTextW(dialog.item(FontSize),L"20");
             SendMessageW(dialog.window,WM_COMMAND,Cancel,0);
             if(dialog.saved || IsWindow(dialog.window) || tiger::readConfiguration(path)!=original)
                 throw std::runtime_error("Cancel changed input settings");
@@ -263,6 +406,22 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             showSelectionSettings(dialog.window,broken,4);
         }
         const auto before=tiger::readConfiguration(path);
+        SendMessageW(dialog.window,WM_COMMAND,SentencePage,0);
+        if((GetWindowLongPtrW(dialog.item(MaxCode),GWL_STYLE)&WS_VISIBLE) || !(GetWindowLongPtrW(dialog.item(SentenceCommon),GWL_STYLE)&WS_VISIBLE))
+            throw std::runtime_error("Sentence settings page switch failed");
+        for(auto invalid:{L"33",L"-1",L"",L"999999999999999999999"}) {
+            SetWindowTextW(dialog.item(SentenceRetained),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
+            if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid sentence retained raw saved");
+        }
+        SetWindowTextW(dialog.item(SentenceRetained),L"32");
+        for(auto invalid:{L"2147483648",L"-1",L"",L"1.5"}) {
+            SetWindowTextW(dialog.item(SentenceCommon),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
+            if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid sentence common limit saved");
+        }
+        SetWindowTextW(dialog.item(SentenceCommon),L"0");SetWindowTextW(dialog.item(SentenceWhitelist),L"");
+        SendMessageW(dialog.item(SentenceEnabled),BM_SETCHECK,BST_UNCHECKED,0);
+        SendMessageW(dialog.item(SentenceAuto),BM_SETCHECK,BST_CHECKED,0);
+        SendMessageW(dialog.item(SentenceDuplicate),BM_SETCHECK,BST_UNCHECKED,0);
         SetWindowTextW(dialog.item(PageSize),L"11");SendMessageW(dialog.window,WM_COMMAND,Save,0);
         if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid settings were saved");
         SetWindowTextW(dialog.item(PageSize),L"10");
@@ -273,7 +432,18 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             SetWindowTextW(dialog.item(FontSize),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
             if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid font size was saved");
         }
-        SetWindowTextW(dialog.item(FontSize),L"17.5");SetWindowTextW(dialog.item(FontName),L"Microsoft YaHei UI");
+        SetWindowTextW(dialog.item(FontSize),L"17.5");
+        for(int id:{CandidateDelay,AnnotationDelay}) {
+            for(auto invalid:{L"60001",L"-1",L"1.5",L"999999999999"}) {
+                SetWindowTextW(dialog.item(id),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
+                if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid reveal delay saved");
+            }
+            SetWindowTextW(dialog.item(id),L"");if(dialog.delay(id)!=0)throw std::runtime_error("Blank delay is not immediate");
+            SetWindowTextW(dialog.item(id),L"0");if(dialog.delay(id)!=0)throw std::runtime_error("Zero delay is not immediate");
+        }
+        SetWindowTextW(dialog.item(CodeMask),L"甲😀乙");
+        SetWindowTextW(dialog.item(CandidateDelay),L"250");SetWindowTextW(dialog.item(AnnotationDelay),L"60000");
+        SetWindowTextW(dialog.item(FontSize),L"17.5");if(!dialog.fonts->select(L"Segoe UI"))throw std::runtime_error("System font missing from picker");
         SendMessageW(dialog.item(300),BM_SETCHECK,BST_UNCHECKED,0);
         SendMessageW(dialog.item(302),BM_SETCHECK,BST_CHECKED,0);
         for(std::size_t i=0;i<tiger::candidateThemeNames.size();++i) {

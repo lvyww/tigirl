@@ -7,6 +7,8 @@
   <Import Project="DictionaryProbe.vcxproj" />
   <ItemGroup>
     <ClCompile Remove="dictionary_probe.cpp" />
+    <ClCompile Include="..\native\SentenceSession.cpp" />
+    <ClCompile Include="..\native\SentenceAutoCommit.cpp" />
     <ClCompile Include="..\native\Engine.cpp" />
     <ClCompile Include="..\native\DynamicText.cpp" />
     <ClCompile Include="..\native\UppercaseText.cpp" />
@@ -16,4 +18,5 @@
     <ClCompile Include="..\native\Settings.cpp" />
     <ClCompile Include="engine_probe.cpp" />
   </ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

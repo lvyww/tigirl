@@ -42,6 +42,7 @@ report = {'platform': 'Windows ARM64' if args.windows else 'Linux', 'results': r
           'automatic_compaction_enabled': False, 'partial_failure_recovery_tested': False,
           'hashes': {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                      for path in (probe, dictionary, ROOT / 'native/UserStore.cpp',
+                                  ROOT / 'native/Lexicon.cpp', ROOT / 'native/Lexicon.h',
                                   ROOT / 'tests/user_store_replay_probe.cpp')}}
 output = ROOT / 'build' / ('user-store-checkpoint-arm64.json' if args.windows else 'user-store-checkpoint-linux.json')
 output.write_text(json.dumps(report, indent=2) + '\n')

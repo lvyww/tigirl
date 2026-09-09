@@ -4,6 +4,10 @@
 #include <ctfutb.h>
 #include <ctffunc.h>
 #include <wrl/client.h>
+#include <filesystem>
+#include <functional>
+#include <string>
+#include <vector>
 namespace tiger::tsf {
 class LanguageBar final : public ITfLangBarItemButton, public ITfSource {
 public:
@@ -12,8 +16,10 @@ public:
     LanguageBar(HINSTANCE module,REFCLSID service,bool secure);
     HRESULT open(ITfThreadMgr*,TfClientId);
     void close();
+    HRESULT showMenu(POINT point,HWND candidateOwner=nullptr);
     void update(bool chinese,bool enabled);
     void userWordFailure(bool failed);
+    void management(std::filesystem::path root,std::function<void()> addWord);
     STDMETHODIMP QueryInterface(REFIID,void**) override;
     STDMETHODIMP_(ULONG) AddRef() override;
     STDMETHODIMP_(ULONG) Release() override;
@@ -31,6 +37,14 @@ public:
 private:
     ~LanguageBar();
     void notify(DWORD);
+    struct MenuEntry {
+        UINT id=0; std::wstring text,action,value; bool checked=false;
+        std::vector<MenuEntry> children;
+    };
+    void refreshMenu();
+    std::vector<MenuEntry> menu_;
+    std::filesystem::path root_;
+    std::function<void()> addWord_;
     LONG refs_=1;
     HINSTANCE module_;
     TF_LANGBARITEMINFO info_{};

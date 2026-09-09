@@ -146,6 +146,17 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         check(modes_.open(manager_.Get(),client_,chinese_,[this](bool chinese){modeChanged(chinese);}));
         stage=L"Create language bar";
         languageBar_.Attach(new LanguageBar(Global::dllInstanceHandle,Global::SampleIMECLSID,secure_));
+        if(!secure_)languageBar_->management(userRoot_,[this] {
+            if(!active_ || !store_ || !lexicon_)return;
+            if(!addWordUI_)addWordUI_=AddWordUI::create(Global::dllInstanceHandle,*store_,lexicon_->dictionary(),
+                [this](std::shared_ptr<const Lexicon> lexicon) {
+                    lexicon_=std::move(lexicon);
+                    if(languageBar_)languageBar_->userWordFailure(false);
+                    for(auto& item:contexts_){item.second->engine.setLexicon(lexicon_);++item.second->revision;}
+                });
+            auto current=state(focused_.Get(),false);
+            addWordUI_->request(current?current->engine.recentElements():std::vector<std::u16string>{});
+        });
         check(languageBar_->open(manager_.Get(),client_));
         OnSetThreadFocus();
         if(!secure_ && !userRoot_.empty()) {
@@ -158,6 +169,12 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
                 pollDataChanges();
             },L"NativeTiger.DataRefresh.");
             dataTimer_->schedule(250);
+        }
+        if(!secure_) {
+            sentenceTimer_=ManualTimer::create(Global::dllInstanceHandle,[this] {
+                ComPtr<ITfTextInputProcessorEx> alive(this);pollSentence();
+            },L"NativeTiger.Sentence.");
+            if(sentenceWorker_ && sentenceWorker_->busy())sentenceTimer_->schedule(10);
         }
         return S_OK;
     } catch(HRESULT hr) {
@@ -172,6 +189,8 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
       catch(const std::exception& error) { report(error.what()); Deactivate(); return E_FAIL; }
 }
 HRESULT Service::Deactivate() {
+    if(sentenceTimer_){sentenceTimer_->close();sentenceTimer_.reset();}
+    sentenceWorker_.reset();sentenceResources_.reset();sentenceSignature_.clear();++sentenceRevision_;
     if(dataTimer_) {dataTimer_->close();dataTimer_.reset();}
     dataChanges_.close(); dataDirty_=false; nextDataWatch_=0;
     if(languageBar_) { languageBar_->close(); languageBar_.Reset(); }
@@ -195,6 +214,7 @@ HRESULT Service::Deactivate() {
     }
     mgrCookie_=focusCookie_=TF_INVALID_COOKIE;
     source_.Reset(); uiManager_.Reset(); manager_.Reset(); store_.reset(); lexicon_.reset();
+    sentenceRequestedSource_.reset();sentenceLoadedSource_.reset();
     selectionPath_.clear(); settingsPath_.clear(); config_=Config{}; candidateStyle_=CandidateStyle{};
     dictionaryPath_.clear(); userRoot_.clear(); schema_.clear();
     fonts_.reset(); fontDirectory_.clear();
@@ -218,6 +238,8 @@ std::shared_ptr<Context> Service::state(ITfContext* context,bool create) {
     return result;
 }
 void Service::forget(const std::shared_ptr<Context>& context) {
+    if(sentenceWorker_ && context->sentenceQueuedIdentity)sentenceWorker_->cancel(context->sentenceQueuedIdentity);
+    context->sentenceDecoder.reset();
     ComPtr<ITfSource> source;
     if(SUCCEEDED(context->context.As(&source))) {
         if(context->editCookie!=TF_INVALID_COOKIE) source->UnadviseSink(context->editCookie);
@@ -271,7 +293,7 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
             check(compositions->StartComposition(cookie,range.Get(),this,&context->composition));
             if(!context->composition) return E_FAIL;
         } else if(!range) check(context->composition->GetRange(&range));
-        const auto& surface=snapshot.compositionText();
+        const auto surface=displayComposition(snapshot,candidateStyle_);
         check(range->SetText(cookie,0,wide(surface),static_cast<LONG>(surface.size())));
         ComPtr<ITfProperty> property;
         if(SUCCEEDED(context->context->GetProperty(GUID_PROP_ATTRIBUTE,&property))) {
@@ -298,6 +320,7 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
         }
     }
     context->engine=std::move(next); ++context->revision;
+    queueSentence(context);
     publishMode(context);
     if(result.manualTimerMs>=0 && active_ && !secure_) {
         try {
@@ -360,7 +383,28 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         // A queued focus edit may not have run yet. Both preview and dispatch
         // must use the active schema before interpreting the next key.
         synchronizeEngine(next);
-        auto result=next.process(key);
+        SentencePathQueries sentenceQueries;
+        if(current->sentenceDecoder && current->sentenceResourceRevision==sentenceLoadedRevision_) {
+            auto decoder=current->sentenceDecoder;
+            sentenceQueries.complete=[decoder](std::u16string_view raw,std::u16string_view prefix,
+                std::optional<std::u16string_view> excluded,bool grouped) {
+                return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped);
+            };
+            sentenceQueries.properPrefix=[decoder](std::u16string_view raw){return decoder->isProperCodePrefix(raw);};
+        }
+        auto result=next.process(key,sentenceQueries);
+        if(!test && result.awaitSentenceDecode) {
+            completeSentenceNow(current,next);result=next.process(key,sentenceQueries);
+        }
+        // Own the entire Space press after our Ctrl+Space toggle. Passing its
+        // repeat/up lets the host/system handle the same shortcut a second time.
+        const bool toggledControlSpace=vk==VK_SPACE && down && key.ctrl &&
+            !key.shift && !key.alt && !key.win && config_.ctrlSpaceToggle &&
+            next.chinese()!=current->engine.chinese();
+        const bool consumedSpace=vk==VK_SPACE && current->controlSpaceConsumed;
+        if(consumedSpace) result.handled=true;
+        const bool nextConsumedSpace=vk==VK_SPACE ?
+            (down && (current->controlSpaceConsumed || toggledControlSpace)) : current->controlSpaceConsumed;
         *eaten=result.handled?TRUE:FALSE;
         if(test && result.handled) return S_OK; // pure preview, no file/text writes
         if(result.switchRecentSchema) {
@@ -392,11 +436,13 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         const bool textChange=!result.commit.empty() || result.cancelComposition ||
             current->engine.snapshot().raw!=next.snapshot().raw;
         if(textChange || result.handled) {
-            const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result](TfEditCookie cookie) mutable {
-                return apply(current,std::move(next),result,cookie);
+            const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result,nextConsumedSpace](TfEditCookie cookie) mutable {
+                const auto applied=apply(current,std::move(next),result,cookie);
+                if(SUCCEEDED(applied)) current->controlSpaceConsumed=nextConsumedSpace;
+                return applied;
             });
             if(FAILED(hr)) { *eaten=FALSE; report("Keystroke edit session failed"); return hr; }
-        } else { current->engine=std::move(next); ++current->revision; publishMode(current); }
+        } else { current->engine=std::move(next); current->controlSpaceConsumed=nextConsumedSpace; ++current->revision; publishMode(current); }
         if(test) {
             current->observed=true; current->observedVk=vk; current->observedFlags=flags;
             current->observedTime=stamp; current->observedDown=down;
@@ -410,6 +456,30 @@ HRESULT Service::OnKeyDown(ITfContext* c,WPARAM w,LPARAM l,BOOL* e) { return key
 HRESULT Service::OnTestKeyUp(ITfContext* c,WPARAM w,LPARAM l,BOOL* e) { return key(c,w,l,e,false,true); }
 HRESULT Service::OnKeyUp(ITfContext* c,WPARAM w,LPARAM l,BOOL* e) { return key(c,w,l,e,false,false); }
 HRESULT Service::OnPreservedKey(ITfContext*,REFGUID,BOOL* eaten) { if(!eaten) return E_POINTER; *eaten=FALSE; return S_OK; }
+HRESULT Service::candidateMenu(POINT point,HWND window) {
+    if(!active_ || secure_ || !languageBar_)return S_FALSE;
+    ComPtr<ITfTextInputProcessorEx> alive=this;
+    auto bar=languageBar_;
+    return bar->showMenu(point,window);
+}
+HRESULT Service::candidateCycle() {
+    if(!active_ || secure_ || !ui_ || settingsPath_.empty())return S_FALSE;
+    ComPtr<ITfTextInputProcessorEx> alive=this;
+    try {
+        candidateStyle_=cycleCandidateMode(settingsPath_,horizontalCode_,verticalCode_);
+        if(ui_)ui_->setStyle(candidateStyle_,fonts_);
+        return S_OK;
+    }catch(const std::exception& error){report(error.what());return E_FAIL;}
+}
+HRESULT Service::candidateWheel(int delta) {
+    if(!active_ || secure_ || !ui_ || settingsPath_.empty() || !delta)return S_FALSE;
+    ComPtr<ITfTextInputProcessorEx> alive=this;
+    try {
+        candidateStyle_.fontSize=adjustCandidateFontSize(settingsPath_,delta);
+        if(ui_)ui_->setStyle(candidateStyle_,fonts_);
+        return S_OK;
+    }catch(const std::exception& error){report(error.what());return E_FAIL;}
+}
 void Service::hideUI() {
     if(ui_) ui_->detach();
     if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->EndUIElement(uiId_);
@@ -441,7 +511,7 @@ void Service::reloadSchema(std::u16string name) {
     if(secure_ || userRoot_.empty()) return;
     if(name.empty()) name=u"虎码字词";
     if(!schema_.empty() && ordinalCompareIgnoreCase(name,schema_)==0) {
-        const auto path=schema_==u"虎码字词"?dictionaryPath_:schemaDictionaryPath(userRoot_/L"schemas"/std::filesystem::path(schema_));
+        const auto path=activeSchemaDictionaryPath(userRoot_,dictionaryPath_,schema_);
         if(lexicon_ && Dictionary::Open(path)==lexicon_->dictionary()) return;
     }
     publishSchema(prepareSchema(std::move(name)));
@@ -454,10 +524,8 @@ Service::PreparedSchema Service::prepareSchema(std::u16string name) {
     const auto canonical=std::find_if(names.begin(),names.end(),[&](const auto& item){return ordinalCompareIgnoreCase(name,item)==0;});
     if(canonical==names.end()) throw std::runtime_error("Schema directory not found");
     name=*canonical;
-    const bool builtin=name==u"虎码字词";
-    const auto directory=userRoot_/L"schemas"/std::filesystem::path(name);
-    const auto dictionary=Dictionary::Open(builtin?dictionaryPath_:schemaDictionaryPath(directory));
-    const auto journal=builtin?userRoot_/L"user"/L"tiger-words.tcu":directory/L"user.tcu";
+    const auto dictionary=Dictionary::Open(activeSchemaDictionaryPath(userRoot_,dictionaryPath_,name));
+    const auto journal=schemaJournalPath(userRoot_,name);
     auto nextStore=std::make_unique<UserStore>(dictionary,journal);
     auto nextLexicon=nextStore->refresh();
     return {std::move(name),std::move(nextStore),std::move(nextLexicon)};
@@ -489,6 +557,8 @@ void Service::reloadSettings() {
                 dataDirty_=true;++modeRevision_;chinese_=config.defaultChinese;
             }
             config_=std::move(config); candidateStyle_=std::move(style);
+            if(!candidateStyle_.hideCandidates)(candidateStyle_.vertical?verticalCode_:horizontalCode_)=candidateStyle_.showCode;
+            refreshSentenceResources(text);
         }
         catch(const std::exception& error) {
             report(error.what());
@@ -513,11 +583,15 @@ void Service::reloadSettings() {
     catch(const std::exception& error) { report(error.what()); }
 }
 void Service::synchronizeEngine(Engine& engine) {
-    if(engine.lexicon()->dictionary()!=lexicon_->dictionary())engine.switchSchema(lexicon_,config_);
+    const auto source=sentenceResources_ && sentenceLoadedSource_?sentenceLoadedSource_:lexicon_;
+    if(engine.lexicon()->dictionary()!=source->dictionary())engine.switchSchema(source,config_);
     else {
         engine.refreshConfiguration(config_);
-        if(engine.lexicon()!=lexicon_)engine.setLexicon(lexicon_);
+        if(engine.lexicon()!=source)engine.setLexicon(source);
     }
+    engine.enableSentenceInput(sentenceResources_ && sentenceLoadedSource_ &&
+        (sentenceLoadedSource_==source || sentenceLoadedSource_->equivalent(*source)),sentenceLoadedRevision_,
+        sentenceSettings_.autoCommit,sentenceSettings_.minimumRetainedRaw);
 }
 void Service::pollDataChanges() {
     if(!active_ || secure_ || keyDepth_ || refreshingData_)return;
@@ -548,6 +622,8 @@ void Service::pollDataChanges() {
                 }
             }
             if(previousLexicon && lexicon_->equivalent(*previousLexicon))lexicon_=previousLexicon;
+            if(lexicon_!=previousLexicon)refreshSentenceResources(readConfiguration(settingsPath_));
+            if(ui_ && (!(candidateStyle_==previousStyle) || fonts_!=previousFonts))ui_->setStyle(candidateStyle_,fonts_);
             dataDirty_=dataDirty_ || !(config_==previousConfig) || !(candidateStyle_==previousStyle) ||
                 lexicon_!=previousLexicon || fonts_!=previousFonts;
         }
@@ -633,7 +709,7 @@ void Service::refreshFocus(ITfContext* context) {
         auto current=state(context,true);
         // Focus state changes immediately. A later edit grant must not clear
         // modifiers pressed after this notification.
-        if(changed) {current->engine.focusChanged();current->observed=false;++current->revision;}
+        if(changed) {current->engine.focusChanged();current->controlSpaceConsumed=false;current->observed=false;++current->revision;}
         const bool switched=current->engine.lexicon()->dictionary()!=lexicon_->dictionary();
         const bool reload=current->engine.requiresConfigurationReload(config_);
         auto next=current->engine;
@@ -663,7 +739,7 @@ HRESULT Service::OnSetFocus(BOOL foreground) {
     foreground_=foreground!=FALSE;
     if(!foreground_) {
         ++modeRevision_; hideUI(); if(languageBar_)languageBar_->update(chinese_,false);
-        for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->observed=false;}
+        for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->controlSpaceConsumed=false;item.second->observed=false;}
     }
     return S_OK;
 }
@@ -677,7 +753,7 @@ HRESULT Service::OnKillThreadFocus() {
     ++modeRevision_;
     foreground_=false; hideUI();
     if(languageBar_)languageBar_->update(chinese_,false);
-    for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->observed=false; }
+    for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->controlSpaceConsumed=false; item.second->observed=false; }
     return S_OK;
 }
 HRESULT Service::OnPopContext(ITfContext* context) {
@@ -708,6 +784,7 @@ HRESULT Service::OnCompositionTerminated(TfEditCookie cookie,ITfComposition* com
         if(SUCCEEDED(composition->GetRange(&range)) && SUCCEEDED(current->context->GetProperty(GUID_PROP_ATTRIBUTE,&property)))
             property->Clear(cookie,range.Get());
         current->composition.Reset(); current->engine.cancel(); ++current->revision;
+        queueSentence(current);
         if(ui_ && ui_->context()==current) hideUI();
         break;
     }
@@ -762,6 +839,7 @@ HRESULT Service::choose(const std::shared_ptr<Context>& current,UINT index,bool 
         Engine next=current->engine; KeyResult result;
         if(abort) { next.cancel(); result.handled=true; result.cancelComposition=true; }
         else {
+            completeSentenceNow(current,next);
             if(index>=next.snapshot().total) return E_INVALIDARG;
             next.setPage(static_cast<int>(index/static_cast<UINT>(next.pageSize())));
             result=next.select(static_cast<int>(index%static_cast<UINT>(next.pageSize())));

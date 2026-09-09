@@ -1,0 +1,15 @@
+{
+  "TigerClaw.Core/CompactLexicon.cs": "5184221b1682d0122ae3379713243fcbfa11171b48de8f76760a1d5d0b8ac53b",
+  "TigerClaw.Core/MixedInputDecoder.cs": "023928bf4e7d27c05cd6bc880c1701dafe7dbe0f9d2b46439b21bfb9583d7ea9",
+  "TigerClaw.Core/NativeMessageBox.cs": "063fda1ee05fd0805e4221d4564bf32c302c50afc4e7b21f1d9902cf87e37648",
+  "TigerClaw.Core/SimpleJson.cs": "275bfaf470dc5c5e4ac9c7e707d4f4118c84085a0ba9adf914c1dbc6af24d72c",
+  "TigerClaw.Shared/BuildInfo.cs": "3680a500512442ef7d8c94f76d6edc4e5832ee1f33bd9239e08382ea8997fabf",
+  "TigerClaw.Shared/MonotonicClock.cs": "6ca5e814d6e536877495316cb39a9eac192255d33003ebea7098b1633fa8c912",
+  "TigerClaw.Shared/OverlayUiState.cs": "db9545902380b2ea94271dac60543922ffb1dbbb0abb5b7bd3c7a341112378b9",
+  "TigerClaw.Shared/ProcessInstanceGuard.cs": "8ebf1f28408187168e35700838e0eeeee5741fe1b10a8dabdbdacca4cc9584c1",
+  "TigerClaw.Shared/RuntimeConstants.cs": "9e104b9d80ecf872bba21341609c124b8221f8d4a996d7531d8016dab120e141",
+  "TigerClaw.Shared/ShortcutGesture.cs": "ce1ac3527803a3f49b0f2bb143717a98566f528c42b405499929594560a2379e",
+  "TigerClaw.Shared/TsfRegistrationGuard.cs": "20994124950434942a8656b80055c060f09a941516331baff98d509cb11e7470",
+  "TigerClaw.Shared/UiStateMemoryMap.cs": "98da053cfb891e16758053d307adb17bcbd42b35bd78e4af1464c2e54ae6cb60",
+  "TigerClaw.Shared/UiStateSnapshotPublisher.cs": "53dd89c56053849009f0b3f78a67cfeec88668a42e7160087594a9cc7e7ea096"
+}

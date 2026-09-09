@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems><Nullable>disable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="AutoCommitOracle.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="NgramOracle.cs" /><Compile Include="SentenceSettingsOracle.cs" /><Compile Include="DecoderOracle.cs" /><Compile Include="upstream/TigerClaw.Core/SentenceNgramModel.cs" /><Compile Include="LexiconOracle.cs" /><Compile Include="SupplementOracle.cs" /><Compile Include="SupplementFileOracle.cs" /><Compile Include="upstream/TigerClaw.Core/SentenceInputDecoder.cs" /><Compile Include="upstream/TigerClaw.Core/SentenceIsolationPenalty.cs" /><Compile Include="upstream/TigerClaw.Core/SentenceCharacterRanks.cs" /><Compile Include="upstream/TigerClaw.Core/SentenceSupplementModel.cs" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="upstream/TigerClaw.Core/Data/sentence_char_ranks.txt" LogicalName="TigerClaw.Core.Data.sentence_char_ranks.txt" /></ItemGroup>
+</Project>

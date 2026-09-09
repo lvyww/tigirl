@@ -21,6 +21,17 @@ int main(int argc,char** argv) {
     std::vector<tiger::UserChange> changes;
     for(int i=0;i<4000;++i)changes.push_back({tiger::ChangeKind::Add,u"replayfixture"+tiger::utf16(std::to_string(i)),u"a"});
     const auto before=store.commit(changes);
+    require(before->addedCodes().size()==4000,"New-code inventory missing entries");
+    for(int i=0;i<4000;++i)
+        require(before->addedCodes()[i]==u"replayfixture"+tiger::utf16(std::to_string(i)),"New codes lost insertion order");
+    auto preview=before->changed({tiger::ChangeKind::Delete,u"replayfixture1",u"a"});
+    preview=preview->changed({tiger::ChangeKind::Add,u"replayfixture1",u"again"});
+    preview=preview->changed({tiger::ChangeKind::Top,u"zzorderfixture",u"new"});
+    require(preview->addedCodes().size()==4001 && preview->addedCodes()[1]==u"replayfixture1" &&
+        preview->addedCodes().back()==u"zzorderfixture" && before->addedCodes().size()==4000,
+        "Delete/re-add/top changed insertion order or mutated original snapshot");
+    require(before->changed({tiger::ChangeKind::Delete,u"absentorderfixture",u"missing"})->addedCodes()==before->addedCodes(),
+        "No-op delete introduced a code");
     std::vector<double> samples;
     for(int sample=0;sample<3;++sample) {
         const auto start=std::chrono::steady_clock::now();const auto replay=store.refresh();
@@ -73,6 +84,9 @@ int main(int argc,char** argv) {
     tiger::UserStore restored(dictionary,checkpointPath);
     require(restored.refresh()->equivalent(*final) && restored.refresh()->quickSymbols()==final->quickSymbols(),"Checkpoint lost edits or empty-key metadata");
     const auto snapshot=restored.refresh();
+    require(snapshot->addedCodes()==final->addedCodes(),"Checkpoint reordered user codes");
+    require(snapshot->addedCodes().size()==4002 && snapshot->addedCodes()[4000]==u";checkpointempty" &&
+        snapshot->addedCodes()[4001]==u"checkpointalias","Empty-code or alias inventory order changed");
     const auto ab=snapshot->find(tiger::Section::Main,u"ab");
     require(ab.count==baseCandidates.count-1 && snapshot->value(ab,0)==promoted,"Checkpoint changed base deletion or ordering");
     const auto aliasMatch=snapshot->find(tiger::Section::Main,u"checkpointalias");

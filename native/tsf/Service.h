@@ -13,6 +13,8 @@
 #include "ModeCompartments.h"
 #include "LanguageBar.h"
 #include "DirectoryChanges.h"
+#include "SentenceWorker.h"
+#include "../SentenceSettings.h"
 #include "../UserStore.h"
 
 namespace tiger::tsf {
@@ -25,12 +27,15 @@ struct Context {
     ComPtr<ITfContext> context;
     ComPtr<ITfComposition> composition;
     Engine engine;
+    std::shared_ptr<SentenceDecoder> sentenceDecoder;
+    std::uint64_t sentenceResourceRevision=0,sentenceQueuedGeneration=0,sentenceQueuedIdentity=0;
     DWORD editCookie=TF_INVALID_COOKIE,layoutCookie=TF_INVALID_COOKIE;
     bool editing=false,observed=false,dataEditQueued=false;
     WPARAM observedVk=0;
     LPARAM observedFlags=0;
     LONG observedTime=0;
     bool observedDown=false;
+    bool controlSpaceConsumed=false;
     std::uint64_t revision=0;
 };
 
@@ -65,6 +70,9 @@ public:
     STDMETHODIMP OnLayoutChange(ITfContext* context,TfLayoutCode code,ITfContextView*) override;
     STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** values) override;
     STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid,ITfDisplayAttributeInfo** value) override;
+    HRESULT candidateMenu(POINT point,HWND window);
+    HRESULT candidateWheel(int delta);
+    HRESULT candidateCycle();
     HRESULT choose(const std::shared_ptr<Context>& state,UINT index,bool abort);
 private:
     HRESULT key(ITfContext*,WPARAM,LPARAM,BOOL*,bool down,bool test);
@@ -82,6 +90,10 @@ private:
     bool userDataRootAvailable() const;
     void pollDataChanges();
     void synchronizeEngine(Engine&);
+    void refreshSentenceResources(std::u16string_view settings);
+    void queueSentence(const std::shared_ptr<Context>&);
+    void pollSentence();
+    void completeSentenceNow(const std::shared_ptr<Context>&,Engine&);
     void reloadSchema(std::u16string name);
     struct PreparedSchema {
         std::u16string name;
@@ -103,6 +115,7 @@ private:
     bool active_=false,foreground_=true,secure_=false;
     ModeCompartments modes_;
     ComPtr<LanguageBar> languageBar_;
+    bool horizontalCode_=false,verticalCode_=false;
     bool chinese_=true;
     std::uint64_t modeRevision_=0;
     ComPtr<ITfContext> focused_;
@@ -114,6 +127,14 @@ private:
     ULONGLONG nextDataWatch_=0;
     bool dataDirty_=false,refreshingData_=false;
     unsigned keyDepth_=0;
+    std::unique_ptr<SentenceWorker> sentenceWorker_;
+    std::shared_ptr<ManualTimer> sentenceTimer_;
+    std::shared_ptr<const SentenceResources> sentenceResources_;
+    std::shared_ptr<const Lexicon> sentenceRequestedSource_,sentenceLoadedSource_;
+    std::u16string sentenceSignature_;
+    SentenceSettings sentenceSettings_;
+    std::uint64_t sentenceRevision_=0;
+    std::uint64_t sentenceLoadedRevision_=0;
     Config config_;
     CandidateStyle candidateStyle_;
     std::shared_ptr<PrivateFonts> fonts_;

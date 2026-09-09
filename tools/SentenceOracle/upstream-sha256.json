@@ -1,0 +1,21 @@
+{
+  "source": "/mnt/c/Users/yc/Desktop/bime_codex_src_20260513/next",
+  "files": {
+    "TigerClaw.Core/SentenceCharacterRanks.cs": "38bef42e708f6001b6e717ea3bd33150f33bd14d1a72295a9772112761c1817a",
+    "TigerClaw.Core/SentenceCommonCharacters.cs": "1de7e5013ec2082a0a54c0c2b580fd62a8b9927ec839193c7e46f067e4e10b9c",
+    "TigerClaw.Core/SentenceInputDecoder.cs": "7adeb4ad6dce8531fadd9f008ce5f9293233c82ebeaf200610028a8d0d6e29de",
+    "TigerClaw.Core/SentenceIsolationPenalty.cs": "bc78525af604b62c41b4511813ecb25eda5abaa15f878e19f43de0bd7718cbe7",
+    "TigerClaw.Core/SentenceNgramModel.cs": "0d0fdf6227c21f4703fc743fdf681cc594647e6139959724e46d9a5dbde55ba2",
+    "TigerClaw.Core/SentenceRerankClient.cs": "56773278786afe3cf0c59ba802cb049169c6e061e79e2ebd20aa468b6fa3a806",
+    "TigerClaw.Core/SentenceServiceLifecycle.cs": "add81cc89376e479ef6fc3ec2fd8c8fb640bc20e25727ee1fcc2801b44f05cc6",
+    "TigerClaw.Core/SentenceSupplementModel.cs": "835d611c94471a9d735b39b10cea9eca4045ea7074d3dd0bc19b95e7383664d4",
+    "TigerClaw.Core/InputMethodEngine.cs": "136aba3a7197c46558a39cd7f19ccd3018f4f8f48754ee7f518414b595c3539f",
+    "TigerClaw.Core/CoreRuntimeState.cs": "a327baf1a07362351be69e3a9450c8f7632b3973ebb692605ad6b839e9c1d5b9",
+    "TigerClaw.Core/Data/sentence_char_ranks.txt": "a8be232135cb33ac85f36475d89705f381419b424c3f83422a0e1f0d72aeb101",
+    "TigerClaw.Core/Data/sentence_common_chars_1500.txt": "e3ccaadda8e856213aac2f5418d4f8cd9f5a206a5593bc3756dc96b187c5b74d",
+    "TigerClaw.Core.Tests/SentenceGoldenExport.cs": "4aa8704b3349b38d8861041bc8213276cbe8efa2f8675b8940bf1c83fdf00051",
+    "TigerClaw.Core.Tests/SentenceLifecycleTests.cs": "59aa627ecb87bd2aa330faef99c8a32c4c718e22194d464dd3b070e94d1f6c1b",
+    "TigerClaw.Core.Tests/SentenceOptimizationTests.cs": "d24a815d2822f3d9ea3dfc870c645400acc96d9615ad4d893bd44a15d8b99df2",
+    "TigerClaw.Core.Tests/golden/sentence_golden.v1.jsonl": "9868fb1d22d5447ed16ec7774f7777f1538095dfad9f5cd2600ba95394726c08"
+  }
+}

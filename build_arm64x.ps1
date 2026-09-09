@@ -1,4 +1,7 @@
+param([string]$SentenceModelPath = "$PSScriptRoot\..\bime_codex_src_20260513\release_arm64\Models\sentence-ngram-v2.bin")
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'sentence_package.ps1')
+Assert-NativeTigerSentenceModel $SentenceModelPath
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
 if (!$vs) { throw 'Visual Studio with C++ ARM64/ARM64EC build tools is required.' }
@@ -17,4 +20,5 @@ foreach ($platform in @('ARM64', 'x64')) {
     if ($LASTEXITCODE -ne 0) { throw "ARM64X loader verifier build failed: $platform" }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "build\tests\$platform\architecture_load_probe.exe") -Destination (Join-Path $destination "verify_load_$($platform.ToLowerInvariant()).exe") -Force
 }
+Copy-NativeTigerSentenceModel $SentenceModelPath $destination
 Write-Output "Experimental ARM64X DLL: $PSScriptRoot\build\ARM64X\ARM64EC\Release\SampleIME.dll"

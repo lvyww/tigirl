@@ -4,6 +4,7 @@
 #include "MixedInput.h"
 #include "Grapheme.h"
 #include "History.h"
+#include "SentenceSession.h"
 #include <chrono>
 #include <string>
 #include <vector>
@@ -41,7 +42,7 @@ struct KeyEvent {
     // The adapter supplies availability; ordinary engine dispatch never opens files.
     bool recentSchemaAvailable = false;
 };
-enum class Mode { English = 0, Idle, Composing, Uppercase, Pinyin };
+enum class Mode { English = 0, Idle, Composing, Uppercase, Pinyin, Sentence };
 struct KeyResult {
     bool handled = false;
     bool cancelComposition = false;
@@ -50,6 +51,8 @@ struct KeyResult {
     bool toggleHiddenCandidates = false;
     int manualTimerMs = -1;
     bool switchRecentSchema = false;
+    // Adapter retains and replays this key after the current sentence result.
+    bool awaitSentenceDecode = false;
 };
 struct Candidate {
     std::u16string display, commit, annotation;
@@ -62,6 +65,8 @@ struct Snapshot {
     std::uint32_t total = 0;
     std::vector<Candidate> candidates;
     std::u16string surface;
+    int selectedCandidate = -1;
+    std::size_t displayPrefixLength=0; // Resolved mixed-input prefix stays unmasked.
     const std::u16string& compositionText() const { return surface.empty()?raw:surface; }
 };
 
@@ -83,7 +88,11 @@ public:
     // Only the real dispatch adapter drains and persists these. A copied engine
     // may preview keys without writing files or changing another context.
     std::vector<UserChange> takeUserChanges();
-    KeyResult process(const KeyEvent& event);
+    KeyResult process(const KeyEvent& event,const SentencePathQueries& queries={});
+    void enableSentenceInput(bool enabled,std::uint64_t resourceRevision,bool automatic=false,int retainedRaw=0);
+    KeyResult autoCommitSentence();
+    std::optional<SentenceDecodeTicket> sentenceRequest() const;
+    bool applySentenceResult(const SentenceDecodeTicket& ticket,SentenceDecodeResult result);
     Snapshot snapshot();
     Candidate candidateAt(std::uint32_t index) const;
     int pageSize() const { return config_.pageSize; }
@@ -99,9 +108,11 @@ public:
     std::vector<std::u16string> recentElements() const { return history_.recent(); }
 
 private:
-    KeyResult dispatch(KeyEvent key);
+    KeyResult dispatch(KeyEvent key,const SentencePathQueries& queries);
     KeyResult idle(const KeyEvent& key);
     KeyResult composition(const KeyEvent& key);
+    KeyResult sentence(const KeyEvent& key,const SentencePathQueries& queries);
+    void syncSentenceRaw();
     KeyResult uppercase(const KeyEvent& key);
     KeyResult finishUppercase(std::u16string suffix={});
     KeyResult finish(std::u16string text = {});
@@ -124,6 +135,11 @@ private:
     void postprocess(const KeyEvent& key, KeyResult& result);
     void appendHistory(std::u16string_view text);
 
+    SentenceSession sentence_;
+    bool sentenceEnabled_=false;
+    bool sentenceAutomatic_=false;
+    int sentenceRetainedRaw_=0;
+    std::uint64_t sentenceResources_=0;
     std::shared_ptr<const Lexicon> lexicon_;
     std::vector<UserChange> userChanges_;
     int oneShotActionKey_ = 0;

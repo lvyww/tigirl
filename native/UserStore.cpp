@@ -236,7 +236,16 @@ std::vector<unsigned char> UserStore::makeCheckpoint(Bytes original) const {
     original.resize(validLength);
     Bytes records(magic,magic+8);
     std::set<std::u16string> retainedCodes;
-    for(const auto& edit:lexicon->edits_) {
+    // Base keys already have their place in the source inventory. New keys
+    // must be replayed in insertion order: sentence shortest-code ties depend
+    // on it, even when a key temporarily has no candidates.
+    std::set<std::u16string> added(lexicon->addedCodes_.begin(),lexicon->addedCodes_.end());
+    std::vector<Lexicon::Edits::const_iterator> ordered;
+    for(auto it=lexicon->edits_.begin();it!=lexicon->edits_.end();++it)
+        if(!added.count(it->first))ordered.push_back(it);
+    for(const auto& code:lexicon->addedCodes_)ordered.push_back(lexicon->edits_.find(code));
+    for(const auto it:ordered) {
+        const auto& edit=*it;
         // Add deduplicates by commit identity. A retained duplicate inherited
         // from the base cannot be reconstructed using Add, so preserve the
         // original history in that case instead of silently dropping it.
@@ -256,8 +265,9 @@ std::vector<unsigned char> UserStore::makeCheckpoint(Bytes original) const {
         }
         if(records.size()>maxJournal)return original;
     }
-    // Operations on distinct codes commute. Preserve original byte records
-    // only for codes whose duplicate identities cannot be rebuilt via Add.
+    // Duplicate identities can only be inherited from base keys (Add itself
+    // deduplicates); replaying their history here cannot reorder new codes.
+    // Preserve records whose duplicate identities cannot be rebuilt via Add.
     // decode() above has already validated all record lengths and checksums.
     if(!retainedCodes.empty()) {
         for(std::size_t offset=8;offset<validLength;) {

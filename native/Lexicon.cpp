@@ -14,7 +14,7 @@ Lexicon::Lexicon(std::shared_ptr<const Dictionary> dictionary) : dictionary_(std
     quick_ = dictionary_->quickSymbols();
 }
 bool Lexicon::equivalent(const Lexicon& other) const {
-    if(dictionary_!=other.dictionary_ || edits_.size()!=other.edits_.size())return false;
+    if(dictionary_!=other.dictionary_ || edits_.size()!=other.edits_.size() || addedCodes_!=other.addedCodes_)return false;
     return std::equal(edits_.begin(),edits_.end(),other.edits_.begin(),[](const auto& a,const auto& b) {
         return a.first==b.first && (a.second==b.second || *a.second==*b.second);
     });
@@ -119,7 +119,11 @@ bool Lexicon::applyChange(const UserChange& change) {
         if(found!=values->end() && found!=values->begin()) { std::iter_swap(found,found-1); changed=true; }
         break;
     }
-    if(changed) { edits_[code]=std::move(values); rebuildQuickSymbols(code); }
+    if(changed) {
+        const auto base=dictionary_->find(Section::Main,code);
+        if(!edits_.count(code) && !base.count && !(base.flags&8))addedCodes_.push_back(code);
+        edits_[code]=std::move(values); rebuildQuickSymbols(code);
+    }
     return changed;
 }
 }

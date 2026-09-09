@@ -1,5 +1,8 @@
 #pragma once
 #include "Service.h"
+#include "CandidateRenderer.h"
+#include "CandidatePlacement.h"
+#include "../CandidateReveal.h"
 
 namespace tiger::tsf {
 class CandidateUI final : public ITfCandidateListUIElementBehavior {
@@ -7,6 +10,7 @@ public:
     CandidateUI(Service* owner,std::shared_ptr<Context> state,CandidateStyle style,std::shared_ptr<PrivateFonts> fonts);
     ~CandidateUI();
     void detach();
+    void setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts);
     void update(const RECT* caret,HWND ownerWindow);
     const std::shared_ptr<Context>& context() const { return state_; }
     STDMETHODIMP QueryInterface(REFIID iid,void** object) override;
@@ -30,7 +34,9 @@ public:
 private:
     static LRESULT CALLBACK windowProc(HWND,UINT,WPARAM,LPARAM);
     void paint(HDC dc);
-    void textMask(HDC dc);
+    void refreshReveal();
+    CandidateReveal reveal_;
+    void layoutAndPaint();
     void place();
     LONG refs_=1;
     Service* owner_=nullptr; // detached before service destruction; no ownership cycle
@@ -41,14 +47,16 @@ private:
     std::shared_ptr<PrivateFonts> fonts_;
     CandidatePresentation presentation_;
     std::vector<RECT> itemRects_;
-    RECT codeRect_{};
     UINT dpi_=0;
     UINT selected_=0;
     std::vector<UINT> pages_;
-    bool shown_=false;
+    bool shown_=false,hasCaret_=false;
     HWND window_=nullptr;
-    HFONT font_=nullptr;
+    std::unique_ptr<CandidateRenderer> renderer_;
+    bool layingOut_=false;
     RECT caret_{};
-    int rowHeight_=28,width_=300,height_=32;
+    CandidatePlacement placement_;
+    HMONITOR placementMonitor_=nullptr;
+    int width_=300,height_=32;
 };
 }

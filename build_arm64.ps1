@@ -1,4 +1,7 @@
+param([string]$SentenceModelPath = "$PSScriptRoot\..\bime_codex_src_20260513\release_arm64\Models\sentence-ngram-v2.bin")
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'sentence_package.ps1')
+Assert-NativeTigerSentenceModel $SentenceModelPath
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
 if (!$vs) { throw 'Visual Studio with C++ ARM64 build tools is required.' }
@@ -15,3 +18,4 @@ foreach ($tool in @('schema_select.exe', 'lexicon_import.exe', 'schema_manager.e
         Copy-Item -LiteralPath $toolSource -Destination $toolDestination -Force
     }
 }
+Copy-NativeTigerSentenceModel $SentenceModelPath (Join-Path $PSScriptRoot 'build\ARM64\Release')

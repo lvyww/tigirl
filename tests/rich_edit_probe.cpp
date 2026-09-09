@@ -84,6 +84,25 @@ int wmain(int argc,wchar_t** argv) {
             const auto deadline=GetTickCount64()+40;
             do {pump(keys.Get());MsgWaitForMultipleObjects(0,nullptr,FALSE,5,QS_ALLINPUT);}while(GetTickCount64()<deadline);
         };
+        // Exercise the OS input path, including the period where the TIP has
+        // published English mode. Direct sink callbacks miss system hotkeys.
+        auto mode=[&]() { VARIANT value;VariantInit(&value);check(open->GetValue(&value));
+            require(value.vt==VT_I4,"Missing open compartment");const auto result=value.lVal;VariantClear(&value);return result; };
+        auto edge=[&](WORD vk,bool down) {
+            require(GetForegroundWindow()==parent && GetFocus()==edits[0],"Chord test lost focus");
+            INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wVk=vk;input.ki.dwFlags=down?0:KEYEVENTF_KEYUP;
+            require(SendInput(1,&input,sizeof(INPUT))==1,"Cannot inject chord edge");
+            const auto deadline=GetTickCount64()+100;
+            do {pump(keys.Get());MsgWaitForMultipleObjects(0,nullptr,FALSE,5,QS_ALLINPUT);}while(GetTickCount64()<deadline);
+        };
+        for(int round=0;round<2;++round) {
+            const auto before=mode();
+            edge(VK_CONTROL,true);edge(VK_SPACE,true);const auto pressed=mode();
+            edge(VK_SPACE,false);const auto released=mode();edge(VK_CONTROL,false);
+            std::cerr<<"CtrlSpace before="<<before<<" pressed="<<pressed<<" released="<<released<<" final="<<mode()<<'\n';
+            require(pressed!=before,"Ctrl+Space did not toggle on keydown");
+            require(released==pressed && mode()==pressed,"Ctrl+Space toggled again on release");
+        }
         tap(edits[0],'A');waitText(edits[0],L"a");tap(edits[0],'B');waitText(edits[0],L"ab");
         tap(edits[0],VK_SPACE);waitText(edits[0],L"交");
         tap(edits[0],'A');tap(edits[0],'B');tap(edits[0],VK_ESCAPE);waitText(edits[0],L"交");

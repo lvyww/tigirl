@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>tsf_host</NativeProbeName></PropertyGroup>
+  <Import Project="ArchitectureLoadProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" /><ClCompile Include="tsf_host.cpp" /></ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>oleaut32.lib;user32.lib;gdi32.lib;dwmapi.lib;psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <Target Name="RequireWin32Host" BeforeTargets="PrepareForBuild"><Error Condition="'$(Platform)'!='Win32'" Text="Build this probe with Platform=Win32." /></Target>
+</Project>

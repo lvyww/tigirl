@@ -13,6 +13,10 @@
 #include <functional>
 #include <system_error>
 #include <limits>
+#include <cmath>
+#include <sstream>
+#include <iomanip>
+#include <locale>
 namespace tiger {
 namespace {
 [[noreturn]] void failure(const char* operation) { throw std::system_error(static_cast<int>(GetLastError()),std::system_category(),operation); }
@@ -159,6 +163,31 @@ bool acceptReminder(const std::filesystem::path& path,const ReminderTicket& tick
         return reminderText(record);
     });
     return accepted;
+}
+CandidateStyle cycleCandidateMode(const std::filesystem::path& path,bool& horizontalCode,bool& verticalCode) {
+    CandidateStyle style;
+    bool horizontal=horizontalCode,vertical=verticalCode;
+    mutateConfiguration(path,[&](std::u16string_view text) {
+        style=parseCandidateStyle(text);
+        if(!style.hideCandidates)(style.vertical?vertical:horizontal)=style.showCode;
+        if(style.hideCandidates && style.showCode) {style.hideCandidates=false;style.vertical=false;style.showCode=horizontal;}
+        else if(style.vertical) {style.hideCandidates=true;style.showCode=true;}
+        else {style.hideCandidates=false;style.vertical=true;style.showCode=vertical;}
+        auto updated=withConfigurationValue(text,u"隐藏候选",style.hideCandidates?u"是":u"否");
+        updated=withConfigurationValue(updated,u"竖排候选",style.vertical?u"是":u"否");
+        return withConfigurationValue(updated,u"候选窗显示编码",style.showCode?u"是":u"否");
+    });
+    horizontalCode=horizontal;verticalCode=vertical;return style;
+}
+double adjustCandidateFontSize(const std::filesystem::path& path,int wheelDelta) {
+    double size=17;
+    mutateConfiguration(path,[&](std::u16string_view text) {
+        size=parseCandidateStyle(text).fontSize;
+        size=std::round(std::clamp(size+wheelDelta/120.0*0.5,3.0,200.0)*100.0)/100.0;
+        std::ostringstream value;value.imbue(std::locale::classic());value<<std::fixed<<std::setprecision(2)<<size;
+        return withConfigurationValue(text,u"字体大小",utf16(value.str()));
+    });
+    return size;
 }
 bool toggleHiddenCandidates(const std::filesystem::path& path) {
     bool hidden=false;

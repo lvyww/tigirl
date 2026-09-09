@@ -1,6 +1,7 @@
 // A real Windows TSF manager/context backed by a small application text store.
 // The registered native profile is activated for this process only.
 #define NOMINMAX
+#include <map>
 #include <windows.h>
 #include <msctf.h>
 #include <ctffunc.h>
@@ -99,6 +100,11 @@ static void verifyMappedDictionary(const std::filesystem::path& dictionary,std::
     require(found,"The tested TSF service has not mapped its dictionary");
 }
 static void verifyDictionary(HMODULE module,std::vector<PSAPI_WORKING_SET_EX_INFORMATION>* pages=nullptr) {
+    wchar_t root[32768]{};const auto length=GetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",root,32768);
+    if(length && length<32768 && std::filesystem::exists(std::filesystem::path(root)/L".builtin-override-tsf-test")) {
+        verifyMappedDictionary(std::filesystem::path(root)/L"schemas"/L"虎码字词"/L"generations"/L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/L"tiger-v2.tcd",pages);
+        return;
+    }
     wchar_t path[32768]; require(GetModuleFileNameW(module,path,32768)!=0,"Cannot locate tested module");
     verifyMappedDictionary(std::filesystem::path(path).parent_path()/L"tiger-v2.tcd",pages);
 }
@@ -107,6 +113,8 @@ class MenuCapture final : public ITfMenu {
     LONG refs_=1;
 public:
     std::vector<std::pair<UINT,std::wstring>> items;
+    std::map<UINT,ComPtr<MenuCapture>> children;
+    std::map<UINT,DWORD> flags;
     STDMETHODIMP QueryInterface(REFIID iid,void** out) override {
         if(!out)return E_POINTER;*out=nullptr;
         if(iid!=IID_IUnknown && iid!=IID_ITfMenu)return E_NOINTERFACE;
@@ -114,8 +122,10 @@ public:
     }
     STDMETHODIMP_(ULONG) AddRef() override{return ++refs_;}
     STDMETHODIMP_(ULONG) Release() override{auto n=--refs_;if(!n)delete this;return n;}
-    STDMETHODIMP AddMenuItem(UINT id,DWORD,HBITMAP,HBITMAP,const WCHAR* text,ULONG length,ITfMenu** submenu) override {
-        if(submenu)*submenu=nullptr;items.emplace_back(id,std::wstring(text,length));return S_OK;
+    STDMETHODIMP AddMenuItem(UINT id,DWORD style,HBITMAP,HBITMAP,const WCHAR* text,ULONG length,ITfMenu** submenu) override {
+        flags[id]=style;
+        if(submenu){children[id].Attach(new MenuCapture);*submenu=children[id].Get();(*submenu)->AddRef();}
+        items.emplace_back(id,std::wstring(text,length));return S_OK;
     }
 };
 
@@ -533,6 +543,7 @@ static ULONG compositionCount(const Document& doc) {
 #include "management_menu_fixture.h"
 #include "word_save_failure_fixture.h"
 #include "selection_race_fixture.h"
+#include "sentence_tsf_fixture.h"
 int wmain(int argc,wchar_t** argv) {
     // Avoid synchronous stderr pipe writes between keys: they can mask timing
     // failures. Keep diagnostics in memory and emit them only when exiting.
@@ -545,8 +556,10 @@ int wmain(int argc,wchar_t** argv) {
     try {
         if(argc==2 && wcscmp(argv[1],L"--text-store-lock-test")==0) {text_store_lock_fixture();return 0;}
         const bool liveReader=argc==6 && wcscmp(argv[4],L"--live-reader")==0;
+        const bool maskDetached=argc==6 && wcscmp(argv[4],L"--mask-detached")==0;
         const bool timerDetached=argc==6 && wcscmp(argv[4],L"--timer-detach")==0;
         const bool wordSaveFailure=argc==6 && wcscmp(argv[4],L"--word-save-failure")==0;
+        const bool candidateMouse=argc==6 && wcscmp(argv[4],L"--candidate-mouse")==0;
         const bool managementLaunch=argc==6 && wcscmp(argv[4],L"--management-launch")==0;
         const bool managementMenu=managementLaunch || (argc==6 && wcscmp(argv[4],L"--management-menu")==0);
         const bool activeMemory=argc==6 && wcscmp(argv[4],L"--memory-active")==0;
@@ -556,16 +569,18 @@ int wmain(int argc,wchar_t** argv) {
             require(root.is_absolute() && std::filesystem::exists(root/L".tsf-memory-test"),"Memory probe requires an isolated marked root");
             require(SetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",root.c_str())!=FALSE,"Cannot isolate memory probe");
         }
-        if(liveReader || timerDetached || managementMenu || wordSaveFailure) {
+        if(liveReader || maskDetached || timerDetached || managementMenu || candidateMouse || wordSaveFailure) {
             const std::filesystem::path root=argv[5];
-            require(root.is_absolute() && std::filesystem::exists(root/(wordSaveFailure?L".tsf-word-save-test":managementMenu?L".tsf-management-test":timerDetached?L".tsf-timer-test":L".tsf-live-test")),"Reader requires an isolated marked root");
+            require(root.is_absolute() && std::filesystem::exists(root/(maskDetached?L".tsf-mask-test":candidateMouse?L".tsf-candidate-mouse-test":wordSaveFailure?L".tsf-word-save-test":managementMenu?L".tsf-management-test":timerDetached?L".tsf-timer-test":L".tsf-live-test")),"Reader requires an isolated marked root");
             require(SetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",root.c_str())!=FALSE,"Cannot isolate live reader");
         }
-        require(argc>=2 && (argc<=5 || memoryProbe || liveReader || timerDetached || managementMenu || wordSaveFailure),"tsf_host <DLL> [capture|-] [manifest] [test mode]");
+        require(argc>=2 && (argc<=5 || memoryProbe || liveReader || maskDetached || timerDetached || managementMenu || candidateMouse || wordSaveFailure),"tsf_host <DLL> [capture|-] [manifest] [test mode]");
         const bool schemaActivation=argc==5 && wcscmp(argv[4],L"--schema-activation-only")==0;
+        const bool sentenceMeasure=argc==5 && wcscmp(argv[4],L"--sentence-measure")==0;
+        const bool sentenceTest=sentenceMeasure || (argc==5 && wcscmp(argv[4],L"--sentence")==0);
         const bool selectionRace=argc==5 && wcscmp(argv[4],L"--selection-race")==0;
         const bool registeredActivation=argc==3 && wcscmp(argv[2],L"--registered-activation-only")==0;
-        const bool activationOnly=selectionRace || registeredActivation || wordSaveFailure || managementLaunch || timerDetached || liveReader || memoryProbe || schemaActivation || (argc==5 && wcscmp(argv[4],L"--activation-only")==0);
+        const bool activationOnly=maskDetached || sentenceTest || selectionRace || registeredActivation || wordSaveFailure || managementLaunch || timerDetached || liveReader || memoryProbe || schemaActivation || (argc==5 && wcscmp(argv[4],L"--activation-only")==0);
         const bool mixed=argc==5 && wcscmp(argv[4],L"--mixed")==0;
         const bool addWord=argc==5 && wcscmp(argv[4],L"--add-word")==0;
         const bool timerTest=argc==5 && wcscmp(argv[4],L"--timer")==0;
@@ -621,7 +636,7 @@ int wmain(int argc,wchar_t** argv) {
                 expected/=L"generations";expected/=L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             }
             verifyMappedDictionary(expected/L"tiger-v2.tcd");
-        } else verifyDictionary(module);
+        } else if(!sentenceTest) verifyDictionary(module);
         if(managementMenu) {
             management_fixture::run(manager.Get(),window,std::filesystem::path(argv[5]),!managementLaunch);
             check(first.manager->Pop(TF_POPF_ALL));check(second.manager->Pop(TF_POPF_ALL));
@@ -629,6 +644,33 @@ int wmain(int argc,wchar_t** argv) {
             const char* popup=managementLaunch?"false":"true";
             std::cout<<"{\"status\":\"passed\",\"management_actions\":2,\"popup_validated\":"<<popup<<",\"os_synthesized_menu_keys\":"<<popup<<",\"child_foreground\":"<<popup<<",\"host_foreground_restored\":"<<popup<<",\"physical_hardware_input\":false}\n";
             return 0;
+        }
+        if(maskDetached) {
+            try {
+                check(profiles->DeactivateProfile(TF_PROFILETYPE_INPUTPROCESSOR,0x0804,clsid,profile,nullptr,TF_IPPMF_FORPROCESS));pump();
+                // TSF can retain the deactivated profile's taskbar item until a later pump.
+                ComPtr<ITfLangBarItemMgr> bars;check(manager.As(&bars));ComPtr<ITfLangBarItem> oldItem;
+                if(SUCCEEDED(bars->GetItem(tiger::tsf::LanguageBar::ItemId,&oldItem)))check(bars->RemoveItem(oldItem.Get()));
+                check(factory->CreateInstance(nullptr,IID_PPV_ARGS(&service)));
+                ComPtr<ITfClientId> ids;check(manager.As(&ids));TfClientId nativeClient;check(ids->GetClientId(clsid,&nativeClient));
+                check(service->ActivateEx(manager.Get(),nativeClient,0));
+                ComPtr<ITfThreadMgrEventSink> focus;check(service.As(&focus));check(focus->OnSetFocus(first.manager.Get(),nullptr));
+                ComPtr<ITfKeyEventSink> input;check(service.As(&input));check(input->OnSetFocus(TRUE));
+                BYTE saved[256],empty[256]{};GetKeyboardState(saved);SetKeyboardState(empty);
+                auto tapMask=[&](WPARAM key){BOOL eaten=FALSE;check(input->OnTestKeyDown(first.context.Get(),key,1,&eaten));require(eaten,"Mask key not consumed");check(input->OnKeyDown(first.context.Get(),key,1,&eaten));check(input->OnTestKeyUp(first.context.Get(),key,1,&eaten));if(eaten)check(input->OnKeyUp(first.context.Get(),key,1,&eaten));};
+                tapMask('A');tapMask('B');require(first.store->text==L"甲😀","Masked preedit differs");
+                tapMask(VK_BACK);require(first.store->text==L"甲","Masked backspace differs");tapMask('B');
+                ComPtr<ITfUIElementMgr> elements;check(manager.As(&elements));ComPtr<ITfUIElement> element;check(elements->GetUIElement(ui->id,&element));
+                ComPtr<ITfCandidateListUIElement> list;check(element.As(&list));BSTR value=nullptr;check(list->GetString(0,&value));
+                const bool original=std::wstring(value,SysStringLen(value))==L"交";SysFreeString(value);require(original,"Candidate text was masked");
+                tapMask(VK_SPACE);require(first.store->text==L"交" && compositionCount(first)==0,"Masked commit differs");
+                tapMask('A');tapMask('B');tapMask('D');tapMask('K');
+                require(first.store->text==L"交交😀甲","Mixed resolved prefix was masked");
+                tapMask(VK_SPACE);require(first.store->text==L"交交口","Mixed masked commit differs");
+                tapMask('A');tapMask(VK_ESCAPE);require(first.store->text==L"交交口","Cancel committed mask");
+                SetKeyboardState(saved);check(service->Deactivate());
+                std::cout<<"{\"status\":\"passed\",\"masked_preedit\":true,\"backspace\":true,\"original_candidates\":true,\"commit\":true,\"mixed_prefix\":true,\"cancel\":true,\"physical_input\":false}\n";return 0;
+            }catch(const std::exception& error){std::cerr<<error.what()<<'\n';throw;}
         }
         if(timerDetached) {
             check(profiles->DeactivateProfile(TF_PROFILETYPE_INPUTPROCESSOR,0x0804,clsid,profile,nullptr,TF_IPPMF_FORPROCESS));pump();
@@ -828,6 +870,18 @@ int wmain(int argc,wchar_t** argv) {
             writeMode(conversionMode.Get(),readMode(conversionMode.Get())|TF_CONVERSIONMODE_NATIVE);
             require(readMode(openMode.Get())==1,"External conversion did not open Chinese mode");
             check(profiles->DeactivateProfile(TF_PROFILETYPE_INPUTPROCESSOR,0x0804,clsid,profile,nullptr,TF_IPPMF_FORPROCESS)); pump();
+            // Deactivating a TIP can activate the user's fallback TIP. Its
+            // compartment sinks must not compete with the manually driven
+            // instance below. Select an already-loaded plain keyboard layout
+            // for this test process only (no user/session profile changes).
+            HKL layouts[64]{};const int layoutCount=GetKeyboardLayoutList(64,layouts);HKL neutral=nullptr;
+            for(int i=0;i<layoutCount;++i)if(LOWORD(reinterpret_cast<ULONG_PTR>(layouts[i]))==0x0409){neutral=layouts[i];break;}
+            require(neutral!=nullptr,"Hidden activation fixture requires a loaded English keyboard layout");
+            check(profiles->ActivateProfile(TF_PROFILETYPE_KEYBOARDLAYOUT,0x0409,CLSID_NULL,GUID_NULL,neutral,
+                TF_IPPMF_FORPROCESS|TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE));pump();
+            TF_INPUTPROCESSORPROFILE neutralProfile{};check(profiles->GetActiveProfile(GUID_TFCAT_TIP_KEYBOARD,&neutralProfile));
+            require(neutralProfile.dwProfileType==TF_PROFILETYPE_KEYBOARDLAYOUT && neutralProfile.hkl==neutral,
+                "Plain keyboard did not replace the fallback TIP in the test process");
             // The hidden host has no OS foreground focus. Exercise the actual
             // service with explicit TSF focus/key callbacks, separately from
             // the system profile activation verified above.
@@ -848,6 +902,14 @@ int wmain(int argc,wchar_t** argv) {
             check(service->ActivateEx(manager.Get(),serviceClient,0));
             ComPtr<ITfThreadMgrEventSink> focusSink; check(service.As(&focusSink));
             ComPtr<ITfKeyEventSink> keySink; check(service.As(&keySink));
+            if(sentenceTest) {
+                sentence_tsf_fixture::run(service.Get(),manager.Get(),first,second,ui.Get(),sentenceMeasure);
+                check(service->Deactivate());service.Reset();
+                check(first.manager->Pop(TF_POPF_ALL));check(second.manager->Pop(TF_POPF_ALL));
+                check(source->UnadviseSink(uiCookie));check(manager->Deactivate());DestroyWindow(secondWindow);DestroyWindow(window);
+                if(sentenceMeasure)std::cout<<"{\"status\":\"sentence-tsf-measured\",\"physical_input\":false}\n";
+                else std::cout<<"{\"status\":\"sentence-tsf-passed\",\"physical_input\":false,\"computed_result_deferred_positive\":true,\"computed_result_stale_context\":true,\"computed_result_stale_thread_focus\":true}\n";return 0;
+            }
             if(selectionRace) {
                 selection_race_fixture::run(service.Get(),serviceClient,first,second,ui.Get());
                 check(service->Deactivate());service.Reset();
@@ -1116,13 +1178,48 @@ int wmain(int argc,wchar_t** argv) {
             BYTE savedModeKeys[256],emptyModeKeys[256]{};
             require(GetKeyboardState(savedModeKeys)!=FALSE,"Cannot save keyboard state");
             require(SetKeyboardState(emptyModeKeys)!=FALSE,"Cannot clear keyboard state");
+            // A handled Ctrl+Space down must not leak its repeat/up to the host.
+            // Preview must leave both mode and the consumed-key latch unchanged.
+            for(bool controlFirst:{false,true}) {
+                BYTE chordKeys[256]{};chordKeys[VK_CONTROL]=chordKeys[VK_LCONTROL]=0x80;
+                require(SetKeyboardState(chordKeys)!=FALSE,"Cannot set Ctrl+Space modifiers");
+                auto chordEvent=[&](UINT vk,bool down,bool repeat,bool mustEat) {
+                    const LPARAM flags=1 | (repeat?(1LL<<30):0) | (down?0:((1LL<<30)|(1LL<<31)));
+                    BOOL eaten=FALSE;const auto before=readMode(openMode.Get());
+                    for(int preview=0;preview<2;++preview) {
+                        if(down)check(keySink->OnTestKeyDown(second.context.Get(),vk,flags,&eaten));
+                        else check(keySink->OnTestKeyUp(second.context.Get(),vk,flags,&eaten));
+                        require(!mustEat || eaten,"Ctrl+Space repeat/release leaked from TSF preview");
+                        require(readMode(openMode.Get())==before,"Ctrl+Space preview changed mode");
+                    }
+                    if(eaten) {
+                        if(down)check(keySink->OnKeyDown(second.context.Get(),vk,flags,&eaten));
+                        else check(keySink->OnKeyUp(second.context.Get(),vk,flags,&eaten));
+                        require(!mustEat || eaten,"Ctrl+Space dispatch leaked to host");
+                    }
+                    pump();
+                };
+                const auto initial=readMode(openMode.Get());
+                chordEvent(VK_LCONTROL,true,false,false);
+                chordEvent(VK_SPACE,true,false,true);
+                require(readMode(openMode.Get())!=initial,"Ctrl+Space did not toggle on down");
+                chordEvent(VK_SPACE,true,true,true);
+                require(readMode(openMode.Get())!=initial,"Ctrl+Space repeat toggled mode again");
+                if(controlFirst) {SetKeyboardState(emptyModeKeys);chordEvent(VK_LCONTROL,false,false,false);}
+                chordEvent(VK_SPACE,false,false,true);
+                require(readMode(openMode.Get())!=initial,"Ctrl+Space release toggled mode again");
+                if(!controlFirst) {SetKeyboardState(emptyModeKeys);chordEvent(VK_LCONTROL,false,false,false);}
+            }
+            require(readMode(openMode.Get())==1 && second.store->text.empty(),"Ctrl+Space regression altered final mode/text");
             BOOL modeEaten=FALSE;
             check(keySink->OnKeyDown(second.context.Get(),'A',1,&modeEaten));
             require(modeEaten && second.store->text==L"a","Mode fixture did not start composition");
             second.store->rejectLocks=true;
             writeMode(openMode.Get(),0);
-            require(second.store->rejectedLocks>0 && readMode(openMode.Get())==1 && second.store->text==L"a",
-                "Rejected mode edit did not restore Chinese mode and composition");
+            if(!(second.store->rejectedLocks>0 && readMode(openMode.Get())==1 && second.store->text==L"a"))
+                throw std::runtime_error("Rejected mode edit did not restore Chinese mode and composition: rejected="+
+                    std::to_string(second.store->rejectedLocks)+" open="+std::to_string(readMode(openMode.Get()))+
+                    " text_length="+std::to_string(second.store->text.size()));
             second.store->rejectLocks=false;
             second.store->deferLocks=true;
             writeMode(openMode.Get(),0);
@@ -1197,7 +1294,8 @@ int wmain(int argc,wchar_t** argv) {
             };
             ComPtr<MenuCapture> menu;menu.Attach(new MenuCapture);
             check(barButton->InitMenu(menu.Get()));
-            require(menu->items==std::vector<std::pair<UINT,std::wstring>>{{1,L"方案管理"},{2,L"输入设置"}},"Language-bar management menu differs");
+            require(menu->items.size()==12 && menu->children.count(10) && menu->children.count(11),"Language-bar management menu differs");
+            require(menu->children[11]->items.size()==9,"Theme submenu is incomplete");
             require(barButton->OnMenuSelect(999)==E_INVALIDARG,"Unknown management action accepted");
             barText(L"中");
             check(barButton->OnClick(TF_LBI_CLK_LEFT,POINT{},nullptr)); pump();
@@ -1290,6 +1388,64 @@ int wmain(int argc,wchar_t** argv) {
             } else dispatch(); ++events; pump(); observeKey(events,vk,down,true,eaten!=FALSE,doc); traceState("after",doc,vk,down); return eaten!=FALSE;
         };
         auto tap=[&](Document& doc,WPARAM vk) { const bool eaten=event(doc,vk,true,true); event(doc,vk,false); return eaten; };
+        if(candidateMouse) {
+            std::ofstream result(std::filesystem::path(argv[5])/L"result.json");
+            try {
+                ShowWindow(window,SW_SHOWNORMAL);SetForegroundWindow(window);SetFocus(window);
+                check(manager->SetFocus(first.manager.Get()));pump();
+                require(tap(first,'A') && tap(first,'B'),"Candidate input failed");
+                auto wait=[&](unsigned ms){auto until=GetTickCount64()+ms;do{pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<until);};
+                wait(150);
+                const auto candidate=ownCandidateWindow();require(candidate && IsWindowVisible(candidate),"Candidate missing");
+                const bool masked=std::filesystem::exists(std::filesystem::path(argv[5])/L".tsf-candidate-mask-test");
+                const auto original=first.store->text;require(original==(masked?L"甲😀":L"ab"),"Unexpected initial composition");
+                if(masked) {
+                    tap(first,VK_BACK);require(first.store->text==L"甲","Masked backspace damaged preedit");
+                    tap(first,'B');require(first.store->text==original,"Masked preedit did not recover");
+                    ComPtr<ITfUIElementMgr> elements;check(manager.As(&elements));ComPtr<ITfUIElement> element;
+                    check(elements->GetUIElement(ui->id,&element));ComPtr<ITfCandidateListUIElement> list;check(element.As(&list));
+                    BSTR label=nullptr;check(list->GetString(0,&label));
+                    const bool unmasked=std::wstring(label,SysStringLen(label))==L"交";SysFreeString(label);
+                    require(unmasked,"Code masking altered candidate data");
+                }
+                RECT before{},after{};GetWindowRect(candidate,&before);
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,2400),0);wait(250);
+                GetWindowRect(candidate,&after);require(after.bottom-after.top>before.bottom-before.top,"Wheel did not enlarge candidate");
+                require(first.store->text==original && compositionCount(first)==1,"Wheel changed composition");
+                std::ifstream config(std::filesystem::path(argv[5])/L"config.txt",std::ios::binary);
+                std::string text((std::istreambuf_iterator<char>(config)),{});require(text.find("27.00")!=std::string::npos,"Wheel size not persisted");config.close();
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,static_cast<WORD>(-2400)),0);wait(250);
+                GetWindowRect(candidate,&after);require(after.bottom-after.top==before.bottom-before.top,"Wheel shrink did not restore size");
+                static bool menuSeen=false;
+                const auto timer=SetTimer(nullptr,0,100,[](HWND,UINT,UINT_PTR id,DWORD){
+                    HWND popup=nullptr;
+                    while((popup=FindWindowExW(nullptr,popup,L"#32768",nullptr))) {
+                        DWORD pid=0;GetWindowThreadProcessId(popup,&pid);if(pid!=GetCurrentProcessId())continue;
+                        const auto menu=reinterpret_cast<HMENU>(SendMessageW(popup,0x01e1,0,0));
+                        if(menu && GetMenuItemCount(menu)==12)menuSeen=true;
+                    }
+                    EndMenu();KillTimer(nullptr,id);
+                });
+                require(timer!=0,"Cannot schedule menu cancel");
+                SendMessageW(candidate,WM_RBUTTONDOWN,MK_RBUTTON,0);KillTimer(nullptr,timer);wait(100);
+                require(menuSeen,"Candidate did not show shared menu");
+                require(first.store->text==original && compositionCount(first)==1,"Menu cancel changed composition");
+                require(GetForegroundWindow()==window && GetFocus()==window,"Menu stole input focus");
+                require(IsWindowVisible(candidate),"Menu hid candidate");
+                // Default vertical -> code-only -> horizontal -> vertical.
+                RECT verticalRect{},codeRect{},horizontalRect{},restoredRect{};GetWindowRect(candidate,&verticalRect);
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&codeRect);
+                require(codeRect.bottom-codeRect.top<verticalRect.bottom-verticalRect.top,"Middle click did not enter code-only mode");
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&horizontalRect);
+                require(horizontalRect.right-horizontalRect.left>codeRect.right-codeRect.left,"Middle click did not enter horizontal mode");
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&restoredRect);
+                require(restoredRect.bottom-restoredRect.top==verticalRect.bottom-verticalRect.top,"Middle click did not restore vertical mode");
+                require(first.store->text==original && compositionCount(first)==1 && GetFocus()==window,"Middle cycle changed composition or focus");
+                tap(first,VK_SPACE);require(first.store->text==L"交","Commit after mouse actions failed");
+                result<<"{\"status\":\"passed\",\"mask_preedit_backspace_commit\":true,\"middle_cycle\":true,\"wheel_live_resize\":true,\"wheel_persisted\":true,\"menu_items\":12,\"composition_preserved\":true,\"focus_preserved\":true,\"commit_after_menu\":true}";
+                SetKeyboardState(savedKeys);return 0;
+            }catch(const std::exception& error){result<<"{\"status\":\"failed\"}";std::ofstream(std::filesystem::path(argv[5])/L"error.txt")<<error.what();throw;}
+        }
         if(!tap(first,'A')) {
             ComPtr<ITfCompartmentMgr> modeManager;check(manager.As(&modeManager));
             ComPtr<ITfCompartment> mode;check(modeManager->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE,&mode));
@@ -1369,13 +1525,14 @@ int wmain(int argc,wchar_t** argv) {
         check(uiManager->GetUIElement(ui->id,element.ReleaseAndGetAddressOf())); check(element.As(&candidates));
         if(nativeUI) {
             HWND candidateWindow=ownCandidateWindow();
-            // Click the rendered first highlight; no fixed font, code-header or
-            // row-height assumptions. UI-less mode separately selects item two.
+            // The default first candidate is not highlighted. Select item two
+            // before locating its highlight to exercise mouse hit testing.
+            check(candidates->SetSelection(1));
             const auto point=highlightedCandidate(candidateWindow);
             SendMessageW(candidateWindow,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(point.x,point.y));
         } else { check(candidates->SetSelection(1)); check(candidates->Finalize()); }
         pump();
-        require(first.store->text==expected+(nativeUI?L"交":L"疒"),"Candidate finalization failed");
+        require(first.store->text==expected+L"疒","Candidate finalization failed");
         if(schemaTest) {
             wchar_t rootText[32768];
             auto length=GetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",rootText,32768);
@@ -1446,11 +1603,12 @@ int wmain(int argc,wchar_t** argv) {
             check(uiManager->GetUIElement(ui->id,element.ReleaseAndGetAddressOf())); check(element.As(&candidates));
             if(nativeUI) {
                 HWND candidateWindow=ownCandidateWindow();
+                check(candidates->SetSelection(1));
                 const auto point=highlightedCandidate(candidateWindow);
                 SendMessageW(candidateWindow,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(point.x,point.y));
             } else { check(candidates->SetSelection(1)); check(candidates->Finalize()); }
             pump();
-            require(first.store->text==baseline+(nativeUI?L"交交交":L"交交疒"),"Mixed finalization dropped or duplicated prefix");
+            require(first.store->text==baseline+L"交交疒","Mixed finalization dropped or duplicated prefix");
             require(compositionCount(first)==0,"Mixed commit retained TSF composition");
             const auto committed=first.store->text;
             for(auto vk:{'A','B','A','B','A'}) tap(first,vk);

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>sentence_session_probe</NativeProbeName></PropertyGroup>
+  <Import Project="ArchitectureLoadProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" />
+    <ClCompile Include="sentence_session_probe.cpp" /><ClCompile Include="..\native\SentenceSession.cpp" />
+    <ClCompile Include="..\native\SentenceAutoCommit.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+</Project>

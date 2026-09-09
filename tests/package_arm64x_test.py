@@ -7,6 +7,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+from windows_process import run_windows
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build'
@@ -16,7 +17,7 @@ def win(path):
     return subprocess.check_output(['wslpath', '-w', str(path)], text=True).strip()
 def check(script, preflight=True):
     flags = ['-CheckOnly'] if preflight else ['-Elevated']
-    return subprocess.run([PS, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', win(script), '-Arm64X', *flags],
+    return run_windows([PS, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', win(script), '-Arm64X', *flags],
                           capture_output=True, text=True, timeout=30)
 
 result = check(ROOT / 'install_arm64.ps1')
@@ -42,8 +43,20 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     script = root / 'install_arm64.ps1'
     shutil.copyfile(ROOT / 'install_arm64.ps1', script)
     shutil.copyfile(ROOT / 'shortcut_arm64.ps1', root / 'shortcut_arm64.ps1')
+    shutil.copyfile(ROOT / 'sentence_package.ps1', root / 'sentence_package.ps1')
     result = check(script)
     assert result.returncode == 0, result.stderr
+    # Unlink the fixture's hard link before corrupting its private replacement.
+    model = staged / 'Models/sentence-ngram-v2.bin'
+    model.unlink()
+    result = check(script)
+    assert result.returncode != 0 and 'Missing sentence model' in result.stderr, result.stderr
+    model.write_bytes(b'corrupt model')
+    result = check(script, preflight=False)
+    assert result.returncode != 0 and 'Sentence model does not match' in result.stderr, result.stderr
+    assert not (root / 'install-arm64.log').exists()
+    model.unlink()
+    os.link(PACKAGE / 'Models/sentence-ngram-v2.bin', model)
     # AA64 in the PE header alone is insufficient: this is a valid ARM64 DLL.
     shutil.copyfile(BUILD / 'ARM64/Release/SampleIME.dll', staged / 'SampleIME.dll')
     result = check(script)
@@ -65,6 +78,8 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     assert not (root / 'install-arm64.log').exists()
 
 report = dict(status='passed', package=package, real_dual_loader_checks=True,
+              sentence_model_included=True, missing_sentence_model_rejected=True,
+              corrupt_sentence_model_rejected_before_elevation=True,
               arm64_only_substitution_rejected=True, missing_verifier_rejected=True,
               wrong_verifier_architecture_rejected=True, invalid_package_rejected_before_elevation=True,
               installation_performed=False)

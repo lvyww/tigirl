@@ -29,10 +29,8 @@ int wmain(int argc,wchar_t** argv) {
         }
         std::shared_ptr<const tiger::Lexicon> validated;
         auto prepare=[&](std::u16string_view target) {
-            const bool builtin=target==u"虎码字词";
-            const auto directory=root/L"schemas"/std::filesystem::path(target);
-            auto dictionary=tiger::Dictionary::Open(builtin?bundled:tiger::schemaDictionaryPath(directory));
-            tiger::UserStore store(dictionary,builtin?root/L"user"/L"tiger-words.tcu":directory/L"user.tcu");
+            auto dictionary=tiger::Dictionary::Open(tiger::activeSchemaDictionaryPath(root,bundled,target));
+            tiger::UserStore store(dictionary,tiger::schemaJournalPath(root,target));
             validated=store.refresh();
         };
         if(!versions && !restore && !maintenance && name==u"--recent") {
@@ -41,7 +39,7 @@ int wmain(int argc,wchar_t** argv) {
         }
         if(!tiger::validSchemaName(name)) throw std::invalid_argument("Invalid schema directory name");
         const bool builtin=name==u"虎码字词";
-        if(builtin && (versions || restore)) throw std::runtime_error("Builtin schema has no user generations");
+        if(builtin && (versions || restore) && !std::filesystem::exists(root/L"schemas"/std::filesystem::path(name)/L"current.txt")) throw std::runtime_error("Builtin schema has no user generations");
         if(!builtin) {
             bool found=false;
             for(const auto& entry:std::filesystem::directory_iterator(root/L"schemas")) {
@@ -54,8 +52,8 @@ int wmain(int argc,wchar_t** argv) {
         }
         if(maintenance) {
             const auto directory=root/L"schemas"/std::filesystem::path(name);
-            auto dictionary=tiger::Dictionary::Open(builtin?bundled:tiger::schemaDictionaryPath(directory));
-            tiger::UserStore store(dictionary,builtin?root/L"user"/L"tiger-words.tcu":directory/L"user.tcu");
+            auto dictionary=tiger::Dictionary::Open(tiger::activeSchemaDictionaryPath(root,bundled,name));
+            tiger::UserStore store(dictionary,tiger::schemaJournalPath(root,name));
             bool changed=false;
             if(compactUser)changed=store.compact();
             else {
@@ -74,7 +72,7 @@ int wmain(int argc,wchar_t** argv) {
             }
             const std::u16string generation(reinterpret_cast<const char16_t*>(argv[5]));
             auto dictionary=tiger::Dictionary::Open(tiger::schemaGenerationPath(directory,generation));
-            tiger::UserStore store(dictionary,directory/L"user.tcu");
+            tiger::UserStore store(dictionary,tiger::schemaJournalPath(root,name));
             validated=store.refresh();
             tiger::selectSchemaGeneration(directory,generation);
             std::cout<<tiger::utf8(generation)<<'\n';return 0;

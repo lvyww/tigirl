@@ -1,3 +1,843 @@
+## Font selection and previews aligned with TigerClaw
+
+- Replaced the three-entry editable font field with a real font picker: bundled
+  TTF families first with # labels, then all DirectWrite system font families.
+  Prefer Chinese names, retain English-family aliases, deduplicate case-insensitively
+  and select the first entry if a configured font cannot be found.
+- Owner-drawn dropdown rows and the selected field use their own font through
+  DirectWrite/Direct2D. Preview uses the opening font size, as in the reference;
+  saves retain the existing atomic edited-field behavior and cancellation is inert.
+- Actual settings tests pass with 250 font choices, alias and fallback checks,
+  existing save/reopen/cancel and concurrent-field preservation tests. Native
+  control captures at 96/144/192 DPI were inspected, including the dropdown rows.
+- ARM64X package generation 201bcce54c555a00 contains the new shared ARM64 manager.
+  Installed-file verification is recorded in build/font-settings-installed-audit.json.
+  UI behavior/reference mapping: docs/FONT_SETTINGS.md.
+
+## First candidate has no highlight
+
+- At the user's request, the native renderer no longer paints selection fill for
+  the first visible candidate. Text, hit rectangles, TSF selection and commit
+  behavior are unchanged; a selected later candidate still has its highlight.
+  The supplied TigerClaw sentence formatter similarly hides selection index 0.
+- Existing renderer probes now compare first-selection pixels to no-selection
+  pixels and confirm selecting the second candidate changes them. All 270 cases
+  pass across ARM64/x64/Win32, nine themes, horizontal/vertical layouts and five
+  DPI samples. The cyberpunk 150% image was visually inspected.
+- Updated mouse-test assumptions to select the second candidate before locating
+  a painted selection; those foreground tests have not been rerun for this change.
+- Evidence: build/directwrite-render-validation.json. Installation validation is
+  recorded separately in build/first-candidate-highlight-install.json.
+
+## Tiger-style taskbar menu installed
+
+- Added folder, export, reload, add-word, checked scheme/theme submenus, settings,
+  manager and original-project GitHub entries to the native input-mode button.
+  Both TSF InitMenu and the Win32 popup use the same menu snapshot. Pure TSF has
+  no resident Core to exit; the final action switches to English.
+- Slow imports/exports run in short-lived schema_manager processes. Export merges
+  the current base with the user overlay and writes a unique UTF-8 file under the
+  user export directory. Source tables and user journals remain intact.
+- Companion action tests pass for theme, schema switch, reload and export with
+  added words. ARM64/x64/Win32 menu contract/launch checks pass; ARM64 popup
+  selection and focus-return checks pass. ARM64 and Win32 fixtures additionally
+  open/cancel add-word and verify the English action's system compartment.
+- Installed ARM64X generation dc8185042a242e42 and matching x86 component. All 13
+  primary artifact hashes, x86 hash, both registry views and shared hard links
+  verified. Ctrl+Space remains delegated to the system by the user's configuration.
+- Evidence: build/tray-menu-installed-audit.json, build/tray-menu-actions.json,
+  management-actions-{arm64x-ARM64,arm64x-x64,Win32}.json and
+  management-menu-arm64x-ARM64.json. User taskbar clicking is not claimed.
+  Usage and scope: docs/TRAY_MENU.md.
+
+## Use the system Ctrl+Space shortcut
+
+- At the user's request, disabled the native engine's Ctrl+Space handler through
+  the existing `Ctrl+空格切换中英文` setting (`否`) in the actual user configuration.
+  Published a new settings reload token, retained the selected 虎整句 scheme and
+  all unrelated settings, and backed up the previous configuration in build/.
+- Windows IME hotkey registration and installed binaries are unchanged. Existing
+  external compartment handling remains responsible for synchronizing the native
+  mode and language-bar state after the system switches. Application confirmation
+  is pending; this configuration change is not yet proof of a successful fix.
+- Evidence: build/system-ctrlspace-config.json.
+
+## Ctrl+Space actual-application regression reported after installation
+
+- User reports Chinese changes to English on Space down but returns to Chinese
+  on Space up. Prior direct TSF callback coverage is insufficient to establish
+  this shortcut works through the operating-system input path.
+- Added a foreground Rich Edit probe that sends individual Ctrl/Space edges and
+  checks mode after Space down/up and Ctrl up, in both toggle directions. The
+  x64 probe builds. Execution has not started: the desktop input-idle prerequisite
+  failed twice. Production DLLs are unchanged; no fix is claimed.
+- Read-only inspection found the system IME hotkeys also assign Ctrl+Space.
+  Duplicate system handling is a hypothesis requiring a reproduced trace.
+
+## Installed sentence trial: 2026-09-09
+
+- Installed ARM64X generation `56502c3a10a47997` and matching Win32 DLL.
+  Both registry views, all 13 primary artifact hashes, x86 DLL hash, and all
+  shared artifact hard-link identities were verified after installation.
+- Foreground standard Rich Edit probes passed on ARM64, x64 and Win32 using
+  system registration and the installed DLLs: 27 injected taps per architecture,
+  covering commit, Escape, context return, selection, Backspace and replacement.
+  These use isolated ordinary-schema settings; they do not establish sentence
+  acceptance in Word, WeChat or Pain.
+- The separate hidden registered-activation fixture could not complete because
+  no English keyboard layout was already loaded. This is recorded as an unmet
+  test precondition, not a pass. No user language configuration was changed.
+- Evidence: `build/sentence-installed-audit.json` and
+  `build/rich-edit-tsf-{ARM64,x64,Win32}.json`. Actual sentence application
+  feedback remains pending; the documented long-burst x86 limitation remains.
+
+## Sentence settings visual review on an isolated desktop
+
+- Added native-control capture to the existing settings test. Initial hidden
+  window captures omitted edit contents, so tests now launch on a unique,
+  inactive desktop and only show the dialog when its desktop name is distinct
+  from the input desktop. No SwitchDesktop or physical input is used.
+- WM_PRINT captures at 96/144/192 DPI were visually inspected: labels and
+  buttons do not overlap, numeric values render, and the long whitelist occupies
+  its horizontal edit field. Pixel checks reject blank input-field captures.
+  Existing save/reopen/cancel/validation and selection tests still pass.
+- Evidence: build/input-settings-arm64.json and sentence-settings-96/144/192.png.
+  This reviews actual control rendering, not active-desktop composition or
+  cross-monitor dragging. The updated manager is being included in the trial
+  package; installed application acceptance remains required.
+
+## Real-table timing through actual TSF edit sessions
+
+- Added a separate --sentence-measure host mode and reproducible runner. The
+  isolated fixture uses real source tables and the packaged model; the frozen
+  original full engine supplies expected commit text. All 54 compositions match
+  across ARM64X ARM64/x64 and x86: three repeats of 32/64/128 codes, paced at
+  30 ms or sent as an unpaced burst, automatic commits off.
+- Paced encoding-key p95 medians range about 0.75–2.04 ms. Paced 128-code Space
+  takes about 18.9/26.8/30.3 ms in ARM64/x64/x86; immediate Space after a burst
+  takes 132/167/310 ms. The long-burst commit path remains noticeably slower,
+  particularly in x86. This is actual TSF callback/edit-session timing, not a
+  standalone decoder timing or an installed application latency guarantee.
+- Samples record active and post-commit private bytes. After long commits, the
+  allocator can retain memory, which later short inputs can release again;
+  three rounds are insufficient to claim bounded memory or absence of leaks.
+- Evidence: build/sentence-tsf-measure-all.json and preserved raw/original
+  outputs. Reproduce with tests/sentence_tsf_measure_test.py; measurement details
+  are in docs/SENTENCE_PERFORMANCE.md. Production code and installation unchanged.
+  The next acceptance work is settings visual review and installed application
+  input, while retaining the measured long-burst limitation explicitly.
+
+## Compact candidate deduplication index
+
+- Bucket deduplication now stores text hashes and vector positions instead of
+  another owned copy of every candidate string. Complete text equality resolves
+  collisions; moved vectors do not invalidate numeric positions, and sorted
+  buckets discard/rebuild the index. Rank representative selection and merged
+  probability arithmetic are unchanged.
+- Same real-table benchmark, three-run full-decode medians: 32 codes 3.64 →
+  3.54 ms, 64 codes 58.00 → 53.83 ms, 128 codes 200.58 → 174.78 ms. The 128-code
+  process still uses about 101 MiB private memory. This is a latency improvement,
+  not a solution to long-input retained state or proof of installed latency.
+- All three architectures pass neutral/real-model full/incremental decoder
+  differentials. All eight real-table full-engine configurations pass (10,850
+  events each). Current standalone ARM64, ARM64X ARM64/x64 and hard-linked x86
+  pass bundled-model TSF journal/resource/automatic/deferred-result fixtures;
+  ordinary staged TSF regression passes as well. ARM64X preflight passes.
+- Measurement details: docs/SENTENCE_PERFORMANCE.md and
+  build/real-sentence-measure/index-comparison.json. Current package is rebuilt;
+  installed files remain unchanged. The earlier 18 synthetic configurations are
+  historical evidence; this optimization was checked with the full decoder
+  differential and eight real-table configurations described above.
+
+## Computed results delayed at the TSF edit-session boundary
+
+- Extended the real hidden TSF fixture to defer the text-store edit lock after
+  input and wait for an actual pending request. A positive control grants the
+  lock and verifies the decoded 中国 candidate, establishing that this path
+  delivers a computed result rather than merely deferring worker capture.
+- Separate cases switch contexts or lose thread focus before granting that lock.
+  Neither document text nor candidate UI begin/update counters may change when
+  the delayed callback is released. Returning to the original context and
+  canceling also preserves the previously committed document text.
+- ARM64X ARM64/x64 and hard-linked x86 package layouts pass with the bundled
+  model, together with all existing journal/base/schema reload and automatic
+  commit tests. Hosts report explicit deferred-positive/context/thread-focus
+  flags; the runner rejects older hosts without these checks. No production
+  code or installation changed. This closes the computed-result transit gap for
+  focus transitions; it is not an original-engine schedule differential or an
+  exhaustive permutation of resource changes and teardown.
+- Evidence: sentence-tsf-arm64x-journal-bundled-validation.json and
+  sentence-tsf-x86-journal-bundled-validation.json under build. Long-input
+  latency/private state, settings visual review and installed input acceptance
+  remain before completion.
+
+## Packaged non-neural model and default TSF resource lookup
+
+- ARM64 and ARM64X build scripts now take SentenceModelPath, validate the fixed
+  reference model's length/SHA256 and copy it into Models with provenance.
+  Install preflight includes both files in the package identity, rejects missing
+  or mismatched models before elevation, and verifies deployed artifact hashes.
+  The x86 installer already hard-links every primary companion artifact, so the
+  new model follows the same shared-file path without a second backing copy.
+- Both complete build scripts and package preflights pass. ARM64X negative
+  fixtures reject missing/corrupt models before elevation as well as wrong/missing
+  architecture loaders. Records: native-package[-arm64x]-preflight.json in build.
+- Real hidden ARM64X ARM64/x64 TSF tests pass with no model-path override, using
+  the bundled model and importer for input, active journal/base/schema reload,
+  automatic prefix and empty-code commits and pause timing. The equivalent x86
+  layout passes too; every shared artifact's hard-link identity is checked in an
+  isolated directory. Records: sentence-tsf-arm64x-journal-bundled-validation.json
+  and sentence-x86-package-validation.json. No installed files or registration
+  changed. The x86 fixture does not run the actual privileged installer.
+- Remaining release gates include computed-result transit delays, long-input
+  latency/private state, settings visual review and installed application
+  acceptance. Model packaging is now implemented, not installed acceptance.
+
+## Native sentence settings page
+
+- Added an independent sentence page to the development input settings dialog:
+  schema-name activation, automatic commits, duplicate single characters,
+  retained raw 0–32, common-character limit and explicit-empty full-code whitelist.
+  It uses the production SentenceSettings parser and defaults, with no Qwen UI.
+- Saves only changed fields through the existing atomic configuration writer and
+  settings reload marker. Existing model-path overrides and unrelated fields are
+  preserved. Eight invalid numeric cases are rejected before writing; retained
+  32/common zero/empty whitelist and all three flags save and reopen correctly.
+- Updated the hidden native settings test to run through the Windows runner.
+  Existing appearance, shortcuts, selection repair and concurrent-field tests
+  pass with the sentence controls, including cancel and 96/144/192 DPI bounds.
+  Evidence: build/input-settings-arm64.json; usage: docs/SENTENCE_SETTINGS.md.
+  The ARM64 companion builds successfully. Installed tools are unchanged.
+
+## Real-table full-engine acceptance traces
+
+- Added an opt-in real-table mode to sentence_engine_parity.py, copying the
+  supplied 虎整句 main table, quick symbols and supplementary corpus into the
+  isolated original/native fixture. Original source files and installed files
+  are untouched. Input codes are derived from source text independently of the
+  native importer. Reverse lookup retains the small synthetic ni fixture.
+- Twelve phrases exercise both shortest/full codes, Space/punctuation, explicit
+  suffix selection, Tab/arrows, repeated deletion and cancellation: 10,850 key
+  events per configuration. The native adapter now parses sentence settings as
+  production does, including the default 1,500-character rule and whitelist;
+  previous synthetic fixtures retain their explicit zero-character setting.
+- Eight configurations pass with zero differences: automatic-off on all three
+  architectures, controlled automatic bursts on all three, plus ARM64 paced
+  automatic and burst retained-raw-zero. Paced automatic produces 471 commits;
+  retained-three bursts produce 142, retained-zero bursts 176. Candidates,
+  selection, composition, output and cumulative committed raw boundaries agree.
+- Reproduce with `python3 tests/sentence_real_engine_test.py`; use
+  `--summarize-only` to audit existing reports against source/table/binary hashes.
+  The matrix is build/sentence-real-engine-matrix.json. The same 10,850 events
+  are replayed eight times; this is not 86,800 distinct input fixtures or a
+  comprehensive accuracy benchmark. Computed-result transit delays, actual TSF
+  latency, settings UI, packaging and installed application acceptance remain.
+- Refreshed sentence-tsf-integration.json only after checking the current DLL
+  hashes against all six sentence reports and ordinary staged activation.
+  SENTENCE_PORT.md now distinguishes current development status from historical
+  checkpoints. No production source changes or installation in this checkpoint.
+
+## Bounded scoring reuse and smaller decoder context states
+
+- Added an exact-key, direct-mapped 4,096-slot n-gram query cache to each lattice
+  (128 KiB per allocated cache). It covers tokens up to two UTF-16 units, checks
+  all key units on hits, bypasses longer tokens/custom models, and is destroyed
+  with the lattice. Model/options remain immutable; no shared mutable cache.
+- Avoided repeated grapheme/vector/string allocation in isolation scoring for
+  candidates composed entirely of basic Han or ASCII letters. All other Unicode
+  text uses the unchanged full grapheme path. Context tokens in beam states now
+  point into the retained immutable lexicon instead of owning two strings.
+- Original decoder parity passes all three architectures in neutral/real-model,
+  full/incremental variants, including scores, order and early-commit evidence.
+  All 18 full-engine configurations also pass. Current development DLLs pass
+  all four sentence TSF host/build combinations with and without user journals.
+- Same real-scheme workload, three-run medians: 32 codes 5.03 → 3.64 ms;
+  64 codes 83.41 → 58.00 ms; 128 codes 281.63 → 200.58 ms. At 128 codes,
+  process private memory falls from 117.10 to 101.32 MiB. Incremental p95 varies
+  from 26.8–36.0 ms and later-phase retained heap use remains variable, so this
+  does not establish an overall latency/memory acceptance threshold.
+- Measurement comparison: build/real-sentence-measure/score-comparison.json.
+  Source/binary hashes and limitations are recorded in the current validation
+  report and docs/SENTENCE_PERFORMANCE.md. Long-input tuning, real-table accuracy,
+  packaging and installed application acceptance remain. Installed files unchanged.
+
+## Real-scheme memory sharing and decoder cost baseline
+
+- Added optimized standalone measurement probes and a repeatable runner using
+  the reference 虎整句 scheme (14,429 records), copied to an isolated build root.
+  The original source, installed DLLs and production decoder were left unchanged.
+- Concurrent ARM64/x64/x86 readers demonstrate actual multiply shared physical
+  pages for all 58,299 model pages and all 682 sentence-index pages. Both mappings
+  are read-only MEM_MAPPED views. Private resource-loading increments are about
+  0.54–0.62 MiB, rather than a private 228 MiB model copy per process.
+- Four fresh-process 32-code decoder contexts add about 5.48 MiB total private
+  memory. Long decoding remains expensive: three-run full-decode medians are
+  5.03 ms at 32 codes, 83.41 ms at 64, and 281.63 ms at 128; the 128-code process
+  has about 117 MiB private memory. Incremental 64-code p95 is about 32–34 ms.
+- An experimental post-pruning capacity trim saved memory but increased measured
+  decoding time, so it was reverted. No unverified optimization was installed.
+  Details, measurement limits and reproduction are in docs/SENTENCE_PERFORMANCE.md;
+  hashes/results are in build/real-sentence-measure/validation.json.
+- This establishes real cross-process/architecture sharing, not installed TSF
+  latency acceptance. Long-input state memory and commit-key latency need work,
+  followed by real-table accuracy, packaging and installed application acceptance.
+
+## Controlled burst traces and empty published-candidate correction
+
+- Added a seeded per-key settle schedule to the full original-engine adapter.
+  It holds the original reentrant engine lock across deferred events, preventing
+  its unchanged worker from capturing work, then releases and settles at selected
+  boundaries. Native decoding is deferred equivalently; manual commit/selection
+  keys still complete decoding. Original method bodies remain unchanged.
+- Retained-raw-zero bursts exposed 176 differing events: after empty-code commit,
+  a pending old candidate became an empty suffix and native UI still published
+  it as an empty selected row. Original GetPublishedSentenceCandidates omits
+  these rows. Engine snapshot totals, candidateAt and selected-row validity now
+  follow that projection without deleting internal decoder/policy candidates.
+  Before-fix evidence: `build/sentence-empty-row-before.json`.
+- All 18 architecture/configuration/schedule combinations pass: ARM64/x64/x86,
+  automatic off/on with retained 3/on with retained 0, settled and burst modes.
+  Each replays 4,042 events; burst modes defer 2,968 events. Current source and
+  executable hashes are checked by `build/sentence-engine-matrix.json`.
+- This verifies queued work before capture, including delete/cancel/selection
+  while results are pending. It does not inject an already-computed result held
+  in transit; that stale-publication schedule remains separate. Larger real
+  schemes, memory/latency, packaging and installed acceptance are still required.
+
+## Full-engine parity across ARM64, x64 and x86
+
+- SentenceTraceProbe now builds independently for ARM64/x64/Win32 with isolated
+  intermediate/output directories, matching source lists and warnings as errors.
+  The runner selects a platform via SENTENCE_TRACE_PLATFORM and keeps each
+  architecture/configuration report and complete trace separate.
+- All nine combinations pass against the full frozen original engine: automatic
+  disabled, paced asynchronous automatic input with retained raw 3, and retained
+  raw 0, on each of the three native architectures. Each replays the same 4,042
+  events; this is 36,378 replayed events, not 36,378 distinct fixtures.
+- Each architecture agrees on candidates, selection, raw/display, mode, output
+  and cumulative prefix boundaries, including 14 and 175 automatic outputs in
+  the two automatic configurations. All source and binary hashes were checked
+  before writing `build/sentence-engine-matrix.json`.
+- This extends the previous ARM64-only full-engine evidence. Production DLLs
+  and installed files were not changed in this checkpoint. Rapid bursts with
+  controlled delayed/stale publication, larger real schemes, memory/latency,
+  packaging and installed application acceptance remain required.
+
+## Match asynchronous automatic-commit timing to the original
+
+- Removed automatic-prefix evaluation from TSF decoder completion. Completion
+  now only publishes candidates; the next appended key consumes already-decoded
+  evidence, matching original AppendSentenceInput and its UI-only completion
+  callback. This avoids spontaneous document commits while the user pauses.
+- Extended the full original-engine driver to run the actual asynchronous worker
+  and settle it after each key. Comparisons now also include cumulative committed
+  text and raw boundary. On ARM64, all three 4,042-event suites pass: automatic
+  off, automatic with retained raw 3 (14 early outputs), and retained raw 0
+  (175 early outputs). This covers both prefix and empty-code policy interaction.
+- The legacy completion-time simulation fails 61 events on the same paced
+  automatic trace. More decisively, the new real TSF pause fixture fails on the
+  previous DLL: it commits after six c keys. Evidence is retained in
+  `build/sentence-timing-before.json`. Current standalone ARM64, ARM64X ARM64/x64
+  and x86 pass: six c keys plus a pause leave raw composed, the seventh commits
+  明, and eighth/Space finishes 明明明明 without duplication or loss.
+- Reports: `sentence-engine-parity.json`,
+  `sentence-engine-async-auto-parity.json`,
+  `sentence-engine-async-auto-retain0-parity.json` under build, alongside current
+  TSF journal reports. Original trace modes have separate saved JSONL outputs.
+- This closes the previously identified completion-time commit discrepancy.
+  The full-engine asynchronous trace uses a settled-per-key schedule; rapid
+  bursts and deliberately delayed/stale publications, larger real schemes,
+  cross-architecture full-engine traces, memory/latency, packaging and installed
+  application acceptance remain required. Installed files unchanged.
+
+## Full original-engine baseline and empty selection correction
+
+- Added a separate SentenceEngineOracle compiling the frozen original full
+  InputMethodEngine and CoreRuntimeState with their model, decoder and source
+  dependencies. Dependency hashes are recorded and checked. A staging marker
+  and process-local HKCU redirection isolate initialization; no rerank client,
+  pipe server or Overlay is started. Original method bodies are unchanged.
+- Added an ARM64 native trace adapter and 3,852 physical-key events covering
+  settled sentence decoding, Space/Tab/up/down selection, selectors, deletion,
+  cancellation, punctuation, short-symbol and reverse-lookup cases, plus seeded
+  random traces. Both use the real model and matching duplicate-character rules.
+- Full original/native comparisons pass for handled/cancel, language/mode, page,
+  raw, output, candidate order/annotations, selected row and displayed code.
+  The expanded selected-row check found 1,684 mismatching events caused by one
+  state bug: no sentence candidates still reported selected row zero. Engine
+  now reports -1, matching the original; all 3,852 events pass after the fix.
+- Evidence: `build/sentence-engine-parity.json` and both complete JSONL traces.
+  This baseline deliberately uses synchronous settled decoding and automatic
+  commits disabled. Automatic/empty-code full-engine traces, asynchronous result
+  schedules, larger user schemes and other native architectures remain required.
+  It does not replace installed application acceptance or performance checks.
+- Follow-up found by reading the original asynchronous path: decoder completion
+  only publishes candidates (ProtocolHandler registers PublishUiState); runtime
+  probabilistic prefix commits are evaluated on the next appended key. The native
+  pollSentence currently also evaluates automatic commit on completion. This
+  timing difference is not covered by the settled/auto-off baseline and must be
+  corrected and tested with an explicit asynchronous schedule before acceptance.
+
+## Empty-code commit policy integrated into Session/Engine/TSF
+
+- Ported the original capture-before-append and resolve-after-append decisions:
+  matching current results, implicit first-rank eligibility, strong visible-top
+  confidence, unpruned complete paths, last-segment proper-prefix deferral,
+  configured retained raw and excluded-text/group-eligible uniqueness checks.
+  Pending candidates survive multiple letters and reset on selectors, deletion,
+  selection, invalidation, disabled settings or contradictory complete paths.
+- Empty-code commits retain the full raw sentence and committed prefix; subsequent
+  decode results apply the original first-rank continuation restriction unless
+  explicit selection markers occur. The final document commit excludes previously
+  committed text. Probabilistic prefix commits remain a distinct policy.
+- Engine receives read-only path-query callbacks per dispatch. TSF supplies the
+  accepted revision's decoder for both copied previews and actual key handling;
+  Engine stores no decoder callbacks. These existence queries use unpruned path
+  traversal, not Beam decoding or IPC. Their key-path latency remains to measure.
+- Fixed backspace to reset probabilistic evidence as well as empty-code pending
+  state, matching the original input handler.
+- Session tests pass 224 checks per ARM64/x64/x86. Hidden real TSF tests pass
+  standalone ARM64, ARM64X ARM64/x64 and x86: cc produces 明, appending a commits
+  明 while preserving an active tail, and a/Space finishes 明中 without loss or
+  duplication. Existing automatic-prefix and resource-transition tests also pass.
+  Ordinary key parity passes 35,554 events with zero differences.
+- These fixtures are native state assertions and actual TSF checks, not a complete
+  original-engine differential. Extracted original empty-code/randomized traces,
+  broader short-symbol/reverse transitions, performance/memory, packaging and
+  installed application acceptance remain required. Installed files unchanged.
+
+## Automatic-prefix commits integrated and verified in TSF
+
+- Connected SentenceAutoCommit to the value-copy SentenceSession, Engine key
+  append path and TSF decoder completion edit session. Approved prefixes update
+  committed text/raw together, retain full decoding context, invalidate older
+  tickets and keep the uncommitted tail composed. Probabilistic prefix commits
+  preserve non-first-rank continuations; empty-code continuation is separate.
+- Session probes pass 177 checks on ARM64/x64/x86, covering copied previews,
+  current and immediately previous evidence, merged-tail boundaries absent from
+  visible candidates, selected-candidate suspension, retained raw, stale tickets
+  and final commits without repeated prefixes. The standalone original-policy
+  differential passes 10,400 steps / 489 commits per architecture after rebuild.
+- Current standalone ARM64, ARM64X ARM64/x64 and x86 DLLs pass hidden real TSF
+  journal/resource-transition tests including automatic prefix commit before
+  Space, remaining live composition, and final exact complete text. No-journal
+  tests also pass all four combinations. Ordinary staged activation passes its
+  three ARM64/ARM64X host combinations with registration unchanged; ordinary
+  key parity reports 35,554 events and zero differences.
+- Current DLL hashes and report links are recorded in
+  `build/sentence-tsf-integration.json`. Component reports have narrower scopes
+  than that integration report. Installed files remain unchanged.
+- Next: original empty-code policy (capture before append, unpruned complete-path
+  checks, proper-prefix deferral, retained-tail limit and hidden alternative
+  uniqueness), full original-engine traces, short-symbol/reverse transitions,
+  performance/memory, packaging and installed application acceptance.
+
+## Native automatic-prefix commit policy
+
+- Added copyable `SentenceAutoCommit` state: current/immediately-previous decoded
+  generation checks, consecutive evidence and strong-evidence counts, neutral-gap
+  retention, exact raw-boundary support, contradictory stems, supplementary-top
+  restriction, visible-path membership and merged-tail behavior. Mature selection
+  respects retained raw length, grapheme length, share, raw-boundary tie order and
+  distance from the last automatic commit. Qwen acceptance is excluded.
+- Generated a separate oracle from unchanged frozen original policy method
+  bodies. UI/rerank and post-commit candidate filtering are stubbed only in this
+  policy adapter; each following fixture supplies fresh decode evidence. This
+  does not replace the still-required full original-engine trace comparison.
+- All three architectures match 10,400 stateful steps / 489 commit decisions,
+  including cumulative committed text and raw boundaries. Evidence:
+  `build/sentence-auto-commit-validation.json`.
+- The same sequence also evaluates a copied policy before each real evaluation;
+  all three architectures preserve the original counters/decisions, checking the
+  value-copy behavior required by Engine key previews.
+- Not yet connected to SentenceSession/Engine/TSF document commits. Session
+  integration must support immediately-previous evidence and merged-tail prefix
+  boundaries, apply prefix bookkeeping atomically, and retain the remaining raw.
+  Empty-code policy is still pending. Production/installed DLLs are unchanged.
+
+## Preserve active sentences across base generations and sentence schemas
+
+- Extended accepted-snapshot retention to replacement base generations and
+  transitions between two enabled sentence schemes. The previous complete pair
+  remains usable during preparation; adoption switches both ordinary lexicon
+  and sentence resources, preserving raw keys through Engine::switchSchema.
+  Explicit disabling or switching to a non-sentence scheme still clears sentence
+  resources immediately under the existing mode rules.
+- Added a real TSF regression that first failed on the previous ARM64 DLL:
+  publishing a new base generation canceled the active sentence. The failure
+  report is retained in `build/sentence-base-reload-before.json`.
+- Updated tests pass standalone ARM64, ARM64X ARM64/x64 and x86. With the same
+  active aabb input, a new base produces 中州, then another sentence scheme
+  produces 中文. Each transition checks retained composition/raw and final text,
+  alongside the existing delayed-helper and live-user-edit checks.
+- This verifies these resource transitions in isolated hosts, not installed
+  application acceptance or complete sentence engine parity. Automatic/empty-code
+  commit policies, short-symbol/reverse transitions, performance and packaging
+  remain pending. The installed version is unchanged.
+
+## Preserve active sentences through same-base user reloads
+
+- Separate requested resource revisions from accepted resource revisions.
+  While a same-base replacement builds, Engine/decoder continue using the last
+  complete immutable lexicon/resource pair. Candidate commits during that window
+  intentionally use that accepted version, never a mixture of new user entries
+  and an old index. Failed preparation retains the last usable pair for retry.
+- Adoption changes the accepted pair together and invalidates obsolete decoder
+  results while retaining the current raw sentence. Ordinary no-sentence modes
+  and explicit sentence disabling still use their existing behavior.
+- Hidden tests now hold the future cache's publication lock to delay the helper.
+  With a live sentence, Back/letter/Space succeeds on the accepted version; another
+  sentence remains composed while the lock is released and then commits using
+  the new user data. Pending aabb legitimately becomes segmented aa bb, so the
+  test verifies codes, live composition and final committed text separately.
+- These tests pass standalone ARM64, ARM64X ARM64/x64 and x86. This closes the
+  previous same-base journal reload cancellation gap. New base generations/schema
+  switches, selection behavior across reload, additional failure races and full
+  original engine traces remain to verify. No installed files were changed.
+
+## TSF user-journal sentence resource integration
+
+- Removed the unconditional edited-code sentence gate. The native resource
+  worker captures an immutable Lexicon snapshot, hashes its revision, reuses a
+  validated shared cache or launches the short-lived importer to prepare it.
+  No full sentence table is rebuilt in a TSF host and no per-key IPC was added.
+- Resource completions carry their source snapshot. Before adoption TSF polls
+  data changes and checks both service generation and snapshot equivalence;
+  Engine enabling also requires resources matching the current Lexicon.
+  Journal refresh now requests resources after publishing the refreshed snapshot.
+- Cache helper launch has correctly quoted arguments, no inherited handles or
+  console, and a 30-second worker wait. Service teardown stays nonblocking; a
+  timed-out helper can finish its immutable cache publication independently.
+- Hidden real TSF tests pass standalone ARM64, ARM64X ARM64/x64 and x86. The
+  base fixture deliberately lacks 中; only the user journal supplies it. All
+  sentence input/selection/cancel/context tests pass, and an independent journal
+  deletion while TSF stays active changes subsequent 中国 input to 中华.
+  Reports: `build/sentence-tsf*-journal-validation.json`.
+- No-journal sentence tests pass all four host/build combinations as well.
+  Ordinary activation/mode/edit-lock regression passes all three staged variants
+  with registration unchanged. Current hashes and both sentence report sets are
+  recorded in `build/sentence-tsf-integration.json`.
+- This covers initial loading and journal changes while no composition is active.
+  Reloading during an active sentence currently disables Engine sentence mode
+  while new resources load and can cancel preedit. Preserving live raw/selection,
+  broader stale-task races, helper failures/performance and installed acceptance
+  remain required. Automatic and empty-code commit behavior also remains pending.
+  Development builds only; the installed version is unchanged.
+
+## Shared sentence cache publication and checked loading
+
+- Added `--ensure-sentence <base.tcd> <user.tcu> <cache-root>
+  <expected-revision>`. Cache entries are partitioned by the effective revision.
+  A stable per-revision lock serializes rebuilds; concurrent callers validate and
+  reuse the selected immutable file instead of each rebuilding full metadata.
+- New cache files have unique generation names. After validation the helper
+  atomically updates the revision directory's descriptor. Missing/damaged entries
+  rebuild into another generation; old paths are retained for existing mappings.
+- SentenceResources accepts an optional sentence file only together with its
+  expected revision and rejects mismatched or missing revision metadata before
+  adopting it. Supplement/model loading continues to use the base generation.
+- Four actual ARM64 helpers requesting one version produce one rebuild and three
+  reuses. Repeated requests retain the descriptor; a damaged cache creates a new
+  generation, and stale requests cannot change the selected cache.
+- ARM64/x64/x86 readers all load the modified candidates from the shared cache
+  and reject both stale and absent expected revisions. The ordinary resource
+  import/decode/cache regression also passes with the updated loader.
+  Evidence: `build/sentence-publish-validation.json` and
+  `build/sentence-resources-validation.json`.
+- TSF helper launch, current-snapshot revalidation and engine resource switching
+  still need integration. Production DLLs and installed files remain unchanged.
+
+## Sentence snapshot revision binding
+
+- Added SHA-256 sentence revisions over mapped base bytes, mapped source inventory,
+  effective user edits and new-code insertion order. Hashing streams mapped data
+  and visits only the private overlay; it does not expand the full base dictionary.
+  This is a helper/worker operation, not a per-key operation. Base-hash caching
+  and production cost measurement are still pending.
+- `--sentence-revision <base.tcd> <user.tcu>` returns the snapshot revision.
+  `--rebuild-sentence` accepts an optional expected revision, rejects a mismatch
+  before publication, and embeds the actual revision in `_sentence_revision`.
+  Results also report the revision so the consumer can validate provenance.
+- All three architecture probes agree on the revision for identical snapshots;
+  changes to effective edits/new-key order change it, redundant history does not.
+  Actual helper tests compare the digest with independent Python SHA-256 and
+  pass stale-request rejection, embedded revision checks and publication races.
+- This binds a result to the snapshot captured at helper start. It does not
+  assert that the journal stayed unchanged during rebuilding. TSF must compare
+  the result against its current snapshot before adopting it; shared cache and
+  runtime adoption remain pending, and the edited-code gate is still present.
+
+## Explicit journal-aware sentence publication
+
+- Added `lexicon_import --rebuild-sentence <base.tcd> <user.tcu>
+  <new-sentence.tcd>`. It opens the base's source inventory, takes one consistent
+  UserStore snapshot under the existing journal locks, rebuilds sentence metadata
+  in the short-lived helper, and atomically publishes a new immutable file.
+- The command requires absolute paths and never replaces an existing destination.
+  It does not select a generation or change configuration. Binding the resulting
+  file to the exact base/user revision is still required before TSF can consume it.
+- Actual Windows ARM64 helper tests pass journal edits, alias collapse, source
+  order and primary-code updates, retaining old generations, existing-output/base
+  refusal, competing helper processes (one winner), and corrupt-journal rejection.
+  Base/supplement files and the readable journal remain unchanged. Evidence:
+  `build/sentence-publish-validation.json`.
+- Shared cache identity, stale-snapshot rejection, helper invocation and TSF
+  resource switching remain pending. The edited-code gate is still present;
+  no installed files or live application input were changed.
+
+## Sentence metadata rebuild from user snapshots
+
+- Added `SentenceRebuild`: combines mapped original code order with the immutable
+  Lexicon snapshot, appends user-created codes in insertion order, unpacks commit
+  aliases and regenerates ranks/primary/optimal metadata through the existing
+  original-validated builder. This allocates transient full metadata and is
+  explicitly an importer/helper operation, not a per-TSF-host runtime operation.
+- Rebuild checks base-code inventory coverage and rejects duplicate identities
+  or missing base codes. The caller must still bind inventory and snapshot to
+  the same immutable base generation; this is not a content-hash identity check.
+- Found and corrected an inventory representation issue: storing uppercase
+  identity loses source spelling (for example final sigma). Format 3 retains
+  normalized original spelling while deduplicating ordinal identities; folder
+  cache fingerprint v4 invalidates older inventories.
+- ARM64/x64/x86 rebuild probes pass deletion, formerly empty base keys, Top,
+  new-key ties, delete/re-add, commit aliases, Unicode spelling, immutable old
+  generations and incomplete-inventory rejection. Evidence is in
+  `build/sentence-rebuild-validation.json`.
+- Updated-format lexicon oracle comparisons still pass 252 fixtures / 7,420
+  queries per architecture. Rebuilt ARM64 importer and three resource probes
+  pass actual import/model decode and cache invalidation regression.
+- Command-line publication, shared generation identity/coordination and TSF
+  refresh are still pending. The edited-code gate remains and nothing is installed.
+
+## Mapped original-code inventory
+
+- Sentence sidecar format 2 stores normalized source codes in Comment, keyed by
+  fixed-width ordinal indices. The inventory retains empty exact keys and first
+  occurrence order separately from the filtered candidate table. Runtime access
+  returns mapped string views and does not construct a per-host full order index.
+- The reader validates contiguous ordinal keys and nonempty single-value entries.
+  Folder cache fingerprint is now v3 so generations with older metadata rebuild.
+- ARM64/x64/x86 serialized lexicon probes each pass 252 fixtures / 7,420 queries
+  against the original. Every fixture also checks mapped source inventory order,
+  empty keys, normalized duplicate keys and out-of-range access.
+- Actual ARM64 importer output also loads/decodes on all three architectures
+  with the original model. Resource tests pass cache reuse, corrupt/missing
+  companion rebuilding, same-timestamp corpus edits and failed-import selection
+  preservation (`build/sentence-resources-validation.json`).
+- Shared generation rebuilding from this inventory plus UserStore snapshots is
+  still pending. Production DLLs and installed applications have not been updated
+  for the format change; use matching rebuilt tools/probes for development tests.
+
+## User-code insertion order for sentence resource rebuilding
+
+- Lexicon snapshots now retain only user-introduced exact codes in insertion
+  order; base dictionary storage remains mapped. Delete/re-add keeps the same
+  position, Top can introduce a new key, and no-op Delete does not add a key.
+  Snapshot equivalence includes this order because sentence code ties depend on it.
+- UserStore checkpoint generation emits newly introduced codes in that order.
+  Legacy journal records remain unchanged in format; inherited duplicate commit
+  identities continue to preserve their original history independently.
+- Linux and actual Windows ARM64 replay/checkpoint probes pass 4,000 new codes
+  and histories with 100,000 adjustments. Tests assert insertion order, retained
+  snapshots, empty-key inventory, aliases, checkpoint equivalence and subsequent
+  edits. Windows additionally verifies explicit compaction and backup recovery.
+  Duplicate-identity fallback with independent compaction also passes on Linux.
+  Four-process journal regression passes with 48 retained entries, recovery at
+  71 interrupted-tail positions, coordination locking and corruption rejection.
+- This is a prerequisite, not complete user-word synchronization. Original base
+  code order still needs persisted metadata, and a shared sentence generation
+  must be rebuilt/published from the base plus user edits. The TSF gate remains.
+  Current changes are probe-verified; production DLLs have not been rebuilt
+  since these Lexicon/UserStore changes and the installed version is unchanged.
+
+## Sentence settings integration verification
+
+- Added original-compatible sentence settings parsing, including explicit empty
+  values, invalid/overflow integers, boolean aliases and Unicode whitespace.
+  All 951 cases per ARM64/x64/x86 agree with extracted original getters.
+- TSF resource selection now uses these typed settings. Decoding only requests
+  prefix evidence when automatic early commit is enabled. The actual automatic
+  commit policy and minimum-retained-code behavior still require implementation.
+- Rebuilt ARM64, ARM64X and x86 DLLs after the settings changes. Hidden sentence
+  TSF tests pass all four host/build combinations; ordinary activation regression
+  passes all three supported staged variants with registration unchanged.
+  Current DLL and source hashes are verified in `build/sentence-tsf-integration.json`.
+  These are development builds, not installed or physical application acceptance.
+- User-journal inspection identifies an additional ordering requirement:
+  `GetSentenceLexiconSnapshot` enumerates original dictionary insertion order,
+  while `UserStore::makeCheckpoint` enumerates a sorted edit map. New-code order
+  must survive journal replay and compaction before sentence metadata can be
+  regenerated faithfully. The existing no-edited-codes gate remains pending.
+
+## TSF sentence worker and real edit-session integration
+
+- Linked sentence model/lexicon/decoder/resources into the development DLL.
+  `SentenceService.cpp` loads resources on a background worker for a schema
+  containing 整句, then enables the Engine sentence mode. The optional
+  `整句语言模型` path supports isolated tests; bundled model packaging is pending.
+- `SentenceWorker` serializes tasks, replaces queued tasks per session, rejects
+  obsolete generations and supports nonblocking close. It captures native data
+  only, retains the DLL with a loader reference and uses FreeLibraryAndExitThread
+  after destroying thread-local C++ objects. No Core process or IPC is involved.
+- Timer delivery returns results to the TSF apartment and applies candidates
+  through edit sessions after checking context/focus/resource/generation state.
+  Composition completion cancels queued publications and releases its decoder;
+  in-flight work owns its remaining lifetime without blocking teardown.
+- Corrected the earlier queued-key-replay plan after reading original
+  `EnsureSentenceDecodeCurrent`: ordinary code input is asynchronous, but Space,
+  Tab, selection and punctuation synchronously complete current decoding. The
+  adapter follows that behavior; preview does not decode or write text. The
+  shared decoder lock prevents concurrent cache mutation. Commit-key latency
+  remains to be measured; it must not be claimed fully nonblocking.
+- Candidate UI now exposes/highlights the Engine's selected sentence row.
+- Worker tests pass ARM64/x64/x86 coalescing, cancellation and nonblocking close.
+  Real hidden TSF tests pass standalone ARM64, ARM64X ARM64/x64 and x86: immediate
+  Space, background candidates, Tab selection, numeric selectors, punctuation,
+  cancellation and context changes. Reports: `build/sentence-tsf*-validation.json`.
+  No physical input or installation was performed.
+- Ordinary staged TSF activation/mode/edit-lock/deactivation regression passed
+  with unchanged registration. Final post-cache-release builds and all four
+  sentence TSF runs pass; ordinary activation regression also passes against
+  those exact DLL hashes. Evidence: `build/sentence-tsf-integration.json`.
+- Deliberate temporary gate: a runtime user journal with edited codes disables
+  sentence mode until journal-aware shared resource publication exists. Removing
+  this limitation is required for goal completion, not optional fallback behavior.
+  Full settings parity (including explicit empty/invalid values), automatic and
+  empty-code commit policy, short-symbol transitions, original engine/golden
+  traces, installed packaging and memory/latency/application acceptance remain.
+
+## Sentence resource import and mapped loading
+
+- `lexicon_import` now prepares sentence metadata from source encounter order,
+  unpacks display/commit aliases and deduplicates commit text. It publishes
+  `<ordinary>.sentence.tcd` and `<ordinary>.supplement.tcd` before the ordinary
+  generation, validates both and switches the descriptor last.
+- Folder cache format advanced to v2. Cache reuse validates both companions;
+  missing/corrupt files rebuild into a new generation. Source supplement changes
+  participate in the existing content fingerprint even with unchanged timestamps.
+- Added original-compatible supplementary text parsing: escaped inline comments,
+  default/positive Int64 weights, clamp/reward rules, invalid-line skipping and
+  last-value replacement retaining first encounter order. Original method bodies
+  are compiled by the UTF-8-only oracle adapter; encoding detection remains
+  covered by the existing lexicon decoder tests.
+- `SentenceResources::Open` loads the immutable generation and original model;
+  separate compositions create private decoder caches over shared mappings.
+  Missing/malformed resources throw so the future adapter can disable/fallback.
+- ARM64/x64/x86 resource probes pass: 278 parsed entries match original across
+  516 input lines; actual importer output loads and decodes with the 238,789,568
+  byte model, with mapping reuse and commit-alias collapse verified. Cache reuse,
+  corrupt/missing companion rebuilds, same-timestamp changes, missing model and
+  failed-import selection preservation pass. `build/sentence-resources-validation.json`.
+- Added the session source to the importer project as required by its Engine
+  dependency. The development importer builds; installed tools are unchanged.
+- Remaining: user-journal changes must produce matching shared sentence metadata
+  without reconstituting the full lexicon inside each host; model/config lookup,
+  TSF resource/decode workers, key replay and automatic commit policy are pending.
+  Resource helpers are not yet linked into the TSF service or enabled by settings.
+
+## Initial sentence Engine/session integration
+
+- Added value-type `SentenceSession`, copied safely by Engine key previews.
+  Decode tickets bind session identity, generation, resources, raw and required
+  prefix; obsolete/duplicate publications cannot change the current selection.
+- Engine now has an opt-in Sentence mode and adapter methods to request/apply
+  results. Added continuous raw/selector input, backspace/cancel/literal Enter,
+  Tab/up/down selection, Space and punctuation commits, selected-candidate
+  snapshots, focus/schema/user-lexicon invalidation. The mode is disabled until
+  an adapter explicitly enables it with available resources.
+- Keys that need a not-yet-current result return `awaitSentenceDecode`; no Beam
+  work occurs in Engine dispatch. TSF still needs a worker, queued-key replay,
+  selection replay and edit-session publication before enabling this mode.
+- Session tests cover prefix projection, no duplicate prefix commits, live-tail
+  deletion, pending display, source revision changes, cross-context tickets,
+  engine-preview isolation and the 128-key live-tail limit. Engine tests exercise
+  basic key dispatch using injected decode completions, not original full-engine
+  differential traces. Report: `build/sentence-session-validation.json`.
+- Ordinary-input differential now runs the built Windows ARM64 Engine probe via
+  the WSL Windows runner, with fresh original reference output. Final validation
+  and build evidence are recorded separately; no installer has been run.
+  Final run: 35,554 events, zero differences; session probes each pass 160 checks,
+  ARM64 Engine passes 26 checks. ARM64X and x86 development DLL builds pass
+  (`build/sentence-session-build.json`).
+- Still required: original engine/golden trace adapter, automatic/empty-code
+  commit policy, exact short-symbol/reverse-lookup transitions, resource/config
+  wiring and import/publication, TSF async scheduling and candidate selection,
+  performance/memory checks, packaging and installed application acceptance.
+
+## Sentence decoder and incremental lattice
+
+- Added `native/SentenceDecoder.{h,cpp}`: full/append/delete decoding, rank-aware
+  duplicate representatives with merged log mass, n-gram/isolation/supplement
+  scores, explicit selectors, stable candidate ordering and path boundaries.
+- Added original early-commit prefix evidence, including incomplete-tail pool,
+  boundary shares, truncation flags and required-prefix filtering. This supplies
+  evidence only; engine early-commit policy still needs integration.
+- Added unpruned complete-candidate queries (required prefix, excluded surface,
+  grouping eligibility), normalized proper-prefix queries and cache reset.
+- Generated all 20,000 original character ranks as pointer-free immutable scalar
+  records. No per-host rank hash table; generator records original source hash.
+- Final ARM64/x64/x86 probes pass 191 fixtures / 4,369 queries in each of four
+  combinations (neutral/real n-gram × full/incremental). Candidate text/order,
+  scores, segmentation, boundaries, evidence and expansion counts match frozen
+  C#. Existence/prefix checks also agree. `build/sentence-decoder-validation.json`.
+- Not linked into TSF or installed. Next: original committed golden/engine
+  traces, engine state transitions and resource import/publication, followed by
+  asynchronous TSF integration. Bounded scoring caches, cancellation, production
+  latency and multi-process memory measurements are still pending.
+
+## Shared supplementary corpus graph
+
+- Added immutable graph serialization and `MappedSentenceSupplement`, which queries nodes/edges directly from the validated mapped container instead of rebuilding per-host maps.
+- Re-ran 240 fixtures / 18,480 transitions per ARM64/x64/x86 through serialized-and-reopened graphs against original C#; all pass. Five malformed graph variants are rejected, including cyclic failure links and out-of-range/backward-depth edges.
+- Evidence: `build/sentence-supplement-validation.json`. Decoder integration, source parsing, installed-host resource lifecycle and memory/latency acceptance remain pending.
+
+## Sentence supplementary corpus matcher
+
+- Added native weight/reward calculation and immutable traversal of a grapheme-based failure-link graph, preserving original maximum-reward semantics.
+- ARM64/x64/x86 each pass 240 fixtures / 18,480 transitions against the original C# matcher (`build/sentence-supplement-validation.json`).
+- Shared graph serialization, source parsing and decoder integration remain required. This component has not been deployed or linked into TSF.
+
+## Sentence lexicon preparation and shared view
+
+- Added source-order primary/optimal-code preparation and a separate version-marked mapped sentence lexicon. Candidate ranks and common/whitelist filtering match the current reference.
+- Actual ARM64/x64/x86 serialized-reader probes each pass 252 fixtures / 7,420 queries against frozen C# SentenceLexiconIndex.Build, including empty input, filtered prefixes, ordinal aliases and graphemes.
+- Evidence: `build/sentence-lexicon-validation.json`. Runtime importer/overlay integration, supplementary corpus and the decoder remain pending. Installed DLL unchanged.
+
+## Sentence input port (Qwen excluded), 2026-09-09
+
+- New active objective: port complete non-neural sentence behavior into TSF. Scope and remaining gates: `docs/SENTENCE_PORT.md`.
+- Frozen the current reference sentence/engine sources and golden fixtures separately from the older ordinary-input oracle.
+- Implemented native read-only n-gram model mapping/scoring. Actual 238,789,568-byte model compared with original C# across 13,006 queries on each of Linux/ARM64/x64/x86; all agree within 1.78e-15. Eight malformed model cases rejected on every implementation.
+- Evidence: `build/sentence-ngram-validation.json`. Sentence decoder, shared lexicon metadata, TSF integration and packaging remain pending; existing installed word-input version is unchanged.
+
+## Folder-based schema management
+
+- Replaced the ordinary import/maintenance screen with root-directory selection, schema list, use and reload. Legacy tools remain in “更多维护”.
+- Automatic content-addressed cache validation and immutable generation preparation; no per-key process/IPC changes.
+- A source folder named 虎码字词 can override the bundled binary while preserving its existing user journal.
+- Folder UI/cache and legacy manager/selector checks pass. TSF override mapping checks pass in all three staged host variants. ARM64X generation `5aa4bd69945cfb9c` and matching x86 companion are installed; registered TSF checks and package hashes pass.
+- See `docs/FOLDER_SCHEMAS.md` for usage and precise limits.
+
+## Ctrl+Space release handling
+
+- User reported down toggles to English and Space up returns to Chinese.
+- A new TSF regression reproduces leaked Space repeat/up in the previous DLL.
+- TSF now retains ownership of Space repeat/up after a successful Ctrl+Space toggle. Preview does not mutate the latch; failed edits do not arm it; focus loss clears it. Engine parity behavior is unchanged.
+- Staged ARM64 and both ARM64X host variants pass both toggle directions, auto-repeat and both modifier release orders (`build/ctrl-space-regression.json`). Real application confirmation is still required.
+- Installed ARM64X generation `ccafa500dd2fe896` and matching x86 supplement; registered TSF regression passes. Evidence: `build/ctrl-space-installed-validation.json`.
+
+## DirectWrite foreground validation
+
+- Installed ARM64/x64/x86 Rich Edit probes each pass 27 injected taps.
+- ARM64/x64 native candidate and UI-less integration fixtures pass; mouse selection uses a direct window message. Candidate screen captures visually inspected.
+- Evidence: `build/directwrite-frontend-validation.json`. Actual app/cross-monitor/scaling and user quality acceptance remain outstanding. Keyboard/mouse released to user.
+
+## DirectWrite / Direct2D deployment
+
+- Installed ARM64X generation `0e1d68726621238b` and its matching x86 supplement.
+- Installed hashes match the tested build; ARM64/x64 registered TSF checks and x86 COM activation pass.
+- Foreground typing, mouse selection, real monitor transitions and user text-quality acceptance remain pending. No physical keys were injected during deployment.
+
 # Ordinary TigerClaw native port
 
 The requested goal is still active. The native ARM64 TSF service is now installed
@@ -6,6 +846,30 @@ name 原生虎码. `build/native-install.json` records the installed immutable g
 The complete ordinary-input acceptance scope is not yet satisfied.
 
 ## Implemented and verified on 2026-09-08
+
+- Resolved the DirectWrite migration's hidden TSF test blocker by isolating
+  manual TIP activation from the fallback TIP. The fixture now selects an
+  already-loaded plain English keyboard FORPROCESS after system deactivation
+  and verifies its profile type/HKL before manual activation. Production mode
+  code and lock/text assertions are unchanged. Installed baseline ARM64 passes
+  with isolation; final standalone ARM64 and ARM64X ARM64/x64 staged checks all
+  pass (`build/directwrite-tsf-background.json`). No deployment changed.
+  Foreground/user visual and actual mixed-DPI monitor tests remain pending.
+
+- Started new goal: DirectWrite/Direct2D candidate rendering with WPF-like
+  quality and per-monitor DPI behavior. Native candidate now uses a private
+  DirectWrite font collection, fractional DIP layouts and a reusable Direct2D
+  WIC target with premultiplied transparency; removed GDI text-mask rendering.
+  Candidate HWND uses scoped PMv2 awareness, caret conversion, DPI-triggered
+  reflow and regenerated mouse rectangles. Host process DPI is unchanged.
+  Final ARM64/ARM64X/x86 builds pass (`build/directwrite-build.json`).
+- ARM64/x64/x86 offscreen probes each pass 90 cases and three host-awareness
+  checks (`build/directwrite-render-validation.json`). Generated and inspected
+  Direct2D/WPF visual samples. No physical monitor transition or user visual
+  acceptance yet. Hidden TSF mode-rejection test fails for both installed
+  baseline and migration DLL; bounded wait did not solve it and was removed.
+  The migration is not installed or complete. Full current scope/evidence and
+  remaining work are in `docs/DIRECTWRITE_MIGRATION.md`.
 
 - User confirmed the taskbar 中/英 button test passed after installation of
   `8005a14ee64cefc0` and its x86 supplement, and requested a commit. This closes
@@ -2519,3 +3383,71 @@ Windows builds use VS 18 / v145 and `tests/DictionaryProbe.vcxproj`,
 Run `tests/measure_dictionary_memory.ps1` in native Windows PowerShell after
 building DictionaryProbe. ReferenceOracle builds with .NET 10 and must only be
 run against a staging directory containing `.native-tiger-staging`.
+
+## 2026-09-09 候选与注解延迟展开
+
+- 对照原版 `MainWindow.Candidate.cs`、`CandidateTextFormatter.cs` 和
+  `CoreRuntimeState.cs`，增加两个原名配置键及“候选外观”中的毫秒输入框。
+- 共用输入会话起点、分别计时，持续输入不重置，展开后保持；拼音反查注解
+  立即显示；保留原版隐藏候选与正延迟的组合行为。
+- 使用候选窗口所属线程的 Win32 定时器，不增加 Core 或 IPC；没有光标布局
+  时保持隐藏，UI detach 销毁定时器。UI-less 数据与按键提交不受延迟影响。
+- 默认值均为 0，现有用户配置不会被自动改成正延迟。
+- 新增可重复的 `tests/candidate_reveal_test.py`；设置测试覆盖保存、重开、
+  取消及八种非法延时输入。前台 Word、微信、32 位程序的延时观感仍需实测。
+- 验证通过：延时状态/解析边界测试、设置控件保存/重开/取消/非法值测试、
+  96/144/192 DPI 边界检查；144 DPI 截图人工查看无重叠。
+- ARM64X 与 Win32 构建、三架构加载/创建实例检查通过，已安装版本
+  `48c888085b86fec3`；两套注册表视图、DLL 哈希及已测设置程序一致。
+  记录：`build/candidate-reveal-validation.json`、`build/input-settings-arm64.json`、
+  `build/candidate-reveal-installed-audit.json`。
+
+## 2026-09-09 候选窗右键菜单与滚轮字号
+
+- 候选窗右键复用任务栏的方案、主题、管理菜单；使用候选窗口作为 owner，
+  不激活临时窗口。滚轮每 120 单位调整 0.5，范围 3–200，保留小幅滚动。
+- 加锁读取最新字号后原子保存，只写字体大小，不发出清空输入的设置重载请求；
+  当前窗口立即重排，其他实例通过已有配置监视同步。
+- 实际 TSF 窗口 ARM64、x64、Win32 测试通过：放大/缩小、持久化、12 项菜单、
+  取消菜单后焦点/编码保留、随后空格上屏。测试在临时前台宿主中发送定向消息，
+  未注入全局输入；独立非活动桌面不能取得真实前台焦点，未用它宣称焦点通过。
+- 字号边界、小幅滚动、8 次并发更新及其他配置保留测试通过。物理鼠标在用户
+  常用应用中的体验仍待实测。记录位于 build/candidate-mouse-validation.json、
+  build/candidate-wheel-validation.json 和 build/candidate-mouse-installed-audit.json。
+- 已安装版本 `842f19b2e76b60c8`，两套注册表及已安装 DLL 与测试产物一致。
+
+## 2026-09-09 中键布局、模式边距与定位
+
+- 中键松开循环横排/竖排/仅编码，分别记忆横、竖排显示编码偏好；三个公开
+  配置值加锁一次写入，保持当前编码和输入焦点。
+- 对齐虎爪三种模式的 padding、字号行高、最小宽度；横排采用实际空格宽度
+  与编码补空格，不再固定 10 DIP 或自动换行。主题边框参与外部尺寸计算。
+- 定位改为原版 5 物理像素光标间隔、右下 2 像素预留；底部不足时择上方，
+  本次输入缩小时保持上方，跨监视器重置。仍使用真实 TSF 光标及 PMv2。
+- 模式/字号/边缘定位自动测试与前台临时宿主的中键循环测试已补充；
+  多实体屏幕拖动及 Word/微信人工并排观感仍需实测，不以模拟测试替代。
+- 已通过：三架构 270 个渲染/DPI 用例、模式尺寸/边距/定位断言、模式偏好
+  保存测试、原有延迟展开回归及 ARM64X 加载预检。已查看竖排、横排和仅编码
+  的 144 DPI 图像。
+- 本轮前台中键测试停在首键前的 OS 焦点检查，尚未验证中键消息路径；
+  不沿用上轮鼠标测试的通过状态。当前报告 candidate-mouse-validation.json
+  如实记录该失败。已询问用户是否可暂停键鼠测试。
+- 安装尚未完成：ARM64X 安装等待 Windows UAC（WSL session 77862）；提前
+  启动的 x86 安装等待进程已停止，待主版本成功后再执行 install_x86.ps1。
+  截至此记录，注册版本仍是 842f19b2e76b60c8。
+
+- 后续确认：ARM64X UAC 已完成，已继续完成 Win32 安装；两者版本均为 `9f83ef2f5a2a7364`，安装 DLL 哈希核验一致。中键前台焦点测试仍待重测。
+
+## 2026-09-09 编码伪装
+
+- 添加原版“编码伪装”设置、Unicode 字素替换器、已解析混合前缀标记，
+  候选窗编码和 TSF 预编辑共用显示变换，查码/候选/提交不变；留空关闭。
+- 修正配置读取过早 trim 行尾的问题，保证后置空值可清除旧值。
+- 通过 Unicode/空白/前缀/候选不变单测、延迟展开回归、设置保存/重开/取消
+  与 96/144/192 DPI 检查，144 DPI 截图已人工检查。
+- ARM64、x64、Win32 的真实 TSF 编辑会话通过多码元伪装退格/恢复、原始候选、
+  上屏、混合前缀及取消验证。专用宿主显式激活服务，不借此宣称物理前台通过。
+  前台鼠标宿主尝试停在焦点检查；已保留报告，不沿用旧结果。
+- 记录：build/code-mask-validation.json、build/code-mask-tsf-validation.json、
+  build/input-settings-arm64.json；详细行为见 docs/CODE_MASKING.md。
+- 已安装版本 `789f4a97fb336ad0`；双架构注册表、三架构已测 DLL 以及设置程序哈希核验一致，记录见 build/code-mask-installed-audit.json。

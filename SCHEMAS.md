@@ -1,3 +1,10 @@
+# Current folder-based workflow
+
+The normal manager now lists text-table folders and automatically prepares shared
+binary caches when selecting/reloading a schema. See [folder workflow](docs/FOLDER_SCHEMAS.md)
+for current behavior and validation. The incremental notes below record earlier
+implementation stages; their “unfinished” statements are historical.
+
 # Native schema loading (in progress)
 
 The native service reads `当前码表` from the per-user `config.txt` on activation

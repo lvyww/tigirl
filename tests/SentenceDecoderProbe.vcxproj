@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>sentence_decoder_probe</NativeProbeName></PropertyGroup>
+  <Import Project="ArchitectureLoadProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" />
+    <ClCompile Include="sentence_decoder_probe.cpp" /><ClCompile Include="..\native\SentenceLexicon.cpp" /><ClCompile Include="..\native\SentenceDecoder.cpp" /><ClCompile Include="..\native\SentenceCharacterRanks.cpp" /><ClCompile Include="..\native\SentenceNgram.cpp" />
+    <ClCompile Include="..\native\Dictionary.cpp" /><ClCompile Include="..\native\AddWord.cpp" />
+    <ClCompile Include="..\native\LexiconSerialize.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+</Project>

@@ -5,6 +5,7 @@ import random
 import subprocess
 import shutil
 import tempfile
+from windows_process import run_windows
 
 ROOT = Path(__file__).resolve().parents[1]
 WINROOT = subprocess.check_output(["wslpath", "-w", str(ROOT)], text=True).strip()
@@ -67,15 +68,16 @@ trace.write_text("".join(json.dumps(k) + "\n" for k in keys), encoding="utf-8")
 with tempfile.TemporaryDirectory(prefix="key-oracle-", dir=BUILD) as isolated, open(BUILD / "keys-oracle.jsonl", "w", encoding="utf-8") as output:
     shutil.copytree(ROOT / "data/staging", isolated, dirs_exist_ok=True)
     isolated_windows = subprocess.check_output(["wslpath", "-w", isolated], text=True).strip()
-    subprocess.run(["/mnt/c/Program Files/dotnet/dotnet.exe", WINROOT+r"\tools\ReferenceOracle\bin\Release\net10.0-windows\ReferenceOracle.dll",
+    run_windows(["/mnt/c/Program Files/dotnet/dotnet.exe", WINROOT+r"\tools\ReferenceOracle\bin\Release\net10.0-windows\ReferenceOracle.dll",
                     "trace", isolated_windows, WINROOT+r"\build\keys.jsonl"], stdout=output, check=True)
 rows = []
 for k in keys:
     rows.append(" ".join(str(int(x)) for x in [k["reset"], k["vk"], k.get("scan",0), k["action"]=="down",
         k.get("shift",False),k.get("ctrl",False),k.get("alt",False),k.get("win",False),k.get("caps",False),
         k.get("num",True), k.get("repeat",1), k.get("extended",False)]))
+(BUILD / "keys-native.tsv").write_text("\n".join(rows)+"\n")
 with open(BUILD / "keys-native.jsonl", "w", encoding="utf-8") as output:
-    subprocess.run([str(BUILD / "engine_probe"), str(ROOT / "data/tiger-v2.tcd")], input="\n".join(rows)+"\n", text=True, stdout=output, check=True)
+    run_windows([BUILD / "tests/ARM64/engine_probe.exe", WINROOT+r"\data\tiger-v2.tcd", WINROOT+r"\build\keys-native.tsv"], text=True, stdout=output, check=True)
 failures = []
 with open(BUILD / "keys-oracle.jsonl", encoding="utf-8-sig") as oracle, open(BUILD / "keys-native.jsonl", encoding="utf-8") as native:
     expected_rows = [json.loads(x) for x in oracle]

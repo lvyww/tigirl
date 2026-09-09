@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><Nullable>disable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+<ItemGroup><Compile Include="Driver.cs" /><Compile Include="RerankContracts.cs" /><Compile Include="../ReferenceOracle/RegistrySandbox.cs" />
+<Compile Include="../SentenceOracle/upstream/TigerClaw.Core/*.cs" Exclude="../SentenceOracle/upstream/TigerClaw.Core/SentenceRerankClient.cs;../SentenceOracle/upstream/TigerClaw.Core/SentenceServiceLifecycle.cs" />
+<Compile Include="../SentenceOracle/upstream/TigerClaw.Shared/*.cs" />
+<EmbeddedResource Include="../SentenceOracle/upstream/TigerClaw.Core/Data/*.txt"><LogicalName>TigerClaw.Core.Data.%(Filename)%(Extension)</LogicalName></EmbeddedResource>
+</ItemGroup></Project>

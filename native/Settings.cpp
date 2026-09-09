@@ -25,7 +25,7 @@ bool boolean(std::u16string value,bool fallback) {
     if(value==u"否" || value==u"false" || value==u"off" || value==u"0") return false;
     return fallback;
 }
-int integer(std::u16string_view value,int fallback,int limit) {
+int integer(std::u16string_view value,int fallback,int limit,int minimum=1) {
     bool negative=false;
     if(!value.empty() && (value.front()==u'+' || value.front()==u'-')) { negative=value.front()==u'-'; value.remove_prefix(1); }
     if(value.empty()) return fallback;
@@ -35,12 +35,13 @@ int integer(std::u16string_view value,int fallback,int limit) {
         n=n*10+c-u'0';
         if(n>(negative?2147483648ll:2147483647ll)) return fallback;
     }
-    return static_cast<int>(std::clamp<std::int64_t>(negative?-n:n,1,limit));
+    return static_cast<int>(std::clamp<std::int64_t>(negative?-n:n,minimum,limit));
 }
 std::map<std::u16string,std::u16string> settingsValues(std::u16string_view text) {
     std::map<std::u16string,std::u16string> values;
     while(!text.empty()) {
-        const auto end=text.find_first_of(u"\r\n"); auto line=trim(text.substr(0,end));
+        const auto end=text.find_first_of(u"\r\n"); auto line=text.substr(0,end);
+        while(!line.empty() && whitespace(line.front()))line.remove_prefix(1);
         if(end==text.npos) text={}; else text.remove_prefix(end+1);
         if(line.empty() || line.front()==u'#') continue;
         const auto sep=line.find_first_of(u"\t ,");
@@ -144,6 +145,7 @@ CandidateStyle parseCandidateStyle(std::u16string_view text) {
         const auto found=values.find(flag.first);
         if(found!=values.end()) style.*flag.second=boolean(found->second,style.*flag.second);
     }
+    if(auto found=values.find(u"编码伪装");found!=values.end())style.codeMask=found->second;
     if(auto found=values.find(u"字体");found!=values.end() && !found->second.empty()) style.font=found->second;
     if(auto found=values.find(u"主题");found!=values.end() && !found->second.empty()) style.theme=found->second;
     if(auto found=values.find(u"字体大小");found!=values.end()) {
@@ -151,6 +153,8 @@ CandidateStyle parseCandidateStyle(std::u16string_view text) {
         double size;
         if(input>>size && input.peek()==std::char_traits<char>::eof() && std::isfinite(size)) style.fontSize=std::clamp(size,3.0,200.0);
     }
+    if(auto found=values.find(u"延时显示候选(毫秒)");found!=values.end()) style.candidateDelayMs=integer(found->second,0,60000,0);
+    if(auto found=values.find(u"延时展开注释和拆分(毫秒)");found!=values.end()) style.annotationDelayMs=integer(found->second,0,60000,0);
     return style;
 }
 Config loadEngineSettings(const std::filesystem::path& path) {

@@ -7,13 +7,18 @@
 #include "ConfigStore.h"
 #include "InputSettings.h"
 #include "OrdinalCase.h"
+#include "CandidateTheme.h"
+#include "UserStore.h"
+#include "Text.h"
+#include <fstream>
+#include <set>
 #include <algorithm>
 #include <iostream>
 #include <memory>
 #include <thread>
 
 namespace {
-enum {Schema=101,Use,Refresh,Version,Versions,Restore,Source,BrowseSource,Pinyin,BrowsePinyin,Name,Import,Update,Status,Current,InputSettings,CompactUser,RecoverUser};
+enum {Schema=101,Use,Refresh,Version,Versions,Restore,Source,BrowseSource,Pinyin,BrowsePinyin,Name,Import,Update,Status,Current,InputSettings,CompactUser,RecoverUser,CodeRoot,BrowseRoot,OpenRoot,Reload,Advanced};
 constexpr UINT Completed=WM_APP+1;
 std::wstring wide(std::u16string_view text){return {reinterpret_cast<const wchar_t*>(text.data()),text.size()};}
 std::wstring controlText(HWND control) {
@@ -60,6 +65,8 @@ struct App {
     struct VersionItem {std::wstring id,label;ULONGLONG timestamp=0;};
     std::vector<VersionItem> versionItems;
     HWND window=nullptr;HFONT font=nullptr;std::filesystem::path root,bundled,tools;
+    bool maintenance=false,menuClose=false;
+    std::filesystem::path sourceRoot;
     std::thread worker;bool busy=false,closing=false,test=false,testClose=false,testRestore=false,testNewest=false;int exitCode=0;
     HWND item(int id){return GetDlgItem(window,id);}
     void scale(UINT dpi,bool resize=true) {
@@ -72,7 +79,7 @@ struct App {
         }
         if(font)DeleteObject(font);font=next;
         if(resize) {
-            RECT bounds{0,0,px(620),px(510)};
+            RECT bounds{0,0,px(620),px(maintenance?510:310)};
             if(!AdjustWindowRectExForDpi(&bounds,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,
                 static_cast<DWORD>(GetWindowLongPtrW(window,GWL_EXSTYLE)),GetDpiForWindow(window)))throw std::runtime_error("Cannot size manager window");
             SetWindowPos(window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
@@ -98,6 +105,9 @@ struct App {
     void status(const std::wstring& text){SetWindowTextW(item(Status),text.c_str());}
     void refresh() {
         const auto previous=controlText(item(Schema));std::vector<std::u16string> names{u"虎码字词"};
+        if(!maintenance && std::filesystem::is_directory(sourceRoot)) for(const auto& entry:std::filesystem::directory_iterator(sourceRoot)) {
+            auto name=entry.path().filename().u16string();if(entry.is_directory() && tiger::validSchemaName(name))names.push_back(std::move(name));
+        }
         if(std::filesystem::is_directory(root/L"schemas")) for(const auto& entry:std::filesystem::directory_iterator(root/L"schemas")) {
             auto name=entry.path().filename().u16string();if(entry.is_directory() && tiger::validSchemaName(name))names.push_back(std::move(name));
         }
@@ -106,9 +116,11 @@ struct App {
         SendMessageW(item(Schema),CB_RESETCONTENT,0,0);
         for(const auto& name:names)SendMessageW(item(Schema),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(name).c_str()));
         auto selected=SendMessageW(item(Schema),CB_FINDSTRINGEXACT,static_cast<WPARAM>(-1),reinterpret_cast<LPARAM>(previous.c_str()));
-        SendMessageW(item(Schema),CB_SETCURSEL,selected==CB_ERR?0:static_cast<WPARAM>(selected),0);
+
         auto current=tiger::currentSchemaSetting(tiger::readConfiguration(root/L"config.txt"));
         if(current.empty())current=u"虎码字词";
+        if(selected==CB_ERR)selected=SendMessageW(item(Schema),CB_FINDSTRINGEXACT,static_cast<WPARAM>(-1),reinterpret_cast<LPARAM>(wide(current).c_str()));
+        SendMessageW(item(Schema),CB_SETCURSEL,selected==CB_ERR?0:static_cast<WPARAM>(selected),0);
         SetWindowTextW(item(Current),(L"当前使用："+wide(current)).c_str());
         SendMessageW(item(Version),CB_RESETCONTENT,0,0);versionItems.clear();
     }
@@ -149,7 +161,7 @@ struct App {
         status(versionItems.empty()?L"未找到可恢复的完整版本。":L"版本按时间从新到旧排列，选择后可恢复。");
     }
     void enabled(bool value) {
-        for(int id:{Schema,Use,Refresh,Version,Versions,Restore,Source,BrowseSource,Pinyin,BrowsePinyin,Name,Import,Update,InputSettings,CompactUser,RecoverUser})EnableWindow(item(id),value);
+        for(int id:{Schema,Use,Refresh,Version,Versions,Restore,Source,BrowseSource,Pinyin,BrowsePinyin,Name,Import,Update,InputSettings,CompactUser,RecoverUser,CodeRoot,BrowseRoot,OpenRoot,Reload,Advanced})EnableWindow(item(id),value);
     }
     std::wstring chooseUserBackup(const std::wstring& schema) {
         if(test) {
@@ -200,10 +212,59 @@ struct App {
             status(saved?L"输入设置已保存，重新聚焦输入框后生效。":L"已取消输入设置。");
             if(test){exitCode=saved?0:1;DestroyWindow(window);}return;
         }
+        if(!maintenance && (id==BrowseRoot || id==Refresh || id==OpenRoot)) {
+            if(id==BrowseRoot)browse(CodeRoot);
+            auto path=std::filesystem::path(controlText(item(CodeRoot)));
+            if(!path.is_absolute()){status(L"请选择码表根目录（其中每个子文件夹是一个方案）。");return;}
+            if(id==OpenRoot) {
+                std::filesystem::create_directories(path);
+                if(reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)status(L"无法打开码表目录。");
+                return;
+            }
+            if(!std::filesystem::is_directory(path)){status(L"码表目录不存在。");return;}
+            sourceRoot=path;
+            tiger::updateConfigurationValues(root/L"config.txt",{{u"码表存储位置",sourceRoot.u16string()}});
+            refresh();status(L"方案列表已刷新，选择方案后点击“使用方案”。");return;
+        }
+        if(id==Advanced) {
+            const auto args=quote(root.wstring())+L" "+quote(bundled.wstring())+L" --maintenance";
+            if(reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"open",(tools/L"schema_manager.exe").c_str(),args.c_str(),nullptr,SW_SHOWNORMAL))<=32)status(L"无法打开维护工具。");
+            return;
+        }
         if(id==Refresh){refresh();status(L"方案列表已刷新。");return;}
         if(id==BrowseSource || id==BrowsePinyin){browse(id==BrowseSource?Source:Pinyin);return;}
         const auto schema=controlText(item(Schema));std::vector<std::wstring> arguments{root.wstring(),bundled.wstring()};
         auto executable=tools/L"schema_select.exe";
+        if(!maintenance && (id==Use || id==Reload)) {
+            const auto configured=std::filesystem::path(controlText(item(CodeRoot)));
+            if(!configured.is_absolute()){status(L"请选择有效的码表根目录。");return;}
+            const std::u16string schemaName(reinterpret_cast<const char16_t*>(schema.data()),schema.size());
+            if(!tiger::validSchemaName(schemaName)){status(L"请选择一个方案。");return;}
+            sourceRoot=configured;
+            const auto source=sourceRoot/schema;
+            auto pinyin=sourceRoot.parent_path()/L"拼音反查码表";
+            const auto custom=tiger::configurationValue(tiger::readConfiguration(root/L"config.txt"),u"拼音反查目录");
+            if(!custom.empty())pinyin=std::filesystem::path(custom);
+            if(!pinyin.is_absolute()){status(L"拼音反查目录必须为完整路径。");return;}
+            const bool hasSource=std::filesystem::is_directory(source);
+            if(!hasSource && schema!=L"虎码字词" && !std::filesystem::is_directory(root/L"schemas"/schema)) {
+                status(L"方案目录不存在，请刷新列表。");return;
+            }
+            wchar_t culture[LOCALE_NAME_MAX_LENGTH]{};
+            if(!GetUserDefaultLocaleName(culture,LOCALE_NAME_MAX_LENGTH))throw std::runtime_error("Cannot read locale");
+            tiger::updateConfigurationValues(root/L"config.txt",{{u"码表存储位置",sourceRoot.u16string()}});
+            busy=true;enabled(false);status(L"正在加载方案，请稍候……");
+            try {worker=std::thread([this,id,schema,source,pinyin,hasSource,culture=std::wstring(culture)] {
+                auto result=std::make_unique<Result>();
+                try {
+                    if(hasSource)*result=execute(id,tools/L"lexicon_import.exe",{L"--ensure",source.wstring(),pinyin.wstring(),root.wstring(),schema,culture});
+                    else result->code=0;
+                    if(result->code==0)*result=execute(id,tools/L"schema_select.exe",{root.wstring(),bundled.wstring(),schema});
+                }catch(...){result->action=id;result->code=1;result->output=L"加载失败，原方案仍保留。";}
+                if(PostMessageW(window,Completed,0,reinterpret_cast<LPARAM>(result.get())))result.release();
+            });}catch(...){busy=false;enabled(true);throw;}
+            return;
+        }
         if(id==Use)arguments.push_back(schema);
         else if(id==CompactUser){arguments.push_back(L"--compact-user");arguments.push_back(schema);}
         else if(id==RecoverUser){
@@ -241,6 +302,23 @@ void create(App& app) {
         if(!child)throw std::runtime_error("Cannot create manager control");app.layout.push_back({child,x,y,w,h});
     };
     control(Current,L"STATIC",L"",0,18,15,600,25);
+    if(!app.maintenance) {
+        control(0,L"STATIC",L"码表目录",0,18,59,90,25);
+        control(CodeRoot,L"EDIT",app.sourceRoot.c_str(),ES_AUTOHSCROLL|WS_TABSTOP,110,55,330,28);
+        control(BrowseRoot,L"BUTTON",L"浏览…",WS_TABSTOP,448,55,75,28);
+        control(OpenRoot,L"BUTTON",L"打开",WS_TABSTOP,530,55,72,28);
+        control(0,L"STATIC",L"方案",0,18,104,85,25);
+        control(Schema,L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,110,100,330,180);
+        control(Refresh,L"BUTTON",L"刷新列表",WS_TABSTOP,448,100,154,28);
+        control(Use,L"BUTTON",L"使用方案",WS_TABSTOP,110,145,145,32);
+        control(Reload,L"BUTTON",L"重新加载",WS_TABSTOP,270,145,170,32);
+        control(InputSettings,L"BUTTON",L"输入设置…",WS_TABSTOP,448,145,154,32);
+        control(0,L"STATIC",L"每个子文件夹是一个方案。修改码表后，点击“重新加载”。",0,18,196,584,25);
+        control(Advanced,L"BUTTON",L"更多维护…",WS_TABSTOP,448,232,154,30);
+        control(Status,L"STATIC",L"选择方案即可加载；已有词库和用户调序记录会保留。",0,18,269,584,35);
+        app.scale(GetDpiForWindow(app.window));app.refresh();return;
+    }
+
     control(0,L"STATIC",L"方案",0,18,52,80,25);control(Schema,L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,110,48,370,240);
     control(Refresh,L"BUTTON",L"刷新",WS_TABSTOP,490,48,110,28);
     control(Use,L"BUTTON",L"使用方案",WS_TABSTOP,110,86,140,30);control(Versions,L"BUTTON",L"读取保留版本",WS_TABSTOP,265,86,150,30);
@@ -294,7 +372,7 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
                 else throw std::runtime_error("Unexpected maintenance tool response");
             } else if(result->code==0){app->refresh();app->status(L"操作完成。输入窗口重新获得焦点后会读取方案变化。");}
             else app->status(L"操作失败：\r\n"+result->output);
-            if(app->test || app->closing){app->exitCode=result->code==0?0:1;DestroyWindow(window);}return 0;
+            if(app->test || app->closing || (app->menuClose && result->code==0)){app->exitCode=result->code==0?0:1;DestroyWindow(window);}return 0;
         }
         if(message==WM_CLOSE){if(app->busy){app->closing=true;app->status(L"操作完成后将关闭窗口。");}else DestroyWindow(window);return 0;}
         if(message==WM_DESTROY){PostQuitMessage(app->exitCode);return 0;}
@@ -304,15 +382,17 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     int argc=0;wchar_t** argv=CommandLineToArgvW(GetCommandLineW(),&argc);App app;
-    const bool interactiveLaunch=argc==1 || (argc==2 && std::wstring_view(argv[1])==L"--settings") ||
+    const bool menuAction=argc==4 && std::wstring_view(argv[1])==L"--menu-action";
+    const bool interactiveLaunch=menuAction || argc==1 || (argc==2 && std::wstring_view(argv[1])==L"--settings") ||
         (argc==3 && std::wstring_view(argv[1]).rfind(L"--",0)!=0);
     try {
         const bool directSettings=argc==2 && std::wstring_view(argv[1])==L"--settings";
-        if(argc!=1 && argc!=3 && argc!=5 && !directSettings)throw std::runtime_error("schema_manager [<absolute-user-root> <absolute-bundled-dictionary>]");
+        const bool maintenance=!menuAction && argc==4 && std::wstring_view(argv[3])==L"--maintenance";
+        if(argc!=1 && argc!=3 && argc!=5 && !directSettings && !maintenance && !menuAction)throw std::runtime_error("schema_manager [<absolute-user-root> <absolute-bundled-dictionary>]");
         wchar_t path[32768];const auto moduleLength=GetModuleFileNameW(nullptr,path,32768);
         if(!moduleLength || moduleLength>=32768)throw std::runtime_error("Cannot locate manager");app.tools=std::filesystem::path(path).parent_path();
         const bool defaultTest=argc==3 && std::wstring_view(argv[1])==L"--test-default";
-        if(argc==1 || defaultTest || directSettings) {
+        if(argc==1 || defaultTest || directSettings || menuAction) {
             const auto length=GetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",path,32768);
             if(length>=32768)throw std::runtime_error("User root override is too long");
             if(length)app.root=path;
@@ -325,16 +405,71 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
         } else {app.root=argv[1];app.bundled=argv[2];}
         const std::wstring mode=defaultTest?L"--test-select":argc==5?argv[3]:L"";
         const wchar_t* testName=defaultTest?argv[2]:argc==5?argv[4]:L"";
-        app.test=mode==L"--test-recover-user" || mode==L"--test-compact" || mode==L"--test-settings" || mode==L"--test-select" || mode==L"--test-select-close" || mode==L"--test-import" || mode==L"--test-update" || mode==L"--test-restore" || mode==L"--test-restore-newest";
+        app.test=mode==L"--test-folder" || mode==L"--test-recover-user" || mode==L"--test-compact" || mode==L"--test-settings" || mode==L"--test-select" || mode==L"--test-select-close" || mode==L"--test-import" || mode==L"--test-update" || mode==L"--test-restore" || mode==L"--test-restore-newest";
+        app.maintenance=maintenance || (app.test && mode!=L"--test-folder");
+        const auto folder=tiger::configurationValue(tiger::readConfiguration(app.root/L"config.txt"),u"码表存储位置");
+        app.sourceRoot=folder.empty()?app.root/L"码表":std::filesystem::path(folder);
+        if(app.sourceRoot.is_relative())app.sourceRoot=app.root/app.sourceRoot;
         app.testClose=mode==L"--test-select-close";app.testNewest=mode==L"--test-restore-newest";app.testRestore=mode==L"--test-restore" || app.testNewest;
         if(!app.root.is_absolute() || !app.bundled.is_absolute() || (argc==5 && !app.test))throw std::runtime_error("Invalid manager arguments");
         if(app.test && !std::filesystem::exists(app.root/L".schema-manager-test"))throw std::runtime_error("Test requires an isolated marked root");
+        std::wstring menuCommand=menuAction?argv[2]:L"",menuValue=menuAction?argv[3]:L"";
+        if(menuAction && menuCommand!=L"use" && menuCommand!=L"reload") {
+            auto openTarget=[](const std::filesystem::path& target) {
+                if(reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr,L"open",target.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)
+                    throw std::runtime_error("Cannot open menu target");
+            };
+            auto config=tiger::readConfiguration(app.root/L"config.txt");
+            auto name=tiger::currentSchemaSetting(config);if(name.empty())name=u"虎码字词";
+            if(menuCommand==L"theme") {
+                const std::u16string theme(reinterpret_cast<const char16_t*>(menuValue.data()),menuValue.size());
+                if(std::find(tiger::candidateThemeNames.begin(),tiger::candidateThemeNames.end(),theme)==tiger::candidateThemeNames.end())
+                    throw std::runtime_error("Unknown theme");
+                tiger::updateConfigurationValues(app.root/L"config.txt",{{u"主题",theme}});
+            } else if(menuCommand==L"official")openTarget(L"https://github.com/lvyww/bime");
+            else if(menuCommand==L"folder") {
+                auto targetFolder=app.sourceRoot/std::filesystem::path(name);
+                if(!std::filesystem::is_directory(targetFolder))targetFolder=app.root/L"schemas"/std::filesystem::path(name);
+                if(!std::filesystem::is_directory(targetFolder))targetFolder=app.tools;
+                openTarget(targetFolder);
+            } else if(menuCommand==L"export") {
+                auto dictionary=tiger::Dictionary::Open(tiger::activeSchemaDictionaryPath(app.root,app.bundled,name));
+                tiger::UserStore store(dictionary,tiger::schemaJournalPath(app.root,name));auto lexicon=store.refresh();
+                std::set<std::u16string> codes;
+                for(std::uint32_t i=0;i<dictionary->count(tiger::Section::Main);++i)codes.emplace(dictionary->at(tiger::Section::Main,i).key);
+                lexicon->visitUserEdits([&](auto code,const auto&){codes.emplace(code);});
+                const auto directory=app.root/L"码表导出";std::filesystem::create_directories(directory);
+                GUID guid{};if(FAILED(CoCreateGuid(&guid)))throw std::runtime_error("Cannot name export");
+                wchar_t unique[40];StringFromGUID2(guid,unique,40);
+                const auto output=directory/(std::filesystem::path(name).wstring()+L" "+unique+L".txt");
+                auto temporary=output;temporary+=L".tmp";
+                std::ofstream file(temporary,std::ios::binary);file<<"\xef\xbb\xbf";
+                for(const auto& code:codes) {
+                    auto match=lexicon->find(tiger::Section::Main,code);if(!match.count)continue;
+                    file<<tiger::utf8(code);
+                    for(std::uint32_t i=0;i<match.count;++i)file<<' '<<tiger::utf8(tiger::packText(lexicon->value(match,i)));
+                    file<<"\r\n";
+                }
+                file.close();if(!file)throw std::runtime_error("Cannot write dictionary export");
+                std::filesystem::rename(temporary,output);openTarget(directory);
+            } else throw std::runtime_error("Unknown menu action");
+            LocalFree(argv);return 0;
+        }
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
         WNDCLASSW type{};type.hInstance=instance;type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerSchemaManager";type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);RegisterClassW(&type);
         HWND window=CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"原生虎码 · 方案管理",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,CW_USEDEFAULT,CW_USEDEFAULT,640,510,nullptr,nullptr,instance,&app);
         if(!window)throw std::runtime_error("Cannot create manager window");create(app);
         if(directSettings){showInputSettings(window,app.root/L"config.txt");DestroyWindow(window);}
+        else if(menuAction) {
+            if(menuCommand==L"use") {
+                auto selected=SendMessageW(app.item(Schema),CB_FINDSTRINGEXACT,static_cast<WPARAM>(-1),reinterpret_cast<LPARAM>(menuValue.c_str()));
+                if(selected==CB_ERR)throw std::runtime_error("Selected schema is no longer available");
+                SendMessageW(app.item(Schema),CB_SETCURSEL,static_cast<WPARAM>(selected),0);
+            }
+            app.menuClose=true;ShowWindow(window,show);
+            PostMessageW(window,WM_COMMAND,menuCommand==L"reload"?Reload:Use,0);
+        }
         else if(app.test) {
             app.verifyLayout();
             if(mode!=L"--test-import") {
