@@ -5,8 +5,8 @@ $temporary = Join-Path $root ('build\shortcut-test-' + [Guid]::NewGuid().ToStrin
 try {
     $programs = Join-Path $temporary '模拟 开始菜单'
     $install = Join-Path $temporary '安装目录'
-    $first = Join-Path $install 'versions\first\schema_manager.exe'
-    $second = Join-Path $install 'versions\second\schema_manager.exe'
+    $first = Join-Path $install 'versions\first\Tigirl.exe'
+    $second = Join-Path $install 'versions\second\Tigirl.exe'
     foreach ($target in @($first, $second)) {
         New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
         [IO.File]::WriteAllText($target, 'fixture; never executed')
@@ -45,7 +45,7 @@ try {
     } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
     $blockedPrograms = Join-Path $temporary 'blocked-programs'
     New-Item -ItemType Directory -Path $blockedPrograms | Out-Null
-    [IO.File]::WriteAllText((Join-Path $blockedPrograms '原生虎码'), 'preserve')
+    [IO.File]::WriteAllText((Join-Path $blockedPrograms '虎娘'), 'preserve')
     $blocked = $false
     try { Assert-NativeTigerShortcutAvailable $blockedPrograms $install } catch { $blocked = $true }
     if (!$blocked) { throw 'Parent file conflict was accepted' }

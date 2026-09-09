@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build'
 PS = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 HOST = BUILD / 'tests/ARM64/tsf_host.exe'
-DLL = BUILD / 'ARM64/Release/SampleIME.dll'
+DLL = BUILD / 'ARM64/Release/Tigirl.dll'
 PROBE = BUILD / 'tests/ARM64/user_store_probe.exe'
 MANIFEST = DLL.parent / 'NativeTiger.Test.manifest'
 

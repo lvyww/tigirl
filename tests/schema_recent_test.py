@@ -1,7 +1,7 @@
 """Recent selection against prepared schemas and concurrent native selectors."""
 import concurrent.futures,hashlib,json,shutil,subprocess,tempfile
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];EXE=ROOT/'build/tests/ARM64/schema_select.exe'
+ROOT=Path(__file__).resolve().parents[1];EXE=ROOT/'build/tests/ARM64/Tigirl.SchemaSelect.exe'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='schema-recent-',dir=ROOT/'build') as tmp:
  root=Path(tmp);dictionary=ROOT/'data/tiger-v2.tcd';config=root/'config.txt'

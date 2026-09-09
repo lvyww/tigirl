@@ -122,7 +122,7 @@ int wmain(int argc,wchar_t** argv) {
         tap(edits[0],'D');tap(edits[0],'K');tap(edits[0],VK_SPACE);
         waitText(edits[0],L"口"+linePrefix.substr(1)+L"口");
         require(text(edits[1])==L"口","Extended input changed the other edit");
-        HMODULE module=GetModuleHandleW(L"SampleIME.dll");wchar_t path[32768]{};
+        HMODULE module=GetModuleHandleW(L"Tigirl.dll");wchar_t path[32768]{};
         require(module && GetModuleFileNameW(module,path,32768) && std::filesystem::equivalent(path,argv[1]),"Unexpected registered DLL loaded");
         DestroyWindow(parent);check(manager->Deactivate());
         std::cout<<"{\"status\":\"passed\",\"standard_rich_edit\":true,\"controls\":2,\"injected_taps\":"<<injected

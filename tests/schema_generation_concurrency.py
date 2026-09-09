@@ -2,7 +2,7 @@
 import concurrent.futures,hashlib,json,selectors,subprocess,tempfile,threading,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build'
-IMPORT=BUILD/'tests/ARM64/lexicon_import.exe';READER=BUILD/'tests/ARM64/schema_generation_reader.exe'
+IMPORT=BUILD/'tests/ARM64/Tigirl.Import.exe';READER=BUILD/'tests/ARM64/schema_generation_reader.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 def hextext(text):return ''.join(f'{ord(c):04x}' for c in text)
 def receive(process):

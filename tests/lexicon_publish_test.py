@@ -1,7 +1,7 @@
 """Native files-to-binary import plus immutable no-replace publication."""
 import concurrent.futures,hashlib,json,subprocess,tempfile
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build';EXE=BUILD/'tests/ARM64/lexicon_import.exe'
+ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build';EXE=BUILD/'tests/ARM64/Tigirl.Import.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 def run(schema,pinyin,output):
  return subprocess.run([str(EXE),win(schema),win(pinyin),win(output),'zh-CN'],capture_output=True,text=True)
@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='publish-import-',dir=BUILD) as temporar
  invalid=root/'空方案';invalid.mkdir()
  rejected=run(invalid,missing_pinyin,root/'empty.tcd')
  assert rejected.returncode!=0 and not (root/'empty.tcd').exists()
- user=root/'用户目录';selector=BUILD/'tests/ARM64/schema_select.exe'
+ user=root/'用户目录';selector=BUILD/'tests/ARM64/Tigirl.SchemaSelect.exe'
  def import_schema(name):
   return subprocess.run([str(EXE),'--schema',win(schema),win(missing_pinyin),win(user),name,'zh-CN'],capture_output=True,text=True)
  def select(name):return subprocess.run([str(selector),win(user),win(ROOT/'data/tiger-v2.tcd'),name],capture_output=True,text=True)

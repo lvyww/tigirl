@@ -14,7 +14,7 @@ def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 stage=Path(tempfile.mkdtemp(prefix='run-',dir=OUT));tables=stage/'source';tables.mkdir()
 source_hashes={}
 for p in source.glob('*.txt'):shutil.copyfile(p,tables/p.name);source_hashes[p.name]=sha(p)
-run([ROOT/'build/tests/ARM64/lexicon_import.exe','--schema',win(tables),win(stage/'pinyin'),win(stage/'user'),'虎整句','zh-CN'])
+run([ROOT/'build/tests/ARM64/Tigirl.Import.exe','--schema',win(tables),win(stage/'pinyin'),win(stage/'user'),'虎整句','zh-CN'])
 dictionary=stage/'user/schemas/虎整句/tiger-v2.tcd';probe=ROOT/'build/tests/ARM64/sentence_measure_probe.exe'
 runs=[]
 for index in range(3):

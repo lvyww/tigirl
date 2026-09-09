@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity name="NativeTiger.PrivateTest" version="1.0.0.0" processorArchitecture="arm64" type="win32" />
-  <file name="SampleIME.dll">
+  <file name="Tigirl.dll">
     <comClass clsid="{D2291A80-84D8-4641-9AB2-BDD1472C846B}" threadingModel="Apartment" />
   </file>
 </assembly>

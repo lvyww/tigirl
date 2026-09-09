@@ -34,7 +34,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     // lexicon with an old sentence index while preparation is pending.
     sentenceRequestedSource_=lexicon_;
     auto source=lexicon_;auto journal=schemaJournalPath(userRoot_,schema_);
-    auto helper=dictionaryPath_.parent_path()/L"lexicon_import.exe";auto cache=userRoot_/L"cache"/L"sentence";
+    auto helper=dictionaryPath_.parent_path()/L"Tigirl.Import.exe";auto cache=userRoot_/L"cache"/L"sentence";
     auto whitelist=sentenceSettings_.whitelist();
     sentenceWorker_->submit(0,revision,[path,model,common,whitelist=std::move(whitelist),options,source,journal,helper,cache] {
         SentenceCompletion result;result.source=source;
@@ -62,7 +62,7 @@ void Service::queueSentence(const std::shared_ptr<Context>& context) {
     auto decoder=context->sentenceDecoder;auto ticket=*request;const bool evidence=sentenceSettings_.autoCommit;
     sentenceWorker_->submit(ticket.session,ticket.generation,[decoder,ticket,evidence] {
         SentenceCompletion result;result.ticket=ticket;
-        try{result.result=decoder->decode(ticket.raw,20,evidence,ticket.requiredPrefix);}
+        try{result.result=decoder->decode(ticket.raw,20,evidence,ticket.requiredPrefix,ticket.lockedPrefix);}
         catch(const std::exception& e){result.error=e.what();}
         return result;
     });
@@ -75,7 +75,7 @@ void Service::completeSentenceNow(const std::shared_ptr<Context>& context,Engine
         context->sentenceQueuedIdentity=0;
     }
     SentenceDecodeResult result;
-    try{result=context->sentenceDecoder->decode(ticket->raw,20,sentenceSettings_.autoCommit,ticket->requiredPrefix);}
+    try{result=context->sentenceDecoder->decode(ticket->raw,20,sentenceSettings_.autoCommit,ticket->requiredPrefix,ticket->lockedPrefix);}
     catch(const std::exception& e){report(e.what());}
     next.applySentenceResult(*ticket,std::move(result));
 }

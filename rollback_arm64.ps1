@@ -8,7 +8,7 @@ if ($record.clsid -ne $clsid) { throw 'Snapshot belongs to another input method.
 $dll = [IO.Path]::GetFullPath($record.dll)
 $root = "$env:ProgramFiles\SampleIME\"
 if (!$dll.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or
-    [IO.Path]::GetFileName($dll) -ne 'SampleIME.dll' -or !(Test-Path $dll)) {
+    [IO.Path]::GetFileName($dll) -notin @('Tigirl.dll','SampleIME.dll') -or !(Test-Path $dll)) {
     throw 'Snapshot does not point to an installed SampleIME generation.'
 }
 if (!$record.hash -or $record.hash -notmatch '^[0-9a-fA-F]{64}$') { throw 'Rollback snapshot requires a SHA256 DLL hash.' }
@@ -27,7 +27,7 @@ $process = Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList @('/s
 if ($process.ExitCode -ne 0) { throw "Registration failed: $($process.ExitCode)" }
 $registered = (Get-Item "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32").GetValue('')
 if ($registered -ne $dll) { throw 'Rollback registration verification failed.' }
-$manager = Join-Path (Split-Path $dll -Parent) 'schema_manager.exe'
+$manager = Join-Path (Split-Path $dll -Parent) 'Tigirl.exe'
 if (Test-Path -LiteralPath $manager -PathType Leaf) {
     Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME" $manager | Out-Null
 } else {

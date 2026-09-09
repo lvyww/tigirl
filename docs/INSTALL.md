@@ -1,4 +1,4 @@
-# 原生虎码 ARM64 开发版
+# 虎娘 ARM64 开发版
 
 当前是开发验收版本，完整体验尚未完成。普通 ARM64 DLL 仅通过 ARM64
 宿主加载；ARM64X 包已通过 ARM64 和 x64 宿主加载与 TSF 测试，x86 补充组件已通过 COM 激活检查。
@@ -53,8 +53,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1
 ```
 
 脚本会请求管理员权限，将完整包放入 `C:\Program Files\SampleIME\versions`
-下由包哈希确定的独立目录，注册“原生虎码”，并创建开始菜单
-“原生虎码 → 方案管理”。安装结果记录在 `build\native-install.json`。
+下由包哈希确定的独立目录，注册“虎娘”，并创建开始菜单
+“虎娘 → 方案管理”。安装结果记录在 `build\native-install.json`。
 安装后重新启动要使用输入法的应用，让它们加载新一代 DLL。
 
 可从语言栏右键菜单进入“方案管理”或“输入设置”。用户配置默认位于

@@ -47,8 +47,9 @@ int wmain() {
     check(a.commitCandidate(1)==std::optional<std::u16string>(u"华"),"final commit excludes prefix");
     a.start(u"aabb",8);a.apply(*a.request(),fixture());a.commitPrefix(u"中",2);
     a.backspace();check(a.liveRaw()==u"b","delete live tail");a.backspace();check(!a.active(),"do not backspace committed text");
-    a.start(u"aabb",8,true);a.apply(*a.request(),fixture());check(a.result().candidates.size()==1,"continuation implicit rank filter");
-    a.start(u"aabb2",8,true);a.apply(*a.request(),fixture());check(a.result().candidates.size()==3,"explicit selector bypasses rank filter");
+    auto ranked=fixture();ranked.candidates.back().boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{{},2,4});
+    a.start(u"aabb",8,true);a.apply(*a.request(),ranked);check(a.result().candidates.size()==2,"continuation keeps segmented ranks and hides whole-input non-first edge");
+    a.start(u"aabb2",8,true);a.apply(*a.request(),ranked);check(a.result().candidates.size()==3,"explicit selector bypasses rank filter");
     a.moveSelection(-1,2);check(a.selectedIndex()==1,"reverse selection wraps visible list");
     check(a.commitWithSuffix(u"。")==u"中华。","punctuation commits selection");
     a.start(u"Ab",8);check(a.commitWithSuffix(u"！")==u"Ab！","no-candidate punctuation literal");
@@ -87,7 +88,7 @@ int wmain() {
     check(!a.tryAutoCommit(false),"Disabled policy committed a prefix");
     bool full=false,proper=false,alternative=false;int fullCalls=0,uniqueCalls=0;
     SentencePathQueries queries;
-    queries.complete=[&](std::u16string_view raw,std::u16string_view prefix,std::optional<std::u16string_view> excluded,bool grouped){
+    queries.complete=[&](std::u16string_view raw,std::u16string_view prefix,std::optional<std::u16string_view> excluded,bool grouped,const SentenceLockedPrefix* locked){
         if(excluded){++uniqueCalls;check(raw==u"aabb" && prefix.empty() && *excluded==u"中国" && grouped,"uniqueness query lost captured context");return alternative;}
         ++fullCalls;check(!grouped,"full path query must include all ranks");return full;
     };
@@ -101,7 +102,10 @@ int wmain() {
     check(a.raw()==u"aabbc" && a.request()->requiredPrefix==u"中国" && !a.current(),"empty-code discarded decoder context");
     check(!a.apply(oldEmpty,fixture()),"empty-code accepted old ticket");
     auto continuation=fixture();continuation.candidates[0].text=u"中国人";continuation.candidates[1].text=u"中国民";
-    a.apply(*a.request(),continuation);check(a.result().candidates.size()==1 && a.commitCandidate(0)==std::optional<std::u16string>(u"人"),"empty-code continuation rank/suffix");
+    auto duplicate=continuation.candidates[1];duplicate.text=u"中国刍";
+    continuation.candidates[1].boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{{},3,5});
+    continuation.candidates.insert(continuation.candidates.begin(),duplicate);
+    a.apply(*a.request(),continuation);check(a.result().candidates.size()==2 && a.commitCandidate(0)==std::optional<std::u16string>(u"刍"),"empty-code continuation retains segmented duplicate but hides whole-input non-first edge");
     prepare();proper=true;check(!a.appendAutomatic(u'c',true,0,queries) && uniqueCalls==0,"proper prefix committed too early");
     proper=false;check(a.appendAutomatic(u'd',true,0,queries)==std::optional<std::u16string>(u"中国") && a.liveRaw()==u"cd","pending prefix not retained across keys");
     prepare();check(!a.appendAutomatic(u'c',true,2,queries),"minimum retained ignored");

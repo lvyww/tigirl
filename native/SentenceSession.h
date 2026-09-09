@@ -6,7 +6,7 @@
 #include <functional>
 namespace tiger {
 struct SentencePathQueries {
-    std::function<bool(std::u16string_view,std::u16string_view,std::optional<std::u16string_view>,bool)> complete;
+    std::function<bool(std::u16string_view,std::u16string_view,std::optional<std::u16string_view>,bool,const SentenceLockedPrefix*)> complete;
     std::function<bool(std::u16string_view)> properPrefix;
 };
 // Value-type composition state, safe to copy for TSF OnTestKeyDown. Scheduling,
@@ -14,6 +14,7 @@ struct SentencePathQueries {
 struct SentenceDecodeTicket {
     std::uint64_t session=0,generation=0,resources=0;
     std::u16string raw,requiredPrefix;
+    std::shared_ptr<const SentenceLockedPrefix> lockedPrefix;
 };
 class SentenceSession {
 public:
@@ -31,7 +32,7 @@ public:
     std::optional<SentenceDecodeTicket> request() const;
     // Duplicate completions do not reset a manual selection.
     bool apply(const SentenceDecodeTicket& ticket,SentenceDecodeResult result);
-    void moveSelection(int delta,int pageSize);
+    void moveSelection(int delta,int pageSize,bool tab=false);
     std::optional<std::u16string> commitCandidate(int index);
     std::u16string commitWithSuffix(std::u16string_view suffix);
     std::u16string commitRaw(bool clearOnly);
@@ -49,6 +50,7 @@ public:
     int selectedIndex() const {return selected_;}
     bool active() const {return !raw_.empty();}
     bool current() const;
+    bool tabSelectionPending() const {return tabPending_;}
     bool autoCommitSuspended() const {return suspended_;}
 private:
     void edited();
@@ -65,6 +67,9 @@ private:
         bool uniqueness=false;
     };
     std::optional<EmptyCodePending> emptyCodePending_;
+    std::shared_ptr<const SentenceLockedPrefix> activeLock() const {return locks_.empty()?nullptr:locks_.back();}
+    std::vector<std::shared_ptr<const SentenceLockedPrefix>> locks_;
+    bool tabPending_=false;
     bool suspended_=false,continuation_=false,hasResult_=false;
     std::shared_ptr<const SentenceDecodeResult> result_=std::make_shared<SentenceDecodeResult>();
 };

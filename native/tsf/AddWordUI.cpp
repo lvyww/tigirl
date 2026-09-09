@@ -29,7 +29,7 @@ std::vector<WORD> layout() {
     auto text=[&](const wchar_t* s) { while(*s) data.push_back(static_cast<WORD>(*s++)); data.push_back(0); };
     dword(WS_POPUP|WS_CAPTION|WS_SYSMENU|DS_MODALFRAME|DS_CENTER|DS_SETFONT); dword(WS_EX_TOOLWINDOW);
     for(int n:{0,0,0,260,160}) data.push_back(static_cast<WORD>(n));
-    data.push_back(0); data.push_back(0); text(L"原生虎码加词"); data.push_back(10); text(L"Microsoft YaHei UI");
+    data.push_back(0); data.push_back(0); text(L"虎娘加词"); data.push_back(10); text(L"Microsoft YaHei UI");
     return data;
 }
 }

@@ -31,11 +31,11 @@ The default root is `%LOCALAPPDATA%\NativeTiger`; isolated tests override it wit
 The short-lived ARM64 native selector provides a validated configuration update:
 
 ```
-schema_select.exe "<absolute-user-root>" "<absolute-DLL-directory>\tiger-v2.tcd" "SchemaName"
+Tigirl.SchemaSelect.exe "<absolute-user-root>" "<absolute-DLL-directory>\tiger-v2.tcd" "SchemaName"
 ```
 
 Build `tools/SchemaSelect.vcxproj` with Release/ARM64; the executable is currently
-`build/tests/ARM64/schema_select.exe`, not yet installed by the package scripts.
+`build/tests/ARM64/Tigirl.SchemaSelect.exe`, not yet installed by the package scripts.
 It resolves the canonical directory spelling, validates/maps the binary and
 replays its journal before publishing configuration, then exits. Unicode command
 arguments use the Windows wide-character entry point. Missing or corrupt targets
@@ -168,10 +168,10 @@ TSF composition, GUI recovery and cleanup of unselected files remain pending.
 A native Win32 manager is now built by `tools/SchemaManager.vcxproj`:
 
 ```text
-schema_manager.exe <absolute-user-root> <absolute-bundled-dictionary>
+Tigirl.exe <absolute-user-root> <absolute-bundled-dictionary>
 ```
 
-Keep `schema_select.exe` and `lexicon_import.exe` beside the manager. Its window
+Keep `Tigirl.SchemaSelect.exe` and `Tigirl.Import.exe` beside the manager. Its window
 provides schema selection, folder pickers, named import/update, retained-version
 listing and restore. Import/update uses the Windows user's current locale. Commands
 run in a worker thread through explicitly located companion executables, with
@@ -228,7 +228,7 @@ interactive visual inspection remain unverified; this is geometry/event-flow evi
 `build_arm64.ps1` now also builds the three management tools and copies their exact
 executables beside the DLL and dictionary in `build/ARM64/Release`. Installation
 includes their hashes in the immutable package generation and validates every DLL/
-EXE as ARM64. `schema_manager.exe` supports no-argument startup: dictionary and
+EXE as ARM64. `Tigirl.exe` supports no-argument startup: dictionary and
 companion tools are resolved beside the executable, with the normal
 `%LOCALAPPDATA%/NativeTiger` user root (or the existing `NATIVE_TIGER_USER_ROOT`
 override). Explicit-path launch and marked test modes remain available.
@@ -244,10 +244,10 @@ interactive installation and real visual/foreground checks remain pending.
 
 
 The installer now creates an all-users Start Menu shortcut at
-`原生虎码/方案管理.lnk` pointing to the installed immutable generation's manager,
+`虎娘/方案管理.lnk` pointing to the installed immutable generation's manager,
 with no arguments. `shortcut_arm64.ps1` provides shared ownership-checked creation,
 retargeting and removal. Ownership requires both the manager description marker
-and a `schema_manager.exe` target inside the installation's `versions` tree.
+and a `Tigirl.exe` target inside the installation's `versions` tree.
 Rollback retargets the shortcut when its selected generation has a manager, or
 removes only an owned shortcut when returning to an older generation without one.
 Unowned same-name shortcuts and unrelated directory contents are preserved.

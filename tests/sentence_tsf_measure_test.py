@@ -73,7 +73,7 @@ def main():
                 if key['vk'] == 32 and key['action'] == 'down']
     assert len(expected) == 3 and all(expected), expected
     user = stage / 'native'
-    run([BUILD / 'tests/ARM64/lexicon_import.exe', '--schema', win(source), win(stage / 'pinyin'), win(user), '测试整句', 'zh-CN'])
+    run([BUILD / 'tests/ARM64/Tigirl.Import.exe', '--schema', win(source), win(stage / 'pinyin'), win(user), '测试整句', 'zh-CN'])
     (user / 'config.txt').write_text(settings, encoding='utf-8-sig')
     cases = [(pause, sample) for _ in range(3) for sample in samples for pause in [0, 30]]
     (user / '.sentence-measure.tsv').write_text('\n'.join(f'{pause} {sample}' for pause, sample in cases))
@@ -86,14 +86,14 @@ def main():
         relative = Path(name.replace('\\', '/'))
         original = dll.parent / relative
         assert sha(original) == digest.lower(), name
-        if name != 'SampleIME.dll':
+        if name != 'Tigirl.dll':
             target = x86 / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             os.link(original, target)
-    shutil.copyfile(BUILD / 'Win32/Release/SampleIME.dll', x86 / 'SampleIME.dll')
+    shutil.copyfile(BUILD / 'Win32/Release/Tigirl.dll', x86 / 'Tigirl.dll')
     manifest = x86 / 'NativeTiger.x86.manifest'
     manifest.write_text((ROOT / 'tests/NativeTiger.Test.manifest').read_text().replace('processorArchitecture="arm64"', 'processorArchitecture="x86"'))
-    selected.append(('Win32', BUILD / 'tests/Win32/tsf_host.exe', manifest, x86 / 'SampleIME.dll'))
+    selected.append(('Win32', BUILD / 'tests/Win32/tsf_host.exe', manifest, x86 / 'Tigirl.dll'))
     results = []
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
     for platform, host, manifest, binary in selected:

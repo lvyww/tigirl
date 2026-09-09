@@ -15,10 +15,10 @@
 #define IDS_PUNCTUATION                 26
 #define IDI_PUNCTUATION_ON              27
 #define IDI_PUNCTUATION_OFF             28
-#define IDR_VERSION2                    107
+#define IDR_VERSION2                    1
 
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        108

@@ -1,4 +1,4 @@
-LIBRARY SampleIME.dll
+LIBRARY Tigirl.dll
 
 EXPORTS
         DllGetClassObject    PRIVATE

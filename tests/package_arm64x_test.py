@@ -58,10 +58,10 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     model.unlink()
     os.link(PACKAGE / 'Models/sentence-ngram-v2.bin', model)
     # AA64 in the PE header alone is insufficient: this is a valid ARM64 DLL.
-    shutil.copyfile(BUILD / 'ARM64/Release/SampleIME.dll', staged / 'SampleIME.dll')
+    shutil.copyfile(BUILD / 'ARM64/Release/Tigirl.dll', staged / 'Tigirl.dll')
     result = check(script)
     assert result.returncode != 0 and 'x64 loader rejected DLL' in result.stderr and '193' in result.stderr, result.stderr
-    shutil.copyfile(PACKAGE / 'SampleIME.dll', staged / 'SampleIME.dll')
+    shutil.copyfile(PACKAGE / 'Tigirl.dll', staged / 'Tigirl.dll')
     verifier = staged / 'verify_load_x64.exe'
     verifier.unlink()
     result = check(script)

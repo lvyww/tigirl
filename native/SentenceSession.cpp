@@ -19,7 +19,7 @@ std::u16string trimAfter(std::u16string_view segmented,int count) {
 }
 SentenceSession::SentenceSession():identity_(nextIdentity.fetch_add(1,std::memory_order_relaxed)){}
 void SentenceSession::clear() {
-    resetAutomaticState();lastAutoCommitRaw_=0;
+    resetAutomaticState();lastAutoCommitRaw_=0;tabPending_=false;locks_.clear();
     raw_.clear();committed_.clear();committedRaw_=selected_=0;suspended_=continuation_=hasResult_=false;
     result_=std::make_shared<SentenceDecodeResult>();++generation_;
 }
@@ -39,20 +39,23 @@ bool SentenceSession::append(char16_t code) {
 void SentenceSession::backspace() {
     resetAutomaticState();
     if(raw_.size()<=static_cast<std::size_t>(committedRaw_+1)){clear();return;}
-    raw_.pop_back();edited();
+    raw_.pop_back();tabPending_=false;
+    while(!locks_.empty() && locks_.back()->rawCode.size()>static_cast<std::size_t>(committedRaw_) && raw_.size()<=locks_.back()->rawCode.size())locks_.pop_back();
+    edited();
 }
 void SentenceSession::changeResources(std::uint64_t resources) {
     if(resources_==resources)return;
     resetAutomaticState();
+    tabPending_=false;locks_.clear();
     resources_=resources;hasResult_=false;result_=std::make_shared<SentenceDecodeResult>();edited();
 }
 std::optional<SentenceDecodeTicket> SentenceSession::request() const {
     if(!active())return {};
-    return SentenceDecodeTicket{identity_,generation_,resources_,raw_,committed_};
+    return SentenceDecodeTicket{identity_,generation_,resources_,raw_,committed_,activeLock()};
 }
 bool SentenceSession::matches(const SentenceDecodeTicket& ticket) const {
     return active() && ticket.session==identity_ && ticket.generation==generation_ && ticket.resources==resources_ &&
-        ticket.raw==raw_ && ticket.requiredPrefix==committed_;
+        ticket.raw==raw_ && ticket.requiredPrefix==committed_ && ticket.lockedPrefix==activeLock();
 }
 bool SentenceSession::current() const {
     return active() && hasResult_ && appliedGeneration_==generation_ && resultResources_==resources_ && result_->rawCode==raw_;
@@ -65,11 +68,18 @@ bool SentenceSession::apply(const SentenceDecodeTicket& ticket,SentenceDecodeRes
     bool implicit=continuation_ && !std::any_of(raw_.begin(),raw_.end(),[](char16_t c){return u_charType(c)==U_DECIMAL_DIGIT_NUMBER || c==u';' || c==u'\'';});
     auto& list=result.candidates;
     list.erase(std::remove_if(list.begin(),list.end(),[&](const SentenceCandidate& c){
-        return !starts(c.text,committed_) || (implicit && c.maxLexiconRank>1);
+        // Segmented paths already passed the decoder's duplicate-single,
+        // optimal-code and word-rank rules. Do not discard them merely because
+        // an earlier segment was automatically committed (e.g. 反 + 刍).
+        // With duplicate singles disabled the decoder emits no such implicit
+        // paths. Whole-input non-first edges remain hidden on continuation.
+        const bool segmented=c.boundary && c.boundary->previous && c.boundary->previous->textLength>0;
+        return !starts(c.text,committed_) || (implicit && c.maxLexiconRank>1 && !segmented);
     }),list.end());
     result_=std::make_shared<SentenceDecodeResult>(std::move(result));appliedGeneration_=generation_;resultResources_=resources_;hasResult_=true;selected_=0;return true;
 }
-void SentenceSession::moveSelection(int delta,int pageSize) {
+void SentenceSession::moveSelection(int delta,int pageSize,bool tab) {
+    if(tab)tabPending_=true;
     resetEmptyCodePending();
     suspended_=true;
     int count=std::min(static_cast<int>(result_->candidates.size()),std::clamp(pageSize,1,10));
@@ -123,16 +133,36 @@ void SentenceSession::resetAutomaticState(){autoCommit_.reset();resetEmptyCodePe
 std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,bool enabled,int minimumRetained,
     const SentencePathQueries& queries) {
     if(raw_.size()-committedRaw_>=128)return {};
-    if(!enabled){resetAutomaticState();append(code);return {};}
     const auto normalized=static_cast<char16_t>(code==0x0130?code:u_tolower(code));
     const bool letter=normalized>=u'a' && normalized<=u'z';
+    const bool confirm=tabPending_ && letter;tabPending_=false;
+    if(confirm && current() && selected_<static_cast<int>(result_->candidates.size())) {
+        const auto selected=result_->candidates[selected_];
+        if(selected.boundary && selected.boundary->rawLength>committedRaw_ &&
+            selected.boundary->rawLength<=static_cast<int>(raw_.size())) {
+            locks_.push_back(std::make_shared<SentenceLockedPrefix>(SentenceLockedPrefix{
+                raw_.substr(0,selected.boundary->rawLength),selected.text,selected.boundary}));
+            std::optional<std::u16string> commit;
+            if(enabled) {
+                commit=selected.text.substr(committed_.size());committed_=selected.text;
+                committedRaw_=lastAutoCommitRaw_=selected.boundary->rawLength;
+            }
+            continuation_=suspended_=false;resetAutomaticState();
+            auto fixed=std::make_shared<SentenceDecodeResult>();fixed->rawCode=result_->rawCode;fixed->candidates={selected};result_=std::move(fixed);
+            append(normalized);return commit;
+        }
+    }
+    if(!enabled){resetAutomaticState();append(normalized);return {};}
     std::optional<EmptyCodePending> captured;
     if(letter && !emptyCodePending_ && !suspended_ && current()) {
         const bool explicitSelection=std::any_of(raw_.begin(),raw_.end(),[](char16_t c){
             return u_charType(c)==U_DECIMAL_DIGIT_NUMBER || c==u';' || c==u'\'';
         });
         std::vector<const SentenceCandidate*> eligible;
-        for(const auto& c:result_->candidates)if(explicitSelection || c.maxLexiconRank<=1)eligible.push_back(&c);
+        // Legal duplicate singles must compete in both uniqueness and confidence,
+        // even while a whole-input candidate list is ordered by lexicon rank.
+        for(const auto& c:result_->candidates)
+            if(explicitSelection || c.maxLexiconRank<=1 || c.eligibleDuplicateSinglePath)eligible.push_back(&c);
         if(!eligible.empty()) {
             const auto& top=*eligible.front();bool strong=eligible.size()==1;
             const auto& evidence=result_->earlyCommitEvidence;
@@ -153,7 +183,7 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
     append(normalized);
     if(letter && (emptyCodePending_ || captured)) {
         if(!queries.complete || !queries.properPrefix)resetEmptyCodePending();
-        else if(queries.complete(raw_,committed_,{},false))resetEmptyCodePending();
+        else if(queries.complete(raw_,committed_,{},false,activeLock().get()))resetEmptyCodePending();
         else {
             if(!emptyCodePending_)emptyCodePending_=std::move(captured);
             const auto& pending=*emptyCodePending_;
@@ -163,7 +193,7 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
             else if(!queries.properPrefix(std::u16string_view(raw_).substr(pending.lastSegmentStart)) &&
                     (minimumRetained<=0 || static_cast<int>(raw_.size())-pending.baseRawLength>=minimumRetained)) {
                 if(pending.uniqueness && queries.complete(std::u16string_view(raw_).substr(0,pending.baseRawLength),
-                    pending.committed,pending.text,true))resetEmptyCodePending();
+                    pending.committed,pending.text,true,activeLock().get()))resetEmptyCodePending();
                 else {
                     auto commit=applyPrefix(pending.text,pending.baseRawLength);
                     lastAutoCommitRaw_=pending.baseRawLength;continuation_=true;suspended_=false;

@@ -4,6 +4,7 @@
 #include "../../SampleIME/DisplayAttributeInfo.h"
 #include "../../SampleIME/EnumDisplayAttributeInfo.h"
 #include "Service.h"
+#include "ManagementLaunch.h"
 #include "CandidateUI.h"
 #include "AddWordUI.h"
 #include "ManualTimer.h"
@@ -352,7 +353,7 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
     if(result.manualTimerMs>=0 && active_ && !secure_) {
         try {
             if(userRoot_.empty() || !userDataRootAvailable())throw std::runtime_error("Reminder user data is unavailable");
-            launchReminder(dictionaryPath_.parent_path()/L"timer_reminder.exe",userRoot_/L"user"/L"timer.txt",result.manualTimerMs);
+            launchReminder(dictionaryPath_.parent_path()/L"Tigirl.Reminder.exe",userRoot_/L"user"/L"timer.txt",result.manualTimerMs);
         } catch(const std::exception& error) { report(error.what()); MessageBeep(MB_ICONWARNING); }
     }
     if(result.toggleHiddenCandidates && active_ && !secure_) {
@@ -414,8 +415,8 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         if(current->sentenceDecoder && current->sentenceResourceRevision==sentenceLoadedRevision_) {
             auto decoder=current->sentenceDecoder;
             sentenceQueries.complete=[decoder](std::u16string_view raw,std::u16string_view prefix,
-                std::optional<std::u16string_view> excluded,bool grouped) {
-                return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped);
+                std::optional<std::u16string_view> excluded,bool grouped,const SentenceLockedPrefix* locked) {
+                return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped,locked);
             };
             sentenceQueries.properPrefix=[decoder](std::u16string_view raw){return decoder->isProperCodePrefix(raw);};
         }
@@ -435,27 +436,8 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         *eaten=result.handled?TRUE:FALSE;
         if(test && result.handled) return S_OK; // pure preview, no file/text writes
         if(result.switchRecentSchema) {
-            const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result,key,eaten](TfEditCookie cookie) mutable {
-                try {
-                    PreparedSchema prepared;
-                    const auto selected=switchRecentSchemaConfiguration(settingsPath_,schemaNames(userRoot_),[&](std::u16string_view name) {
-                        prepared=prepareSchema(std::u16string(name));
-                    });
-                    if(!selected.empty()) {
-                        publishSchema(std::move(prepared));
-                        next.switchSchema(lexicon_,config_);
-                        return apply(current,std::move(next),result,cookie);
-                    }
-                } catch(const std::exception& error) { report(error.what()); MessageBeep(MB_ICONWARNING); }
-                // Failed/no-longer-available switches do not latch the chord.
-                auto fallback=current->engine;
-                if(fallback.lexicon()->dictionary()!=lexicon_->dictionary()) fallback.switchSchema(lexicon_,config_);
-                key.recentSchemaAvailable=false;
-                auto passed=fallback.process(key);*eaten=passed.handled?TRUE:FALSE;
-                return apply(current,std::move(fallback),passed,cookie);
-            });
-            if(FAILED(hr)) {*eaten=FALSE;report("Schema-switch edit session failed");}
-            return hr;
+            if(FAILED(launchManagement(Global::dllInstanceHandle,L"recent")))MessageBeep(MB_ICONWARNING);
+            result.switchRecentSchema=false;
         }
         // The oracle reports idle Enter as history text while passing the key.
         // The application receives that physical Enter; do not insert it twice.
@@ -537,6 +519,15 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
 void Service::reloadSchema(std::u16string name) {
     if(secure_ || userRoot_.empty()) return;
     if(name.empty()) name=u"虎码字词";
+    const auto available=schemaNames(userRoot_);
+    if(std::find(available.begin(),available.end(),name)==available.end()) {
+        auto fallback=std::find(available.begin(),available.end(),u"虎码字词");
+        name=fallback!=available.end()?*fallback:available.front();
+        // Only publish the fallback setting once its compiled data is usable.
+        auto prepared=prepareSchema(name);
+        selectSchemaConfiguration(settingsPath_,name);
+        publishSchema(std::move(prepared));return;
+    }
     if(!schema_.empty() && ordinalCompareIgnoreCase(name,schema_)==0) {
         const auto path=activeSchemaDictionaryPath(userRoot_,dictionaryPath_,schema_);
         if(lexicon_ && Dictionary::Open(path)==lexicon_->dictionary()) return;

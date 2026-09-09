@@ -20,13 +20,13 @@ with tempfile.TemporaryDirectory(prefix='sentence-x86-package-', dir=BUILD) as t
         relative = Path(name.replace('\\', '/'))
         source = primary / relative
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected.lower(), name
-        if name == 'SampleIME.dll':
+        if name == 'Tigirl.dll':
             continue
         target = stage / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         os.link(source, target)
         assert os.path.samefile(source, target), name
-    shutil.copyfile(BUILD / 'Win32/Release/SampleIME.dll', stage / 'SampleIME.dll')
+    shutil.copyfile(BUILD / 'Win32/Release/Tigirl.dll', stage / 'Tigirl.dll')
     env = {k: v for k, v in os.environ.items() if not k.startswith('SENTENCE_')}
     env.update(SENTENCE_X86='1', SENTENCE_BUNDLED_MODEL='1', SENTENCE_JOURNAL='1',
                SENTENCE_X86_PACKAGE_DIR=str(stage))

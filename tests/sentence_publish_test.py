@@ -3,7 +3,7 @@ import concurrent.futures,hashlib,json,struct,subprocess,tempfile,zlib
 from pathlib import Path
 from windows_process import run_windows
 ROOT=Path(__file__).resolve().parents[1]
-EXE=ROOT/'build/tests/ARM64/lexicon_import.exe'
+EXE=ROOT/'build/tests/ARM64/Tigirl.Import.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 def invoke(*args):return run_windows([EXE,*args],capture_output=True,text=True,timeout=60)
 def record(kind,code,text):

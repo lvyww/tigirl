@@ -10,14 +10,14 @@ import argparse
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOL = ROOT/'build/tests/ARM64/schema_select.exe'
+TOOL = ROOT/'build/tests/ARM64/Tigirl.SchemaSelect.exe'
 PS = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 COMMAND = [PS] if Path('/proc/sys/fs/binfmt_misc/WSLInterop').exists() else ['/init', PS]
 parser = argparse.ArgumentParser()
 parser.add_argument('--manager', action='store_true', help='Use hidden manager command handlers for compaction and recovery')
 parser.add_argument('--imported', action='store_true', help='Maintain an imported schema using its current generation')
 args = parser.parse_args()
-MANAGER = ROOT/'build/tests/ARM64/schema_manager.exe'
+MANAGER = ROOT/'build/tests/ARM64/Tigirl.exe'
 
 
 def win(path):

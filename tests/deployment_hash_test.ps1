@@ -14,16 +14,16 @@ if (!$function) { throw 'Deployment validator missing.' }
 . ([scriptblock]::Create($function.Extent.Text))
 $directory = Join-Path $root 'build\ARM64X\ARM64EC\Release'
 $hashes = [ordered]@{}
-foreach ($file in @('SampleIME.dll', 'verify_load_arm64.exe', 'verify_load_x64.exe')) {
+foreach ($file in @('Tigirl.dll', 'verify_load_arm64.exe', 'verify_load_x64.exe')) {
     $hashes[$file] = (Get-FileHash -LiteralPath (Join-Path $directory $file)).Hash
 }
 $valid = Test-NativeTigerDeployment $directory $hashes -Arm64X
 if (!$valid.arm64.class_instance -or !$valid.x64.class_instance) { throw 'Valid package rejected.' }
-$hashes['SampleIME.dll'] = '0' * 64
+$hashes['Tigirl.dll'] = '0' * 64
 $rejected = $false
 try { Test-NativeTigerDeployment $directory $hashes -Arm64X | Out-Null }
 catch {
-    if ($_.Exception.Message -notlike '*Deployment hash mismatch: SampleIME.dll*') { throw }
+    if ($_.Exception.Message -notlike '*Deployment hash mismatch: Tigirl.dll*') { throw }
     $rejected = $true
 }
 if (!$rejected) { throw 'Mismatched deployment bytes accepted.' }

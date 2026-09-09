@@ -15,8 +15,8 @@ $dll = [IO.Path]::GetFullPath($installed.dll)
 $versions = $installRoot.TrimEnd('\') + '\versions\'
 $generation = Split-Path (Split-Path $dll -Parent) -Leaf
 if (!$dll.StartsWith($versions, [StringComparison]::OrdinalIgnoreCase) -or
-    [IO.Path]::GetFileName($dll) -ne 'SampleIME.dll' -or $generation -notmatch '^[0-9a-f]{16}$' -or
-    [IO.Path]::GetFullPath((Join-Path $versions "$generation\SampleIME.dll")) -ne $dll) {
+    [IO.Path]::GetFileName($dll) -notin @('Tigirl.dll','SampleIME.dll') -or $generation -notmatch '^[0-9a-f]{16}$' -or
+    [IO.Path]::GetFullPath((Join-Path $versions ("$generation\"+[IO.Path]::GetFileName($dll)))) -ne $dll) {
     throw 'Installation record does not identify a native immutable generation.'
 }
 if (!(Test-Path -LiteralPath $dll -PathType Leaf) -or !$installed.dll_hash -or

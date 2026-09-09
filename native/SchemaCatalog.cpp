@@ -59,15 +59,22 @@ std::filesystem::path schemaJournalPath(const std::filesystem::path& root,std::u
     return name==u"虎码字词"?root/L"user"/L"tiger-words.tcu":root/L"schemas"/std::filesystem::path(name)/L"user.tcu";
 }
 std::vector<std::u16string> schemaNames(const std::filesystem::path& userRoot) {
-    std::vector<std::u16string> names{u"虎码字词"};
-    const auto directory=userRoot/L"schemas";
+    std::vector<std::u16string> names;
+    const auto directory=userRoot/L"码表";
     if(std::filesystem::exists(directory)) for(const auto& entry:std::filesystem::directory_iterator(directory)) {
         const auto name=entry.path().filename().u16string();
-        if(validSchemaName(name) && entry.is_directory()) {
-            try {if(std::filesystem::is_regular_file(schemaDictionaryPath(entry.path()))) names.push_back(name);}
-            catch(const std::exception&) { /* Incomplete schemes are not selectable. */ }
+        if(!validSchemaName(name) || !entry.is_directory())continue;
+        // Empty folders and annotation-only folders are not input schemes.
+        for(const auto& file:std::filesystem::directory_iterator(entry.path())) {
+            const auto filename=ordinalCaseKey(file.path().filename().u16string());
+            auto ends=[&](std::u16string_view suffix){return filename.size()>=suffix.size() &&
+                std::u16string_view(filename).substr(filename.size()-suffix.size())==suffix;};
+            if(file.is_regular_file() && filename!=u"构词.TXT" && filename!=u"用户调整.TXT" && filename!=u"补充语料.TXT" &&
+                (ends(u".TXT") || ends(u".DICT.YAML"))) {names.push_back(name);break;}
         }
     }
+    // Recovery input remains possible before first-user initialization.
+    if(names.empty())names.push_back(u"虎码字词");
     std::sort(names.begin(),names.end(),[](const auto& a,const auto& b){return compare(a,b)==CSTR_LESS_THAN;});
     names.erase(std::unique(names.begin(),names.end(),[](const auto& a,const auto& b){return compare(a,b)==CSTR_EQUAL;}),names.end());
     return names;

@@ -42,7 +42,7 @@ normal typing must remain entirely native and in-process.
 
 ## Progress
 
-- Native ARM64 TSF builds and is registered as 原生虎码 independently of daily
+- Native ARM64 TSF builds and is registered as 虎娘 independently of daily
   TigerClaw. The original SampleIME DLL remains available as a rollback target.
 - Source inspection confirms original Core loads main and auxiliary tables into
   private dictionaries; SampleIME maps text read-only but performs linear scans.

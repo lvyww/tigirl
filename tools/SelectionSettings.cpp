@@ -124,9 +124,9 @@ bool showSelectionSettings(HWND owner,const std::filesystem::path& path,int test
     try{text=tiger::decodeUnicodeText(bytes);}catch(const std::runtime_error&){dialog.recovering=true;}catch(const std::invalid_argument&){dialog.recovering=true;}
     if(dialog.recovering || !tiger::SelectionKeys::parse(text,dialog.initial,error)) {dialog.recovering=true;dialog.damagedBytes=bytes;}
     dialog.current=dialog.initial;
-    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerSelectionSettings";type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
+    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerSelectionSettings";type.hIcon=LoadIconW(type.hInstance,MAKEINTRESOURCEW(12));type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&type) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)throw std::runtime_error("Cannot register selection-key window");
-    if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"原生虎码 · 选重键",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create selection-key window");
+    if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"虎娘 · 选重键",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create selection-key window");
     dialog.create();
     if(testMode) {
         const auto before=tiger::readConfigurationBytes(path);

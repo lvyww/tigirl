@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $probe = Join-Path $root 'build\tests\ARM64\reminder_launch_probe.exe'
-$helper = Join-Path $root 'build\tests\ARM64\timer_reminder.exe'
+$helper = Join-Path $root 'build\tests\ARM64\Tigirl.Reminder.exe'
 $wrongHelper = Join-Path $root 'build\tests\ARM64\reminder_ledger_probe.exe'
 $stalledHelper = Join-Path $root 'build\tests\ARM64\reminder_stall_probe.exe'
 $temporary = Join-Path $root ('build\reminder launch ' + [Guid]::NewGuid().ToString('N'))

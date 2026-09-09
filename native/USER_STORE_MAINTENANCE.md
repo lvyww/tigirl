@@ -1,10 +1,10 @@
 # 用户词库维护
 
-新构建的 `schema_select.exe` 提供显式维护命令（尚未部署到当前安装目录）：
+新构建的 `Tigirl.SchemaSelect.exe` 提供显式维护命令（尚未部署到当前安装目录）：
 
 ```text
-schema_select.exe <用户目录绝对路径> <内置码表绝对路径> --compact-user <方案名>
-schema_select.exe <用户目录绝对路径> <内置码表绝对路径> --recover-user <方案名> <备份绝对路径>
+Tigirl.SchemaSelect.exe <用户目录绝对路径> <内置码表绝对路径> --compact-user <方案名>
+Tigirl.SchemaSelect.exe <用户目录绝对路径> <内置码表绝对路径> --recover-user <方案名> <备份绝对路径>
 ```
 
 内置方案名为 `虎码字词`，对应 `user/tiger-words.tcu`；其他已安装方案对应

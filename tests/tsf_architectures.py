@@ -5,7 +5,7 @@ import struct
 ROOT = Path(__file__).resolve().parents[1]
 
 def variants(arm64x):
-    dll = ROOT / ('build/ARM64X/ARM64EC/Release/SampleIME.dll' if arm64x else 'build/ARM64/Release/SampleIME.dll')
+    dll = ROOT / ('build/ARM64X/ARM64EC/Release/Tigirl.dll' if arm64x else 'build/ARM64/Release/Tigirl.dll')
     template = (ROOT / 'tests/NativeTiger.Test.manifest').read_text()
     result = []
     for platform, architecture, machine in ([('ARM64', 'arm64', 0xaa64), ('x64', 'amd64', 0x8664)] if arm64x else [('ARM64', 'arm64', 0xaa64)]):

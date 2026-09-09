@@ -11,11 +11,17 @@ struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
     int textLength=0,rawLength=0;
 };
+struct SentenceLockedPrefix {
+    std::u16string rawCode,text;
+    std::shared_ptr<const SentencePathBoundary> boundary;
+};
 struct SentenceCandidate {
     std::u16string text,segmentedCode;
     double baseScore=0,finalScore=0,confidenceScore=0,supplementScore=0;
     int maxLexiconRank=1;
     std::shared_ptr<const SentencePathBoundary> boundary;
+    // Eligibility from the producing decoder's settings, retained with its snapshot.
+    bool eligibleDuplicateSinglePath=false;
 };
 struct SentencePrefixEvidence {
     std::u16string text;
@@ -57,10 +63,11 @@ public:
     SentenceDecoder(const SentenceDecoder&)=delete;
     SentenceDecoder& operator=(const SentenceDecoder&)=delete;
     SentenceDecodeResult decode(std::u16string_view raw,int candidateLimit=20,
-        bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={});
+        bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={},
+        std::shared_ptr<const SentenceLockedPrefix> lockedPrefix={});
     void resetDecodeCache();
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
-        std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false) const;
+        std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
     bool isProperCodePrefix(std::u16string_view raw) const;
     SentenceDecodeResult decodeFull(std::u16string_view raw,int candidateLimit=20,
         bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={}) const;

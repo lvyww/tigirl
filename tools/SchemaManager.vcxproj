@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup><NativeProbeName>schema_manager</NativeProbeName></PropertyGroup>
+  <PropertyGroup><NativeProbeName>Tigirl</NativeProbeName></PropertyGroup>
   <Import Project="..\tests\EngineProbe.vcxproj" />
   <ItemGroup><ClCompile Remove="engine_probe.cpp" />
     <ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" />
@@ -10,4 +10,5 @@
     <ClCompile Include="SelectionSettings.cpp" />
   </ItemGroup>
   <ItemDefinitionGroup><Link><SubSystem>Windows</SubSystem><AdditionalDependencies>dwrite.lib;d2d1.lib;comctl32.lib;icu.lib;ole32.lib;shell32.lib;user32.lib;gdi32.lib;uuid.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemGroup><ResourceCompile Include="SchemaManager.rc" /></ItemGroup>
 </Project>

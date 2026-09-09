@@ -104,11 +104,34 @@ struct SentenceDecoder::Cache {
 };
 SentenceDecoder::~SentenceDecoder()=default;
 void SentenceDecoder::resetDecodeCache(){std::lock_guard<std::mutex> lock(decodeMutex_);cache_.reset();}
-SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit,bool evidence,std::u16string_view required) {
+SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit,bool evidence,std::u16string_view required,
+    std::shared_ptr<const SentenceLockedPrefix> lockedPrefix) {
     std::lock_guard<std::mutex> lock(decodeMutex_);
     auto raw=normalizeRawCode(input);
     if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return u_isalpha(c)!=0;})){cache_.reset();return {};}
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
+    if(lockedPrefix) {
+        // Decode only the tail. Reconstruct model and supplement context from
+        // the chosen text; no lattice edge may cross its fixed raw boundary.
+        const auto lockedRaw=normalizeRawCode(lockedPrefix->rawCode);
+        if(lockedRaw.empty() || raw.substr(0,lockedRaw.size())!=lockedRaw)return {};
+        Lattice lattice(static_cast<int>(raw.size()));lattice.states[0]=Bucket{};
+        State seed;seed.text=lockedPrefix->text;seed.boundary=lockedPrefix->boundary;
+        std::size_t offset=0;
+        for(const auto& element:wordTextElements(lockedPrefix->text)) {
+            const auto target=std::u16string_view(lockedPrefix->text).substr(offset,element.size());offset+=element.size();
+            seed.score+=transition(lattice,seed.previous2,seed.previous1,target)+options_.emittedCharacterReward;
+            if(supplement_ && !supplement_->empty()) {
+                double reward=0;seed.supplementState=supplement_->advance(seed.supplementState,target,reward);
+                seed.score+=reward;seed.supplementScore+=reward;
+            }
+            seed.previous2=seed.previous1;seed.previous1=target;
+        }
+        seed.mass=seed.score-seed.supplementScore;
+        lattice.states[lockedRaw.size()].add(std::move(seed));
+        const auto expanded=expand(raw,lattice,static_cast<int>(lockedRaw.size()));
+        return emit(raw,lattice,limit,expanded,evidence,required);
+    }
     if(cache_ && cache_->raw==raw && cache_->limit==limit && cache_->evidence==evidence && cache_->required==required)return cache_->result;
     int length=static_cast<int>(raw.size()),expanded=0;
     auto next=std::make_unique<Cache>();
@@ -135,13 +158,24 @@ bool SentenceDecoder::isProperCodePrefix(std::u16string_view raw) const {
     return lexicon_->isProperCodePrefix(normalizeRawCode(raw));
 }
 bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16string_view required,
-    std::optional<std::u16string_view> excluded,bool groupEligibleOnly) const {
+    std::optional<std::u16string_view> excluded,bool groupEligibleOnly,const SentenceLockedPrefix* lockedPrefix) const {
     auto raw=normalizeRawCode(input);
     if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return u_isalpha(c)!=0;}))return false;
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
     bool firstOnly=groupEligibleOnly && !std::any_of(raw.begin(),raw.end(),[](char16_t c){return digit(c) || c==u';' || c==u'\'';});
-    int length=static_cast<int>(raw.size());std::vector<std::set<std::pair<int,int>>> states(length+1);states[0].emplace(0,0);
-    for(int position=0;position<length;++position) {
+    int length=static_cast<int>(raw.size());std::vector<std::set<std::pair<int,int>>> states(length+1);
+    int start=0,matchedRequired=0,matchedExcluded=0;
+    if(lockedPrefix) {
+        const auto lockedRaw=normalizeRawCode(lockedPrefix->rawCode);
+        if(lockedRaw.empty() || raw.substr(0,lockedRaw.size())!=lockedRaw)return false;
+        const auto count=std::min(required.size(),lockedPrefix->text.size());
+        if(required.substr(0,count)!=std::u16string_view(lockedPrefix->text).substr(0,count))return false;
+        start=static_cast<int>(lockedRaw.size());matchedRequired=static_cast<int>(count);
+        if(excluded)matchedExcluded=excluded->substr(0,lockedPrefix->text.size())==lockedPrefix->text?static_cast<int>(lockedPrefix->text.size()):-1;
+        if(start==length)return count==required.size() && (!excluded || matchedExcluded!=static_cast<int>(excluded->size()));
+    }
+    states[start].emplace(matchedRequired,matchedExcluded);
+    for(int position=start;position<length;++position) {
         if(states[position].empty())continue;
         for(int codeLength:lexicon_->codeLengths()) {
             if(codeLength>length-position || (position>0 && (raw[position]==u';' || raw[position]==u'/' || raw[position]==u'[')))continue;
@@ -149,7 +183,8 @@ bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16str
             int selected=0;int consumed=suffix(raw,position+codeLength,selected);bool whole=position==0 && consumed==length;
             if(length>1 && consumed-position<2)continue;
             for(const auto& matched:states[position])for(const auto& c:candidates) {
-                if(firstOnly && c.rank>1)continue;
+                if(firstOnly && c.rank>1 &&
+                   !(options_.allowDuplicateSingleCharacters && c.textElements.size()==1))continue;
                 if(selected>0 ? c.rank!=static_cast<unsigned>(selected) :
                     !(c.rank==1 || whole || (options_.allowDuplicateSingleCharacters && c.textElements.size()==1)))continue;
                 int nextRequired=matched.first;
@@ -286,6 +321,8 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         double adjustment=transition(lattice,state.previous2,state.previous1,eos)-isolation(state.text);
         SentenceCandidate c;c.text=state.text;c.baseScore=c.finalScore=state.score+adjustment;
         c.confidenceScore=state.mass+adjustment;c.supplementScore=state.supplementScore;c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
+        c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
+            ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
         return c;
     };
     for(const auto& state:completed.values) {

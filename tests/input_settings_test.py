@@ -4,7 +4,7 @@ from PIL import Image
 from windows_process import run_windows, PS
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-EXE=ROOT/'build/ARM64X/ARM64EC/Release/schema_manager.exe'
+EXE=ROOT/'build/ARM64X/ARM64EC/Release/Tigirl.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as temporary:
  root=Path(temporary);(root/'.schema-manager-test').touch()

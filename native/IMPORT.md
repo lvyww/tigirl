@@ -230,7 +230,7 @@ arguments are absolute Windows paths; culture is explicit (empty for invariant).
 For example, in Windows PowerShell after building the project:
 
 ```powershell
-& .\build\tests\ARM64\lexicon_import.exe `
+& .\build\tests\ARM64\Tigirl.Import.exe `
   'C:\Users\yc\Desktop\ime\data\staging\码表\虎码字词' `
   'C:\Users\yc\Desktop\ime\data\staging\拼音反查码表' `
   'C:\Users\yc\Desktop\ime\build\imported\tiger-v2.tcd' 'zh-CN'

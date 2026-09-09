@@ -16,7 +16,7 @@ function Test-NativeTigerDeployment([string]$Directory, $Hashes, [switch]$Arm64X
     $checks = [ordered]@{}
     if ($Arm64X) {
         foreach ($variant in @('arm64', 'x64')) {
-            $output = & (Join-Path $Directory "verify_load_$variant.exe") (Join-Path $Directory 'SampleIME.dll')
+            $output = & (Join-Path $Directory "verify_load_$variant.exe") (Join-Path $Directory 'Tigirl.dll')
             if ($LASTEXITCODE -ne 0) { throw "ARM64X $variant loader verification failed: $LASTEXITCODE" }
             $loaded = $output | ConvertFrom-Json
             if (!$loaded.loaded -or !$loaded.class_instance) { throw "ARM64X $variant loader rejected DLL (Windows error $($loaded.load_error))." }
@@ -39,10 +39,13 @@ try {
     foreach ($requiredFont in @('LXGWWenKaiGBScreen.ttf', 'OFL.txt', 'provenance.json')) {
         if (!(Test-Path -LiteralPath (Join-Path $fontRoot $requiredFont) -PathType Leaf)) { throw "Missing font artifact: $requiredFont" }
     }
-    $executables = @('SampleIME.dll', 'schema_select.exe', 'lexicon_import.exe', 'schema_manager.exe', 'timer_reminder.exe')
+    $executables = @('Tigirl.dll', 'Tigirl.SchemaSelect.exe', 'Tigirl.Import.exe', 'Tigirl.exe', 'Tigirl.Reminder.exe')
     if ($Arm64X) { $executables += @('verify_load_arm64.exe', 'verify_load_x64.exe') }
     Assert-NativeTigerSentenceModel (Join-Path $source 'Models\sentence-ngram-v2.bin')
     $artifacts = $executables + @('tiger-v2.tcd', 'Models\sentence-ngram-v2.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
+    foreach ($sidecar in @('tiger-v2.tcd.sentence.tcd', 'tiger-v2.tcd.supplement.tcd')) {
+        if (Test-Path -LiteralPath (Join-Path $source $sidecar)) { $artifacts += $sidecar }
+    }
     $hashes = [ordered]@{}
     foreach ($file in $artifacts) {
         if (!(Test-Path "$source\$file")) { throw "Missing build artifact: $file" }
@@ -54,7 +57,7 @@ try {
     finally { $sha.Dispose() }
     $generation = $packageHash.Substring(0, 16)
     $destination = "$env:ProgramFiles\SampleIME\versions\$generation"
-    $dll = "$destination\SampleIME.dll"
+    $dll = "$destination\Tigirl.dll"
 
     foreach ($executable in $executables) {
         $bytes = [IO.File]::ReadAllBytes((Join-Path $source $executable))
@@ -130,7 +133,7 @@ public static class SampleImeInstall {
     foreach ($file in $artifacts) {
         if ((Get-FileHash -LiteralPath "$destination\$file").Hash -ne $hashes[$file]) { throw "Installed hash mismatch: $file" }
     }
-    $shortcut = Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME" (Join-Path $destination 'schema_manager.exe')
+    $shortcut = Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME" (Join-Path $destination 'Tigirl.exe')
     @{ dll = $dll; generation = $generation; dll_hash = (Get-FileHash $dll).Hash;
        dictionary_hash = (Get-FileHash "$destination\tiger-v2.tcd").Hash; package_hash = $packageHash; artifacts = $hashes; tip = $tip; manager_shortcut = $shortcut; architecture = $architecture; load_checks = $loadChecks; installed_load_checks = $installedLoadChecks } |
         ConvertTo-Json -Depth 6 | Set-Content "$PSScriptRoot\build\native-install.json" -Encoding UTF8

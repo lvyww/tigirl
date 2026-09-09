@@ -83,7 +83,7 @@ callback; it also displays and dismisses the actual default reminder. Report:
 `build/manual-timer-ui-arm64.json`. Rebuild `tests/ManualTimerUIProbe.vcxproj`
 and run its executable to reproduce this short popup test.
 
-Timer commands now use `ReminderLaunch` and the separate `timer_reminder.exe`.
+Timer commands now use `ReminderLaunch` and the separate `Tigirl.Reminder.exe`.
 The helper loads no dictionary and processes no input; it exits after replacement
 or dismissal. The TSF adapter reserves a ticket in `user/timer.txt`, starts the
 helper with unique startup events, waits for readiness, publishes the accepted

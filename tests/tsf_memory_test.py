@@ -3,7 +3,7 @@ import hashlib,json,selectors,subprocess,tempfile,sys
 from pathlib import Path
 from tsf_architectures import variants
 ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build'
-EXE=BUILD/'tests/ARM64/tsf_host.exe';DLL=BUILD/'ARM64/Release/SampleIME.dll'
+EXE=BUILD/'tests/ARM64/tsf_host.exe';DLL=BUILD/'ARM64/Release/Tigirl.dll'
 ACTIVE='--active' in sys.argv
 ARM64X='--arm64x' in sys.argv
 COUNT=2 if '--pair' in sys.argv else 4

@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include "LanguageBar.h"
+#include "ManagementLaunch.h"
 #include "../../SampleIME/resource.h"
 #include <cwchar>
 #include <filesystem>
@@ -20,7 +21,7 @@ LanguageBar::LanguageBar(HINSTANCE module,REFCLSID service,bool secure):module_(
     DllAddRef();
     info_.clsidService=service; info_.guidItem=ItemId;
     info_.dwStyle=TF_LBI_STYLE_BTN_BUTTON|TF_LBI_STYLE_BTN_MENU;
-    wcscpy_s(info_.szDescription,L"原生虎码 · 中英文切换");
+    wcscpy_s(info_.szDescription,L"虎娘 · 中英文切换");
 }
 LanguageBar::~LanguageBar(){DllRelease();}
 HRESULT LanguageBar::open(ITfThreadMgr* manager,TfClientId client) {
@@ -71,7 +72,7 @@ HRESULT LanguageBar::GetText(BSTR* text){if(!text)return E_POINTER;*text=SysAllo
 HRESULT LanguageBar::GetTooltipString(BSTR* text){
     if(!text)return E_POINTER;*text=nullptr;
     try {
-        std::wstring value=chinese_?L"原生虎码：中文，点击切换英文":L"原生虎码：英文，点击切换中文";
+        std::wstring value=chinese_?L"虎娘：中文，点击切换英文":L"虎娘：英文，点击切换中文";
         if(userWordFailed_)value+=L"\n上次词条调整保存失败。请检查用户词库后重新执行调整。";
         *text=SysAllocString(value.c_str());return *text?S_OK:E_OUTOFMEMORY;
     }catch(...){return E_OUTOFMEMORY;}
@@ -103,21 +104,11 @@ void LanguageBar::traceMenu(const char* stage,HRESULT result) const noexcept {
     }catch(...){}
 }
 void LanguageBar::refreshMenu() {
-    menu_={{1,L"方案管理"},{2,L"输入设置"}};
+    menu_={{2,L"输入设置"}};
     if(root_.empty())return;
     const auto text=readConfiguration(root_/L"config.txt");
     const auto current=currentSchemaSetting(text);
-    auto source=configurationValue(text,u"码表存储位置");
-    auto folder=source.empty()?root_/L"码表":std::filesystem::path(source);
-    if(folder.is_relative())folder=root_/folder;
     auto names=schemaNames(root_);
-    std::error_code error;
-    for(std::filesystem::directory_iterator it(folder,error),end;!error && it!=end;it.increment(error)) {
-        const auto name=it->path().filename().u16string();
-        if(it->is_directory(error) && validSchemaName(name))names.push_back(name);
-    }
-    std::sort(names.begin(),names.end(),[](const auto& a,const auto& b){return ordinalCompareIgnoreCase(a,b)<0;});
-    names.erase(std::unique(names.begin(),names.end(),[](const auto& a,const auto& b){return ordinalCompareIgnoreCase(a,b)==0;}),names.end());
     auto wide=[](std::u16string_view value){return std::wstring(reinterpret_cast<const wchar_t*>(value.data()),value.size());};
     MenuEntry schemas{10,L"方案"},themes{11,L"主题"};
     UINT id=100;
@@ -126,7 +117,7 @@ void LanguageBar::refreshMenu() {
     for(const auto name:candidateThemeNames)themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
     menu_={{7,L"虎爪 Github 页面",L"official"},{},
         {3,L"方案文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
-        {5,L"加词"},std::move(schemas),std::move(themes),{1,L"方案管理"},{2,L"输入设置"},{},
+        {5,L"加词"},std::move(schemas),std::move(themes),{2,L"输入设置"},{},
         {8,L"切换到英文"}};
 }
 HRESULT LanguageBar::InitMenu(ITfMenu* menu) {
@@ -175,22 +166,7 @@ HRESULT LanguageBar::OnMenuSelect(UINT id) {
             updateConfigurationValues(root_/L"config.txt",{{u"主题",theme}});
             return S_OK;
         }
-        wchar_t modulePath[32768];const auto length=GetModuleFileNameW(module_,modulePath,32768);
-        if(!length || length>=32768)return E_FAIL;
-        const auto directory=std::filesystem::path(modulePath).parent_path();
-        const auto executable=directory/L"schema_manager.exe";
-        // Windows command-line quoting, including trailing backslashes.
-        auto quote=[](std::wstring_view arg) {
-            std::wstring out=L"\"";std::size_t slashes=0;
-            for(auto ch:arg){if(ch==L'\\'){++slashes;continue;}out.append(slashes*(ch==L'"'?2:1),L'\\');slashes=0;if(ch==L'"')out+=L'\\';out+=ch;}
-            out.append(slashes*2,L'\\');return out+L"\"";
-        };
-        auto command=quote(executable.wstring())+(id==2?L" --settings":L"");
-        if(id!=1 && id!=2)command+=L" --menu-action "+quote(action)+L" "+quote(value);
-        STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
-        if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,directory.c_str(),&startup,&process))
-            return HRESULT_FROM_WIN32(GetLastError());
-        CloseHandle(process.hThread);CloseHandle(process.hProcess);return S_OK;
+        return launchManagement(module_,id==2?L"settings":action,value);
     }catch(...){return E_FAIL;}
 }
 HRESULT LanguageBar::showMenu(POINT point,HWND candidateOwner) {
@@ -233,7 +209,7 @@ HRESULT LanguageBar::showMenu(POINT point,HWND candidateOwner) {
         if(!candidateOwner)DestroyWindow(owner);
         DestroyMenu(menu);
         const auto hr=selected?OnMenuSelect(selected):S_FALSE;
-        if(FAILED(hr))MessageBoxW(nullptr,L"操作失败，请检查用户数据权限；当前应用也可能不允许启动管理程序。",L"原生虎码",MB_OK|MB_ICONERROR);
+        if(FAILED(hr))MessageBoxW(nullptr,L"操作失败，请检查用户数据权限；当前应用也可能不允许启动管理程序。",L"虎娘",MB_OK|MB_ICONERROR);
         return hr;
     }
     return S_FALSE;

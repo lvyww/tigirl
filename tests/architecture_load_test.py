@@ -11,7 +11,7 @@ import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
-parser.add_argument('--dll', type=Path, default=ROOT / 'build/ARM64/Release/SampleIME.dll')
+parser.add_argument('--dll', type=Path, default=ROOT / 'build/ARM64/Release/Tigirl.dll')
 parser.add_argument('--expect', choices=['arm64-only', 'both'], default='arm64-only')
 args = parser.parse_args()
 dll = args.dll.resolve()

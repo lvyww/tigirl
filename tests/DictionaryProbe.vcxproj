@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
     <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -15,7 +17,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
-    <OutDir>$(MSBuildProjectDirectory)\..\build\tests\ARM64\</OutDir>
+    <OutDir>$(MSBuildProjectDirectory)\..\build\tests\$(Platform)\</OutDir>
     <IntDir>$(MSBuildProjectDirectory)\..\build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <TargetName Condition="'$(NativeProbeName)'==''">dictionary_probe</TargetName>
     <TargetName Condition="'$(NativeProbeName)'!=''">$(NativeProbeName)</TargetName>

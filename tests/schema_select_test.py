@@ -2,7 +2,7 @@
 import hashlib,json,shutil,subprocess,tempfile
 from pathlib import Path
 from windows_process import run_windows
-ROOT=Path(__file__).resolve().parents[1];EXE=ROOT/'build/tests/ARM64/schema_select.exe'
+ROOT=Path(__file__).resolve().parents[1];EXE=ROOT/'build/tests/ARM64/Tigirl.SchemaSelect.exe'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='schema-selector-',dir=ROOT/'build') as tmp:
  root=Path(tmp);dictionary=ROOT/'data/tiger-v2.tcd';schema=root/'schemas/测试方案Ab';schema.mkdir(parents=True)

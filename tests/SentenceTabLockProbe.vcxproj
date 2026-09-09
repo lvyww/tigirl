@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>sentence_tab_lock_probe</NativeProbeName></PropertyGroup>
+  <Import Project="ArchitectureLoadProbe.vcxproj" />
+  <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" />
+    <ClCompile Include="sentence_tab_lock_probe.cpp" /><ClCompile Include="..\native\SentenceLexicon.cpp" /><ClCompile Include="..\native\SentenceDecoder.cpp" /><ClCompile Include="..\native\SentenceCharacterRanks.cpp" /><ClCompile Include="..\native\SentenceNgram.cpp" />
+    <ClCompile Include="..\native\Dictionary.cpp" /><ClCompile Include="..\native\AddWord.cpp" />
+    <ClCompile Include="..\native\LexiconSerialize.cpp" />
+<ClCompile Include="..\native\Engine.cpp" /><ClCompile Include="..\native\Lexicon.cpp" /><ClCompile Include="..\native\Text.cpp" /><ClCompile Include="..\native\SelectionKeys.cpp" /><ClCompile Include="..\native\Settings.cpp" /><ClCompile Include="..\native\DynamicText.cpp" /><ClCompile Include="..\native\UppercaseText.cpp" /><ClCompile Include="..\native\SentenceSession.cpp" /><ClCompile Include="..\native\SentenceAutoCommit.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+</Project>

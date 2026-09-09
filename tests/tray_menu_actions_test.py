@@ -14,7 +14,7 @@ config=root/'config.txt'
 config.write_text('码表存储位置\t'+win(source.parent)+'\nCtrl+空格切换中英文\t否\n主题\t默认\n',encoding='utf-8-sig')
 results=[]
 def action(name,value='-'):
- cmd='$env:NATIVE_TIGER_USER_ROOT='+quote(win(root))+'; & '+' '.join(map(quote,[win(PACKAGE/'schema_manager.exe'),'--menu-action',name,value]))+' | Out-String -Stream; exit $LASTEXITCODE'
+ cmd='$env:NATIVE_TIGER_USER_ROOT='+quote(win(root))+'; & '+' '.join(map(quote,[win(PACKAGE/'Tigirl.exe'),'--menu-action',name,value]))+' | Out-String -Stream; exit $LASTEXITCODE'
  r=subprocess.run(['/init',PS,'-NoProfile','-Command',cmd],capture_output=True,text=True,timeout=60)
  results.append(dict(action=name,value=value,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr))
  assert r.returncode==0,results[-1]
@@ -34,5 +34,5 @@ action('reload');assert dictionary()!=first,(str(first),str(dictionary()));asser
 action('export');outputs=list((root/'码表导出').glob('*.txt'));assert len(outputs)==1
 export=outputs[0].read_text(encoding='utf-8-sig');assert '更新词' in export and '原词' not in export and 'zz menu-word-0' in export
 assert journal.read_bytes()==saved
-report=dict(status='passed',results=results,artifacts=str(root),export=str(outputs[0]),configuration_preserved=True,user_words_preserved=True,manager_sha256=hashlib.sha256((PACKAGE/'schema_manager.exe').read_bytes()).hexdigest(),installed=False)
+report=dict(status='passed',results=results,artifacts=str(root),export=str(outputs[0]),configuration_preserved=True,user_words_preserved=True,manager_sha256=hashlib.sha256((PACKAGE/'Tigirl.exe').read_bytes()).hexdigest(),installed=False)
 (BUILD/'tray-menu-actions.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))

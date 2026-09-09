@@ -20,7 +20,7 @@ std::wstring text(HWND window,int id) {
 }
 BOOL CALLBACK find(HWND window,LPARAM output) {
     wchar_t title[64];GetWindowTextW(window,title,64);
-    if(std::wstring(title)==L"原生虎码加词") *reinterpret_cast<HWND*>(output)=window;
+    if(std::wstring(title)==L"虎娘加词") *reinterpret_cast<HWND*>(output)=window;
     return TRUE;
 }
 void setWord(HWND window,const wchar_t* word) {

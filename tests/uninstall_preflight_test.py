@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix='uninstall-preflight-',dir=BUILD) as tem
  root=Path(temporary);cases=[]
  bad=dict(original,tip='foreign-profile');cases.append(bad)
  bad=dict(original,dll_hash='0'*64);cases.append(bad)
- bad=dict(original,dll=win(root/'SampleIME.dll'));cases.append(bad)
+ bad=dict(original,dll=win(root/'Tigirl.dll'));cases.append(bad)
  old=json.loads((BUILD/'previous-install-19466b1647bcaa2b.json').read_text(encoding='utf-8-sig'))
  bad=dict(original,dll=old['dll'],dll_hash=old['hash']);cases.append(bad)
  for i,bad in enumerate(cases):

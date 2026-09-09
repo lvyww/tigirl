@@ -1,3 +1,36 @@
+## Empty-code ambiguity includes duplicate singles (upstream 1784df1)
+
+- Empty-code capture now includes decoder-approved duplicate-single paths in
+  both uniqueness and strong-confidence comparisons. Eligibility travels with
+  the candidate snapshot, so it uses the producing decoder's settings.
+- Exact complete-path queries also count legal non-first single characters,
+  even when Beam or visible-candidate limits hide those alternatives. Non-first
+  multi-character words still need explicit selection; the disabled switch
+  retains first-rank grouping.
+- Regression fixture: ot = 是/题/多字词, qm = 目. With duplicate singles enabled,
+  otq must not implicitly submit 是; otqm can rank 题目 first.
+- Tests: tests/sentence_empty_code_test.ps1 builds the new Engine/decoder probe
+  plus Tab-lock, rumination and session regressions for x64, Win32 and ARM64.
+- Rebuilt the x64/x86 graphical installer as 2026.9.10.1 with this fix.
+  Package hashes, binary versions, architecture loaders, initialization and runtime
+  fixtures pass. ARM64 rejection preserves live registration and configuration.
+  Evidence: build/setup-2026.9.10.1-validation.json. The installed ARM64X DLL
+  remains unchanged; real Intel/AMD x64 installation acceptance is still pending.
+
+## Single-file x64 graphical installer (2026.9.9.6)
+
+- Added the Chinese Inno Setup wizard, branded artwork, offline x64/x86 payload,
+  original-user initialization, and optional settings launch.
+- Added persistent machine/user recovery, immutable version repair, old-package
+  adoption, downgrade rejection, and owned-version cleanup.
+- Added a nonresident graphical uninstall controller with default data retention,
+  confirmed current-user-only deletion, and deferred cleanup of locked binaries.
+- Local validation covers data merge, interrupted transactions, mixed registration
+  recovery models, package runtime, and UI previews. Real Intel/AMD x64 machine
+  installation, multi-user, UWP, and restart/uninstall acceptance remains required.
+- Build and operational details: docs/GRAPHICAL-INSTALLER.md. This development
+  does not replace the ARM64X version currently installed on this ARM64 host.
+
 ## Font selection and previews aligned with TigerClaw
 
 - Replaced the three-entry editable font field with a real font picker: bundled
@@ -842,7 +875,7 @@
 
 The requested goal is still active. The native ARM64 TSF service is now installed
 independently of daily TigerClaw, using the former SampleIME profile with display
-name 原生虎码. `build/native-install.json` records the installed immutable generation.
+name 虎娘. `build/native-install.json` records the installed immutable generation.
 The complete ordinary-input acceptance scope is not yet satisfied.
 
 ## Implemented and verified on 2026-09-08
@@ -1708,7 +1741,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
 
 - Implemented an isolated ARM64X build and passed actual ARM64/x64 TSF hosts.
   `build_arm64x.ps1` builds Release|ARM64EC with BuildAsX, compiling both ABIs
-  into `build/ARM64X/ARM64EC/Release/SampleIME.dll`; the native half uses separate
+  into `build/ARM64X/ARM64EC/Release/Tigirl.dll`; the native half uses separate
   intermediate/output directories. The script stages all four ARM64 companion
   executables plus the dictionary/fonts. The ordinary ARM64 DLL remains byte-
   identical (`ddfbc5cf...`); registered generation remains `19466b1647bcaa2b`.
@@ -1905,7 +1938,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
   matrix check, and does not cover restrictive jobs or locked desktops.
 
 - Connected actual TSF timer dispatch to `ReminderLaunch` and packaged
-  `timer_reminder.exe`. The native launch API uses separate readiness and release
+  `Tigirl.Reminder.exe`. The native launch API uses separate readiness and release
   events: it publishes the accepted ledger ticket only after the child reports
   ready, and cancels startup on failure. The child checks its parent's creation
   time to avoid PID reuse and can recover publication from the ledger if that
@@ -2673,7 +2706,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
   including all prior full-binary and no-replacement checks. Same-schema generation
   updates, failed-import directory recovery and importer UI remain open. Tests use
   a disposable user root; installed registration and daily runtime are unchanged.
-- Added the short-lived ARM64 `lexicon_import.exe`, connecting actual source files
+- Added the short-lived ARM64 `Tigirl.Import.exe`, connecting actual source files
   through all six maps to validated immutable v2 publication. The real tiger data
   reproduces the original 41,897,112-byte export byte-for-byte. Publication writes/
   flushes a unique temporary file, validates with the production reader, then moves

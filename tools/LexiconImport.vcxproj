@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup><NativeProbeName>lexicon_import</NativeProbeName></PropertyGroup>
+  <PropertyGroup><NativeProbeName>Tigirl.Import</NativeProbeName></PropertyGroup>
   <Import Project="..\tests\DictionaryProbe.vcxproj" />
   <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ClCompile Remove="dictionary_probe.cpp" />
@@ -17,4 +17,5 @@
     <ClCompile Include="..\native\SentenceRebuild.cpp" />
     <ClCompile Include="..\native\SentenceAutoCommit.cpp" />
   </ItemGroup>
+  <ItemGroup><ResourceCompile Include="LexiconImport.rc" /></ItemGroup>
 </Project>

@@ -24,8 +24,8 @@ $build = Join-Path $root 'build'
 $isolated = Join-Path $build ('management-menu-' + [Guid]::NewGuid().ToString('N'))
 $hostPlatform = if ($Win32Host) { 'Win32' } elseif ($X64Host) { 'x64' } else { 'ARM64' }
 $exe = Join-Path $build "tests\$hostPlatform\tsf_host.exe"
-$dll = Join-Path $build $(if ($Arm64X) { 'ARM64X\ARM64EC\Release\SampleIME.dll' } else { 'ARM64\Release\SampleIME.dll' })
-$manager = Join-Path (Split-Path $dll -Parent) 'schema_manager.exe'
+$dll = Join-Path $build $(if ($Arm64X) { 'ARM64X\ARM64EC\Release\Tigirl.dll' } else { 'ARM64\Release\Tigirl.dll' })
+$manager = Join-Path (Split-Path $dll -Parent) 'Tigirl.exe'
 $manifest = Join-Path (Split-Path $dll -Parent) 'NativeTiger.Test.manifest'
 $registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\InprocServer32'
 $before = (Get-Item $registration).GetValue('')
@@ -34,12 +34,12 @@ New-Item -ItemType File -Path (Join-Path $isolated '.tsf-management-test') | Out
 if ($Win32Host) {
     $package = Join-Path $isolated 'package'
     New-Item -ItemType Directory -Path $package | Out-Null
-    Copy-Item -LiteralPath (Join-Path $build 'Win32\Release\SampleIME.dll') -Destination $package
-    foreach ($file in @('schema_manager.exe','schema_select.exe','lexicon_import.exe','tiger-v2.tcd')) {
+    Copy-Item -LiteralPath (Join-Path $build 'Win32\Release\Tigirl.dll') -Destination $package
+    foreach ($file in @('Tigirl.exe','Tigirl.SchemaSelect.exe','Tigirl.Import.exe','tiger-v2.tcd')) {
         Copy-Item -LiteralPath (Join-Path $build ('ARM64X\ARM64EC\Release\' + $file)) -Destination $package
     }
-    $dll = Join-Path $package 'SampleIME.dll'
-    $manager = Join-Path $package 'schema_manager.exe'
+    $dll = Join-Path $package 'Tigirl.dll'
+    $manager = Join-Path $package 'Tigirl.exe'
     $manifest = Join-Path $package 'NativeTiger.Test.manifest'
 }
 $config = Join-Path $isolated 'config.txt'

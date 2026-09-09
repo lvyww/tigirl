@@ -48,7 +48,7 @@ public static class ManagerLaunchProbe {
    if(found==IntPtr.Zero)throw new Exception("Expected manager window not found on isolated desktop");
    if(expectedCode!=0) {
     var title=new StringBuilder(256);GetWindowText(found,title,256);
-    if(title.ToString()!="原生虎码 · 无法启动")throw new Exception("Unexpected startup error dialog");
+    if(title.ToString()!="虎娘 · 无法启动")throw new Exception("Unexpected startup error dialog");
    }
    if(WaitForInputIdle(process.process,5000)!=0)throw new Exception("Manager did not become input-idle");
    if(!PostMessage(found,0x10,IntPtr.Zero,IntPtr.Zero))Error("Close test window");
@@ -70,7 +70,7 @@ try {
     [IO.File]::WriteAllText($config,"# isolated launch fixture`r`n",(New-Object Text.UTF8Encoding($true)))
     $before = (Get-FileHash -LiteralPath $config).Hash
     $env:NATIVE_TIGER_USER_ROOT = $temporary
-    $exe = Join-Path $root 'build\ARM64\Release\schema_manager.exe'
+    $exe = Join-Path $root 'build\ARM64\Release\Tigirl.exe'
     [void][ManagerLaunchProbe]::Run($exe,'--settings','NativeTigerInputSettings',0)
     [void][ManagerLaunchProbe]::Run($exe,'','NativeTigerSchemaManager',0)
     if ((Get-FileHash -LiteralPath $config).Hash -ne $before) { throw 'Closing launched windows changed configuration' }

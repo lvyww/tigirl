@@ -2,8 +2,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'reminder_window.ps1')
 $root = Split-Path $PSScriptRoot -Parent
 $hostExe = Join-Path $root 'build\tests\ARM64\tsf_host.exe'
-$dll = Join-Path $root 'build\ARM64\Release\SampleIME.dll'
-$helper = Join-Path $root 'build\ARM64\Release\timer_reminder.exe'
+$dll = Join-Path $root 'build\ARM64\Release\Tigirl.dll'
+$helper = Join-Path $root 'build\ARM64\Release\Tigirl.Reminder.exe'
 $manifest = Join-Path (Split-Path $dll -Parent) 'NativeTiger.Test.manifest'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'NativeTiger.Test.manifest') -Destination $manifest -Force
 $registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\InprocServer32'

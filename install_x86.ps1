@@ -9,7 +9,7 @@ $primary = Split-Path $record.dll -Parent
 foreach ($entry in $record.artifacts.PSObject.Properties) {
     if ((Get-FileHash -LiteralPath (Join-Path $primary $entry.Name)).Hash -ne $entry.Value) { throw "Primary artifact changed: $($entry.Name)" }
 }
-$source = "$PSScriptRoot\build\Win32\Release\SampleIME.dll"
+$source = "$PSScriptRoot\build\Win32\Release\Tigirl.dll"
 $probe = "$PSScriptRoot\build\tests\Win32\architecture_load_probe.exe"
 foreach ($file in @($source, $probe)) {
     $bytes = [IO.File]::ReadAllBytes($file)
@@ -20,7 +20,7 @@ $loaded = (& $probe $source) | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or !$loaded.loaded -or !$loaded.class_instance) { throw 'x86 loader/class check failed.' }
 $hash = (Get-FileHash $source).Hash
 $destination = "$env:ProgramFiles\SampleIME\versions\x86-$($record.generation)-$($hash.Substring(0,16).ToLowerInvariant())"
-$dll = Join-Path $destination 'SampleIME.dll'
+$dll = Join-Path $destination 'Tigirl.dll'
 $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32)
 $old = $base.OpenSubKey("CLSID\$clsid\InprocServer32")
 $previousDll = if ($old) { $old.GetValue('') } else { $null }
@@ -44,7 +44,7 @@ if (Test-Path $dll) {
 } else { Copy-Item $source $dll }
 # Hard links retain one backing file for the dictionary across x86/ARM64/x64.
 foreach ($entry in $record.artifacts.PSObject.Properties) {
-    if ($entry.Name -eq 'SampleIME.dll') { continue }
+    if ($entry.Name -eq 'Tigirl.dll') { continue }
     $target = Join-Path $destination $entry.Name
     if (Test-Path -LiteralPath $target) {
         if ((Get-FileHash -LiteralPath $target).Hash -ne $entry.Value) { throw "Immutable companion collision: $($entry.Name)" }

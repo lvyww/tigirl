@@ -12,7 +12,7 @@ $dll = $registeredBefore
 $manifest = $null
 if ($ActivationOnly -and !$PrivateBuild) { throw '-ActivationOnly requires -PrivateBuild' }
 if ($PrivateBuild) {
-    $dll = Join-Path $build $(if ($Arm64X) { 'ARM64X\ARM64EC\Release\SampleIME.dll' } else { 'ARM64\Release\SampleIME.dll' })
+    $dll = Join-Path $build $(if ($Arm64X) { 'ARM64X\ARM64EC\Release\Tigirl.dll' } else { 'ARM64\Release\Tigirl.dll' })
     $manifest = Join-Path (Split-Path $dll -Parent) "NativeTiger.Host.$hostArchitecture.manifest"
     $manifestText = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'NativeTiger.Test.manifest') -Raw
     if ($X64Host) { $manifestText = $manifestText.Replace('processorArchitecture="arm64"', 'processorArchitecture="amd64"') }

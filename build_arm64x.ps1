@@ -12,7 +12,7 @@ foreach ($tool in @('SchemaSelect', 'LexiconImport', 'SchemaManager', 'Reminder'
     & "$vs\MSBuild\Current\Bin\MSBuild.exe" "$PSScriptRoot\tools\$tool.vcxproj" /nr:false /p:Configuration=Release /p:Platform=ARM64 /v:minimal
     if ($LASTEXITCODE -ne 0) { throw "ARM64X companion build failed: $tool" }
 }
-foreach ($tool in @('schema_select.exe', 'lexicon_import.exe', 'schema_manager.exe', 'timer_reminder.exe')) {
+foreach ($tool in @('Tigirl.SchemaSelect.exe', 'Tigirl.Import.exe', 'Tigirl.exe', 'Tigirl.Reminder.exe')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "build\tests\ARM64\$tool") -Destination (Join-Path $destination $tool) -Force
 }
 foreach ($platform in @('ARM64', 'x64')) {
@@ -21,4 +21,4 @@ foreach ($platform in @('ARM64', 'x64')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "build\tests\$platform\architecture_load_probe.exe") -Destination (Join-Path $destination "verify_load_$($platform.ToLowerInvariant()).exe") -Force
 }
 Copy-NativeTigerSentenceModel $SentenceModelPath $destination
-Write-Output "Experimental ARM64X DLL: $PSScriptRoot\build\ARM64X\ARM64EC\Release\SampleIME.dll"
+Write-Output "Experimental ARM64X DLL: $PSScriptRoot\build\ARM64X\ARM64EC\Release\Tigirl.dll"

@@ -59,7 +59,7 @@ static void verifyModule(HMODULE expected) {
     require(snapshot!=INVALID_HANDLE_VALUE,"Cannot inspect loaded modules");
     MODULEENTRY32W item{}; item.dwSize=sizeof(item); bool found=false,unexpected=false;
     for(BOOL next=Module32FirstW(snapshot,&item);next;next=Module32NextW(snapshot,&item)) {
-        if(_wcsicmp(item.szModule,L"SampleIME.dll")==0) {
+        if(_wcsicmp(item.szModule,L"Tigirl.dll")==0) {
             if(item.hModule==expected) found=true; else unexpected=true;
         }
     }
@@ -395,7 +395,7 @@ static std::vector<DWORD> reminderChildren() {
     require(snapshot!=INVALID_HANDLE_VALUE,"Cannot inspect reminder child processes");
     PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);std::vector<DWORD> children;
     if(Process32FirstW(snapshot,&entry))do {
-        if(entry.th32ParentProcessID==GetCurrentProcessId() && _wcsicmp(entry.szExeFile,L"timer_reminder.exe")==0)
+        if(entry.th32ParentProcessID==GetCurrentProcessId() && _wcsicmp(entry.szExeFile,L"Tigirl.Reminder.exe")==0)
             children.push_back(entry.th32ProcessID);
     } while(Process32NextW(snapshot,&entry));
     CloseHandle(snapshot);return children;
@@ -426,7 +426,7 @@ struct AddWordCheck { DWORD* lock=nullptr; bool seen=false; int phase=0,ticks=0;
 static AddWordCheck* addWordCheck=nullptr;
 static BOOL CALLBACK findAddWord(HWND window,LPARAM output) {
     wchar_t title[64]{}; GetWindowTextW(window,title,64);
-    if(std::wstring(title)==L"原生虎码加词") *reinterpret_cast<HWND*>(output)=window;
+    if(std::wstring(title)==L"虎娘加词") *reinterpret_cast<HWND*>(output)=window;
     return TRUE;
 }
 static void CALLBACK saveAddedWord(HWND,UINT,UINT_PTR,DWORD) {

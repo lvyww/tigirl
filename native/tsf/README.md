@@ -42,6 +42,17 @@ foreground testing after installation, including the reported skin and menu
 issues. ARM64, x64 and Win32 input regressions, restricted-token configuration
 and theme-menu tests, and the desktop popup/focus fixture also passed.
 
+Sentence continuation follows TigerClaw commit
+`954c82d5ed3823a9007375568740a67d063dfebc`: empty-code automatic commit must retain
+decoder-approved segmented duplicate-single paths, so `xrxbj`/`xryxbj` can keep
+`反刍` as the first choice after `反` is committed. The decoder remains responsible
+for the duplicate-single toggle, optimal-code eligibility and word-rank rules;
+the session still rejects whole-input non-first edges on implicit continuation.
+`tests/sentence_continuation_test.py` covers both prefix codes and both settings
+on ARM64, x64 and Win32, using the real native decoder and Engine. This focused
+regression tracks the upstream fix without replacing the older frozen oracle
+with unrelated upstream changes.
+
 Key preview copies the engine. Actual consumed keys request a synchronous TSF
 write edit session, replace the composition or insert committed text, and publish
 the new engine state. Unconsumed keys may still end an existing composition;
@@ -92,7 +103,7 @@ remaining ordinary-engine features in `PLAN.md`.
 ## Private build validation
 
 `tests/run_tsf_host.ps1 -PrivateBuild` uses a test-only activation manifest beside
-`build/ARM64/Release/SampleIME.dll`. The activation context redirects COM only
+`build/ARM64/Release/Tigirl.dll`. The activation context redirects COM only
 inside the test process. It does not register or install that DLL, and the runner
 compares the original registered path before and after. An existing enabled TSF
 profile is still required for Windows profile metadata. The manifest is not part
@@ -112,3 +123,22 @@ coverage. It currently passes on ARM64 with registration unchanged. The attempte
 full private run stopped before event zero because GetForegroundWindow returned
 null. Full composition, layout-recovery, font and layered-window behavior remain
 unverified for the pending build until an interactive desktop is available.
+
+## Tab confirmation in sentence input
+
+Ported from TigerClaw `14b611f48555bb0f02b1fdf1e7b02671096bebbc`.
+Tab/Shift+Tab highlights without committing. The next code letter fixes the
+chosen text and raw-code boundary; the decoder scores only the remaining tail,
+with language-model and supplement context reconstructed from the locked text.
+With automatic commit enabled, that letter also submits only the uncommitted
+selected text, independently of confidence and retained-code floors. Otherwise
+Backspace reaching a lock boundary releases it; nested locks unwind one at a
+time. Numeric/punctuation rank selectors edit the current segment, and arrow
+navigation alone does not arm confirmation. Literal exits retain live raw-code
+semantics. Immutable lock snapshots travel with synchronous/asynchronous decode
+tickets and exact-path queries; old completions cannot replace the new state.
+
+Run `tests/sentence_tab_lock_test.ps1` in Windows PowerShell to build and run
+ARM64/x64/Win32 engine+decoder fixtures, the preceding rumination regression,
+and the session-state suite. These tests replay pending decode requests and
+inject stale results; they do not constitute physical foreground input testing.

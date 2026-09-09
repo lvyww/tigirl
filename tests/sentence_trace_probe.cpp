@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
         tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=sentence.allowDuplicateSingleCharacters;
         auto resources=tiger::SentenceResources::Open(std::filesystem::u8path(argv[1]),std::filesystem::u8path(argv[5]),sentence.commonCharacterLimit,sentence.whitelist(),options);
         auto decoder=resources->createDecoder();engine.enableSentenceInput(true,1,automatic,retained);
-        auto complete=[&] {if(auto ticket=engine.sentenceRequest())engine.applySentenceResult(*ticket,decoder->decode(ticket->raw,20,automatic,ticket->requiredPrefix));};
+        auto complete=[&] {if(auto ticket=engine.sentenceRequest())engine.applySentenceResult(*ticket,decoder->decode(ticket->raw,20,automatic,ticket->requiredPrefix,ticket->lockedPrefix));};
         for (std::string line; std::getline(source, line);) {
             if (line.empty()) continue;
             std::istringstream input(line);
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
             bool settle=true;input>>settle;
             if (reset) {engine = tiger::Engine(engine.lexicon(),config);engine.enableSentenceInput(true,1,automatic,retained);decoder=resources->createDecoder();}
             tiger::SentencePathQueries queries;
-            queries.complete=[&](std::u16string_view raw,std::u16string_view prefix,std::optional<std::u16string_view> excluded,bool grouped){return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped);};
+            queries.complete=[&](std::u16string_view raw,std::u16string_view prefix,std::optional<std::u16string_view> excluded,bool grouped,const SentenceLockedPrefix* locked){return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped,locked);};
             queries.properPrefix=[&](std::u16string_view raw){return decoder->isProperCodePrefix(raw);};
             auto result = engine.process(key,queries);if(result.awaitSentenceDecode){complete();result=engine.process(key,queries);}if(settle)complete();
             if(automatic && std::string(argv[6])=="--legacy-auto")result.commit+=engine.autoCommitSentence().commit;

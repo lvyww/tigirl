@@ -309,9 +309,9 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
     const auto settings=tiger::readConfiguration(path);
     dialog.initial=tiger::parseEngineSettings(settings);dialog.initialStyle=tiger::parseCandidateStyle(settings);
     dialog.initialSentence=tiger::parseSentenceSettings(settings);
-    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerInputSettings";type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
+    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerInputSettings";type.hIcon=LoadIconW(type.hInstance,MAKEINTRESOURCEW(12));type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&type) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)throw std::runtime_error("Cannot register input settings window");
-    if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"原生虎码 · 输入设置",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create input settings window");
+    if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"虎娘 · 输入设置",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create input settings window");
     dialog.create();
     if(testMode) {
         const auto original=tiger::readConfiguration(path);

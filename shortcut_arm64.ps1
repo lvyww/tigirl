@@ -1,13 +1,13 @@
 ﻿# Shared by install/rollback; tests pass an isolated Programs directory.
 function Get-NativeTigerShortcutPath([string]$ProgramsDirectory) {
-    return Join-Path $ProgramsDirectory '原生虎码\方案管理.lnk'
+    return Join-Path $ProgramsDirectory '虎娘\输入设置.lnk'
 }
 function Test-NativeTigerShortcutOwner($Link, [string]$InstallRoot) {
-    if ($Link.Description -ne '原生虎码 · 方案管理') { return $false }
+    if ($Link.Description -notin @('虎娘 · 输入设置','原生虎码 · 方案管理')) { return $false }
     $root = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') + '\versions\'
     $target = [IO.Path]::GetFullPath($Link.TargetPath)
     return $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -and
-        [IO.Path]::GetFileName($target) -eq 'schema_manager.exe'
+        [IO.Path]::GetFileName($target) -in @('Tigirl.exe','schema_manager.exe')
 }
 function Assert-NativeTigerShortcutAvailable([string]$ProgramsDirectory, [string]$InstallRoot) {
     $path = Get-NativeTigerShortcutPath $ProgramsDirectory
@@ -42,7 +42,7 @@ function Set-NativeTigerShortcut([string]$ProgramsDirectory, [string]$InstallRoo
         }
         # Check the proposed target with the same ownership rule before saving.
         $link.TargetPath = $Manager
-        $link.Description = '原生虎码 · 方案管理'
+        $link.Description = '虎娘 · 输入设置'
         if (!(Test-NativeTigerShortcutOwner $link $InstallRoot)) { throw 'Manager target is outside the installed generations.' }
         $link.Arguments = ''
         $link.WorkingDirectory = Split-Path $Manager -Parent

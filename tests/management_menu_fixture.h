@@ -10,7 +10,7 @@ inline MenuInput* pending=nullptr;
 inline bool addWordSeen=false;
 inline void CALLBACK closeAddWord(HWND,UINT,UINT_PTR timer,DWORD) {
     HWND dialog=nullptr;
-    while((dialog=FindWindowExW(nullptr,dialog,L"#32770",L"原生虎码加词"))) {
+    while((dialog=FindWindowExW(nullptr,dialog,L"#32770",L"虎娘加词"))) {
         DWORD process=0;GetWindowThreadProcessId(dialog,&process);
         if(process!=GetCurrentProcessId())continue;
         addWordSeen=true;PostMessageW(dialog,WM_COMMAND,IDCANCEL,0);KillTimer(nullptr,timer);return;
@@ -41,7 +41,7 @@ inline std::vector<DWORD> children() {
     require(snapshot!=INVALID_HANDLE_VALUE,"Cannot inspect manager child processes");
     PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);
     if(Process32FirstW(snapshot,&entry))do {
-        if(entry.th32ParentProcessID==GetCurrentProcessId() && !_wcsicmp(entry.szExeFile,L"schema_manager.exe"))result.push_back(entry.th32ProcessID);
+        if(entry.th32ParentProcessID==GetCurrentProcessId() && !_wcsicmp(entry.szExeFile,L"Tigirl.exe"))result.push_back(entry.th32ProcessID);
     }while(Process32NextW(snapshot,&entry));
     CloseHandle(snapshot);return result;
 }

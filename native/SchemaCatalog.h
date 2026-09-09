@@ -11,7 +11,7 @@ std::filesystem::path schemaDictionaryPath(const std::filesystem::path& schemaDi
 std::filesystem::path activeSchemaDictionaryPath(const std::filesystem::path& userRoot,
     const std::filesystem::path& bundled,std::u16string_view name);
 std::filesystem::path schemaJournalPath(const std::filesystem::path& userRoot,std::u16string_view name);
-// Only prepared native schemes are selectable; the bundled schema is implicit.
+// Enumerate source directories; fall back to the bundled schema if none exist.
 std::vector<std::u16string> schemaNames(const std::filesystem::path& userRoot);
 std::u16string recentSchemaName(std::u16string_view configuration,const std::vector<std::u16string>& schemas);
 }

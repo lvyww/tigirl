@@ -8,7 +8,7 @@ def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=Tru
 def check(script):return run_windows([PS,'-NoProfile','-ExecutionPolicy','Bypass','-File',win(script),'-CheckOnly'],capture_output=True,text=True,timeout=30)
 result=check(ROOT/'install_arm64.ps1');assert result.returncode==0,result.stderr
 package=json.loads(result.stdout)
-for name in ['schema_manager.exe','schema_select.exe','lexicon_import.exe','timer_reminder.exe']:
+for name in ['Tigirl.exe','Tigirl.SchemaSelect.exe','Tigirl.Import.exe','Tigirl.Reminder.exe']:
  assert hashlib.sha256((PACKAGE/name).read_bytes()).hexdigest()==package['artifacts'][name].lower()
  assert (PACKAGE/name).read_bytes()==(BUILD/'tests/ARM64'/name).read_bytes()
 with tempfile.TemporaryDirectory(prefix='package-preflight-',dir=BUILD) as temporary:
@@ -16,12 +16,12 @@ with tempfile.TemporaryDirectory(prefix='package-preflight-',dir=BUILD) as tempo
  script=root/'install_arm64.ps1';shutil.copyfile(ROOT/'install_arm64.ps1',script)
  shutil.copyfile(ROOT/'shortcut_arm64.ps1',root/'shortcut_arm64.ps1')
  shutil.copyfile(ROOT/'sentence_package.ps1',root/'sentence_package.ps1')
- manager=staged/'schema_manager.exe';original=manager.read_bytes();bad=bytearray(original)
+ manager=staged/'Tigirl.exe';original=manager.read_bytes();bad=bytearray(original)
  pe=struct.unpack_from('<I',bad,0x3c)[0];struct.pack_into('<H',bad,pe+4,0x8664);manager.write_bytes(bad)
  result=check(script);assert result.returncode!=0 and 'not ARM64' in result.stderr
  manager.unlink();result=check(script);assert result.returncode!=0 and 'Missing build artifact' in result.stderr
  manager.write_bytes(original)
- reminder=staged/'timer_reminder.exe';reminder_bytes=reminder.read_bytes();reminder.unlink()
+ reminder=staged/'Tigirl.Reminder.exe';reminder_bytes=reminder.read_bytes();reminder.unlink()
  result=check(script);assert result.returncode!=0 and 'Missing build artifact' in result.stderr
  reminder.write_bytes(reminder_bytes)
  user=root/'用户 配置';user.mkdir();(user/'.schema-manager-test').touch()

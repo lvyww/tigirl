@@ -449,6 +449,9 @@ KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& querie
     if(vk==Return)return finish(sentence_.commitRaw(config_.enterClear));
     const bool selector=!key.shift && (digitKey(vk) || (vk==Semi && config_.semicolonSecond) || (vk==Quote && config_.quoteThird));
     if(letter(vk) || selector) {
+        if(letter(vk) && sentence_.tabSelectionPending() && !sentence_.current()) {
+            KeyResult pending;pending.handled=true;pending.awaitSentenceDecode=true;return pending;
+        }
         char16_t c=letter(vk)?static_cast<char16_t>(vk+32):vk==Semi?u';':vk==Quote?u'\'':static_cast<char16_t>(vk>=96?'0'+vk-96:vk);
         auto commit=sentence_.appendAutomatic(c,sentenceAutomatic_,sentenceRetainedRaw_,queries);
         syncSentenceRaw();return {true,false,commit?std::move(*commit):std::u16string{}};
@@ -461,7 +464,7 @@ KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& querie
     }
     if(vk==Tab || vk==38 || vk==40) {
         if(vk==Tab && sentence_.result().candidates.empty() && config_.tabClear)return finish();
-        sentence_.moveSelection(vk==38 || (vk==Tab && key.shift)?-1:1,config_.pageSize);return {true,false,{}};
+        sentence_.moveSelection(vk==38 || (vk==Tab && key.shift)?-1:1,config_.pageSize,vk==Tab);return {true,false,{}};
     }
     if(vk==Space) {
         auto text=sentence_.commitCandidate(sentence_.selectedIndex());return text?finish(std::move(*text)):KeyResult{true,false,{}};

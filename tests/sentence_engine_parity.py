@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='sentence-engine-',dir=BUILD) as temp:
  trace=root/'keys.jsonl';trace.write_text('\n'.join(json.dumps(k) for k in keys))
  tsv=root/'keys.tsv';tsv.write_text('\n'.join(' '.join(str(int(v)) for v in [k['reset'],k['vk'],0,k['action']=='down',k.get('shift',False),False,False,False,False,True,1,False,k.get('settle',True)]) for k in keys))
  expected=[json.loads(s) for s in run(['/mnt/c/Program Files/dotnet/dotnet.exe',win(ROOT/'tools/SentenceEngineOracle/bin/Release/net10.0-windows/SentenceEngineOracle.dll'),win(root),win(trace)]+(['--async'] if automatic or burst else [])).splitlines()]
- user=root/'native';run([BUILD/'tests/ARM64/lexicon_import.exe','--schema',win(schema),win(pinyin),win(user),'测试整句','zh-CN'])
+ user=root/'native';run([BUILD/'tests/ARM64/Tigirl.Import.exe','--schema',win(schema),win(pinyin),win(user),'测试整句','zh-CN'])
  dll=user/'schemas/测试整句/tiger-v2.tcd'
  actual=[json.loads(s) for s in run([BUILD/'tests'/platform/'sentence_trace_probe.exe',win(dll),win(tsv),win(root/'selection.txt'),win(config),win(model)]+(['--legacy-auto' if legacy else '--auto',str(retained)] if automatic else [])).splitlines()]
  assert len(expected)==len(actual)==len(keys)

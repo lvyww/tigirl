@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='sentence-resources-',dir=BUILD) as temp
   results[platform]={'parser_entries':len(actual),'sha256':hashlib.sha256(probe.read_bytes()).hexdigest()}
  corpus.write_text('中国 1000000\n中华 1000\n',encoding='utf-8')
  (schema/'词条.txt').write_text('aa 显示甲=>中 100\naa 显示乙=>中 90\naa 人 80\nbb 国 100\nbb 华 90\n',encoding='utf-8')
- def ensure(success=True):return run([TOOLS/'lexicon_import.exe','--ensure',win(schema),win(pinyin),win(user),'测试整句','zh-CN'],success)
+ def ensure(success=True):return run([TOOLS/'Tigirl.Import.exe','--ensure',win(schema),win(pinyin),win(user),'测试整句','zh-CN'],success)
  def selected():
   gen=(user/'schemas/测试整句/current.txt').read_text(encoding='utf-8-sig').strip().split('\t')[1]
   return user/'schemas/测试整句/generations'/gen/'tiger-v2.tcd'

@@ -2,7 +2,7 @@
 import hashlib,json,subprocess,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build'
-IMPORT=BUILD/'tests/ARM64/lexicon_import.exe';SELECT=BUILD/'tests/ARM64/schema_select.exe'
+IMPORT=BUILD/'tests/ARM64/Tigirl.Import.exe';SELECT=BUILD/'tests/ARM64/Tigirl.SchemaSelect.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='schema-generation-',dir=BUILD) as temporary:
  root=Path(temporary);source=root/'source';source.mkdir();table=source/'source.txt';table.write_text('ab 旧词\n',encoding='utf-8')

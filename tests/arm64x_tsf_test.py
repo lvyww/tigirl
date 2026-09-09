@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / 'build/ARM64X/ARM64EC/Release/SampleIME.dll'
+DLL = ROOT / 'build/ARM64X/ARM64EC/Release/Tigirl.dll'
 PS = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 def win(path):
     return subprocess.check_output(['wslpath', '-w', str(path)], text=True).strip()

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$exe = Join-Path $root 'build\tests\ARM64\timer_reminder.exe'
+$exe = Join-Path $root 'build\tests\ARM64\Tigirl.Reminder.exe'
 $ledgerProbe = Join-Path $root 'build\tests\ARM64\reminder_ledger_probe.exe'
 . (Join-Path $PSScriptRoot 'reminder_window.ps1')
 $owned = New-Object 'Collections.Generic.List[Diagnostics.Process]'
