@@ -1,6 +1,6 @@
 虎娘 / Tigirl 图形安装程序
 
-分发文件：Tigirl-2026.9.10.1-x64-Setup.exe。
+分发文件：Tigirl-2026.9.10.2-x64-Setup.exe。
 双击单文件安装程序，按中文向导操作，无需手工解压。
 只支持 Intel/AMD x64 Windows 10 2004 及以上，包含 x86 程序支持。
 不适用于 ARM64 和 32 位 Windows。

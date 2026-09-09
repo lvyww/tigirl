@@ -1,4 +1,4 @@
-﻿param([string]$Version='2026.9.10.1',[switch]$SkipBuild,[switch]$RecompileOnly,[string]$Compiler="$PSScriptRoot\build\tools\InnoSetup-6.7.3\ISCC.exe")
+﻿param([string]$Version='2026.9.10.2',[switch]$SkipBuild,[switch]$RecompileOnly,[string]$Compiler="$PSScriptRoot\build\tools\InnoSetup-6.7.3\ISCC.exe")
 $ErrorActionPreference='Stop'
 if(!(Test-Path $Compiler)){throw 'Install Inno Setup 6.7.3, then pass -Compiler <ISCC.exe>.'}
 if((Get-FileHash (Join-Path (Split-Path $Compiler) 'ISCC.exe')).Hash -ne '0A8757031B33777E4C9CBFFEE40F11A5062B36D25CBE144C1DB73B6102B80AD7'){throw 'Compiler checksum mismatch; use Inno Setup 6.7.3.'}

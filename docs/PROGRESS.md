@@ -1,3 +1,15 @@
+## Locked DLL uninstall cleanup (2026.9.10.2)
+
+- Fix PowerShell string marshaling at MoveFileEx: pass native NULL with
+  NullString.Value so occupied DLLs can be deleted after restart.
+- Retain the active cleanup scripts and manifest until Inno completes uninstall;
+  retry cleanup accepts already removed files and skips redundant unregistration.
+- Report scheduling errors with their Win32 code, log unregistration and cleanup
+  separately, and avoid labeling every uninstall error as a registration failure.
+- Add locked-file regression coverage using a real exclusive file handle and an
+  intercepted native scheduling boundary; no reboot registry changes in tests.
+- Real Intel/AMD x64 uninstall and reboot acceptance remains pending.
+
 ## Empty-code ambiguity includes duplicate singles (upstream 1784df1)
 
 - Empty-code capture now includes decoder-approved duplicate-single paths in

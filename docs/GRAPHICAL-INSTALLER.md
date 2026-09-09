@@ -1,6 +1,6 @@
 # 虎娘图形安装程序
 
-发布物为 `Tigirl-2026.9.10.1-x64-Setup.exe`，单文件、离线，适用 Intel/AMD x64 Windows 10 2004 及以上，包含 x86 程序支持。ARM64 和 32 位 Windows 被拒绝。
+发布物为 `Tigirl-2026.9.10.2-x64-Setup.exe`，单文件、离线，适用 Intel/AMD x64 Windows 10 2004 及以上，包含 x86 程序支持。ARM64 和 32 位 Windows 被拒绝。
 
 安装使用中文 Inno Setup 向导。程序位于 `%ProgramFiles%\Tigirl`，既有受管 NativeTiger 包沿用原程序目录；用户数据固定 `%LOCALAPPDATA%\NativeTiger`。已有配置和个人词条保留，同名源码表可选择跳过或覆盖，覆盖前备份。正式包只含默认虎码字词、虎整句及拼音反查数据。
 

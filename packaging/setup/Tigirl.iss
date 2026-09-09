@@ -5,7 +5,7 @@
  #error Generation is required
 #endif
 #ifndef ProductVersion
- #define ProductVersion "2026.9.10.1"
+ #define ProductVersion "2026.9.10.2"
 #endif
 [Setup]
 AppId=NativeTiger
@@ -55,7 +55,7 @@ WelcomeFontName=Microsoft YaHei UI
 [Files]
 ; One embedded payload. Extract for preflight, then let Inno copy/track these exact files.
 Source: "{#PackageDir}\*"; DestDir: "{tmp}\payload"; Flags: dontcopy recursesubdirs createallsubdirs
-Source: "{tmp}\payload\*"; DestDir: "{app}\versions\{#Generation}"; Flags: external recursesubdirs createallsubdirs onlyifdoesntexist
+Source: "{tmp}\payload\*"; DestDir: "{app}\versions\{#Generation}"; Flags: external recursesubdirs createallsubdirs onlyifdoesntexist uninsrestartdelete
 Source: "{#PackageDir}\setup\Tigirl.Maintenance.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
 [Icons]
 Name: "{commonprograms}\虎娘\输入设置"; Filename: "{app}\versions\{#Generation}\x64\Tigirl.exe"
@@ -189,12 +189,12 @@ begin if Failed then Result:=1 else Result:=0; end;
 function InitializeUninstall: Boolean;
 begin
   Result:=Deploy('UninstallCheck',ExpandConstant('{app}\versions\{#Generation}'));
-  if not Result then SuppressibleMsgBox('无法验证此安装的注册归属，卸载已停止。请查看 setup.log。',mbError,MB_OK,IDOK);
+  if not Result then SuppressibleMsgBox('卸载检查未通过，可能涉及注册归属或安装记录、文件清单损坏。请查看安装目录中的 setup.log。',mbError,MB_OK,IDOK);
 end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep=usUninstall then
-    if not Deploy('Uninstall',ExpandConstant('{app}\versions\{#Generation}')) then RaiseException('撤销输入法注册失败，卸载停止。');
+    if not Deploy('Uninstall',ExpandConstant('{app}\versions\{#Generation}')) then RaiseException('卸载未完成，可能在撤销注册或清理程序文件时失败。请查看安装目录中的 setup.log。');
 end;
 function UninstallNeedRestart: Boolean;
 begin Result:=RestartCleanup; end;

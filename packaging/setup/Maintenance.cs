@@ -8,7 +8,7 @@ using System.Windows.Forms;
 using System.Runtime.InteropServices;
 [assembly: System.Reflection.AssemblyTitle("虎娘卸载")]
 [assembly: System.Reflection.AssemblyProduct("Tigirl")]
-[assembly: System.Reflection.AssemblyVersion("2026.9.10.1")]
+[assembly: System.Reflection.AssemblyVersion("2026.9.10.2")]
 class Maintenance : Form {
  [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
  readonly CheckBox erase = new CheckBox { Text="同时删除当前用户的码表、设置和个人词条（包括备份）",AutoSize=true };

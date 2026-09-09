@@ -71,20 +71,42 @@ function Set-GuiEntries($Record){
   $link=$shell.CreateShortcut((Join-Path $dir '输入设置.lnk'));$link.TargetPath=Get-PackageTool $Record.directory;$link.IconLocation=$link.TargetPath+',0';$link.Save()
  }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)}
 }
-function Remove-Version([string]$Directory){
+function Queue-Deletion([string]$Path){
+ if(![TigirlMove]::MoveFileEx($Path,[NullString]::Value,4)){
+  $errorCode=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
+  throw [ComponentModel.Win32Exception]::new($errorCode,"Cannot schedule deletion: $Path")
+ }
+ $script:restart=$true
+}
+function Assert-UninstallPackage([string]$Directory){
+ Assert-VersionPath $Directory
+ $m=Get-Content -LiteralPath (Join-Path $Directory 'manifest.json') -Raw|ConvertFrom-Json
+ if($m.version -notmatch '^\d+\.\d+\.\d+\.\d+$'){throw 'Invalid package version.'}
+ foreach($entry in $m.files){
+  if(!$entry.path -or $entry.path -match '(^[\\/]|:|(^|[\\/])\.\.([\\/]|$))'){throw 'Invalid manifest path.'}
+ }
+ # Cleanup can be retried after some files were removed. Do not load DLLs or
+ # require a complete payload here; ownership is checked separately above.
+}
+function Remove-Version([string]$Directory,[switch]$KeepControlFiles){
  if(!('TigirlMove' -as [type])){Add-Type 'using System.Runtime.InteropServices; public static class TigirlMove {[DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] public static extern bool MoveFileEx(string a,string b,int f);}'}
  Assert-VersionPath $Directory
  # Delete only manifest-listed package files and explicitly created x86 hard links.
  $m=Get-Content (Join-Path $Directory 'manifest.json') -Raw|ConvertFrom-Json
- $paths=@('manifest.json')+@($m.files|ForEach-Object path)
+ $paths=@($m.files|ForEach-Object path)
  foreach($entry in $m.files){if($entry.path -like 'x64\*' -and $entry.path -ne 'x64\Tigirl.dll'){$paths+=('x86\'+$entry.path.Substring(4))}}
  foreach($relative in $paths|Select-Object -Unique){
+  if($KeepControlFiles -and $relative -in @('common.ps1','data.ps1','setup\deploy.ps1')){continue}
   if($relative -match '(^[\\/]|:|(^|[\\/])\.\.([\\/]|$))'){throw 'Invalid manifest path.'}
   $file=Join-Path $Directory $relative
-  if(Test-Path -LiteralPath $file -PathType Leaf){try{Remove-Item -LiteralPath $file -Force}catch{if(![TigirlMove]::MoveFileEx($file,$null,4)){throw};$script:restart=$true}}
+  if(Test-Path -LiteralPath $file -PathType Leaf){try{Remove-Item -LiteralPath $file -Force}catch{Queue-Deletion $file}}
  }
+ # Inno removes the active backend and inventory only after cleanup succeeds.
+ if($KeepControlFiles){return}
+ # Keep the cleanup inventory until all payload deletions have succeeded or been queued.
+ Remove-Item -LiteralPath (Join-Path $Directory 'manifest.json') -Force
  foreach($dir in @(Get-ChildItem $Directory -Directory -Recurse|Sort-Object {$_.FullName.Length} -Descending)+@(Get-Item $Directory)){
-  if(!(Get-ChildItem $dir.FullName -Force|Select-Object -First 1)){Remove-Item $dir.FullName}else{[void][TigirlMove]::MoveFileEx($dir.FullName,$null,4)}
+  if(!(Get-ChildItem $dir.FullName -Force|Select-Object -First 1)){Remove-Item $dir.FullName}else{Queue-Deletion $dir.FullName}
  }
 }
 try {
@@ -146,14 +168,16 @@ try {
   }
  }elseif($Action -in @('UninstallCheck','Uninstall')){
   if(!$record){throw 'Installation record is missing.'}
-  Assert-Package $record.directory|Out-Null
+  Assert-UninstallPackage $record.directory
   if($Action -eq 'Uninstall'){
-   Invoke-Registration $record.directory -Remove
+   ('Stage Unregister '+(Get-Date).ToString('o'))|Add-Content $log -Encoding UTF8
+   if((Get-ComPath 'Registry64') -or (Get-ComPath 'Registry32')){Invoke-Registration $record.directory -Remove}
+   ('Stage FileCleanup '+(Get-Date).ToString('o'))|Add-Content $log -Encoding UTF8
    Remove-MachineEntries
    Add-Type 'using System.Runtime.InteropServices; public static class TigirlMove {[DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] public static extern bool MoveFileEx(string a,string b,int f);}'
    $script:restart=$false
    # All adopted historical versions are constrained to this owned installation root.
-   foreach($dir in Get-ChildItem (Join-Path $InstallRoot 'versions') -Directory){if($dir.Name -match '^[a-f0-9]{16}$' -and (Test-Path (Join-Path $dir.FullName 'manifest.json'))){Remove-Version $dir.FullName}}
+   foreach($dir in Get-ChildItem (Join-Path $InstallRoot 'versions') -Directory){if($dir.Name -match '^[a-f0-9]{16}$' -and (Test-Path (Join-Path $dir.FullName 'manifest.json'))){Remove-Version $dir.FullName -KeepControlFiles:($dir.FullName -eq $record.directory)}}
    Remove-Item $NativeTigerRecord
    if($script:restart){exit 3010}
   }

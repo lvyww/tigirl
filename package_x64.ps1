@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version='2026.9.10.1',
+    [string]$Version='2026.9.10.2',
     [string]$DataSource="$PSScriptRoot\..\bime_codex_src_20260513\release_arm64",
     [switch]$SkipBuild
 )
