@@ -1,3 +1,23 @@
+## Compact native settings styling
+
+- Keep the existing dense four-page layout; replace page buttons with a native
+  tab control, including Ctrl+Tab / Ctrl+Shift+Tab navigation.
+- Use DengXian for interface text and classic native control styles; unify
+  static/checkbox backgrounds with the page while preserving font previews.
+- Put all page controls in a child container inside the full native tab frame,
+  using its adjusted display rectangle. Keep white editable fields on a system
+  gray page; rely on classic control borders without additional group boxes.
+- Distinguish descriptions with 13-DIP muted text while option labels stay
+  16 DIP; preserve high-contrast text and prominent save errors.
+  Description styling is built/tested but not installed: local UAC was canceled.
+- Build ARM64 and x64 settings tools. Isolated real-control tests pass at
+  96/144/192 DPI, including save/cancel, validation and concurrent configuration.
+- Restore settings regression execution through a dedicated probe executable;
+  the removed scheme-manager CLI is no longer used to enter these tests.
+- Installed locally as ARM64X generation f41e6fce1d53448e with x86 support.
+  Manager hash, registration, URI and shortcut targets verified; evidence:
+  build/settings-style-installed.json. Distribution installer remains unchanged.
+
 ## Locked DLL uninstall cleanup (2026.9.10.2)
 
 - Fix PowerShell string marshaling at MoveFileEx: pass native NULL with

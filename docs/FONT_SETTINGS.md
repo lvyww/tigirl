@@ -24,3 +24,21 @@
 且未切换为输入桌面的 Windows desktop 上绘制，生成
 `build/font-settings-{96,144,192}.png` 和 `build/font-dropdown-{96,144,192}.png`。
 当前字体集合250项；截图确认各列表项按自己的字体显示。
+
+## 设置窗口原生样式
+
+设置窗口保留四页与紧凑双列布局，顶部改为原生 Tab 控件，支持标签上的
+方向键，以及 Ctrl+Tab / Ctrl+Shift+Tab 切页。界面字体指定等线（DengXian），
+候选字体列表仍使用每个字体自身预览。使用旧版经典控件风格，将内容放入按 TabCtrl_AdjustRect 布局的子容器，统一使用系统浅灰底，
+输入框保留白底，使用经典控件自身的边框区分，不额外叠加分组框。
+
+回归使用独立 `tools/InputSettingsProbe.vcxproj`，直接调用生产设置窗口，
+不再依赖已移除的方案管理测试命令。构建 Release ARM64 后，将
+`build/tests/ARM64/input_settings_probe.exe` 复制到
+`build/ARM64X/ARM64EC/Release/`（复用旁边的内置字体），运行
+`python3 tests/input_settings_test.py`。检查原生标签通知、三档 DPI 的控件范围、
+字体预览、保存/取消、参数校验及并发字段保留；输入页截图为
+`build/input-settings-{96,144,192}.png`。
+
+选项名称及输入控件使用 16 DIP 等线；辅助说明和底部保存提示使用 13 DIP
+等线、深灰色。高对比度模式使用系统文字色；保存失败信息恢复正常字号与文字色。

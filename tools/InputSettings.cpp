@@ -19,6 +19,7 @@
 #include <commctrl.h>
 #include <iomanip>
 namespace {
+constexpr int Pages=221;
 struct Flag {const char16_t* key;bool tiger::Config::*member;};
 const Flag flags[]={
     {u"默认中文",&tiger::Config::defaultChinese},{u"shift切换中英文",&tiger::Config::shiftToggle},
@@ -36,32 +37,54 @@ constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDupl
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
 struct Dialog {
-    HWND window=nullptr;HFONT font=nullptr;std::filesystem::path path;
+    HWND window=nullptr,content=nullptr;HFONT font=nullptr,helpFont=nullptr;std::filesystem::path path;
     std::vector<std::u16string> themes;
     std::unique_ptr<FontChooser> fonts;
     tiger::Config initial;tiger::CandidateStyle initialStyle;int buildingPage=-1;bool saved=false;std::wstring error;
     tiger::SentenceSettings initialSentence;
-    struct Control {HWND window;int x,y,w,h,page;};std::vector<Control> controls;
-    ~Dialog(){if(IsWindow(window))DestroyWindow(window);if(font)DeleteObject(font);}
-    HWND item(int id){return GetDlgItem(window,id);}
-    void control(int id,const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int w,int h) {
+    struct Control {HWND window;int x,y,w,h,page;bool help;};std::vector<Control> controls;
+    ~Dialog(){if(IsWindow(window))DestroyWindow(window);if(font)DeleteObject(font);if(helpFont)DeleteObject(helpFont);}
+    HWND item(int id){for(auto c:controls)if(GetDlgCtrlID(c.window)==id)return c.window;return nullptr;}
+    static LRESULT CALLBACK contentProcedure(HWND hwnd,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR) {
+        switch(message) {
+        case WM_COMMAND:case WM_NOTIFY:case WM_DRAWITEM:case WM_MEASUREITEM:
+        case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORBTN:
+            return SendMessageW(GetParent(hwnd),message,w,l);
+        }
+        return DefSubclassProc(hwnd,message,w,l);
+    }
+    void control(int id,const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int w,int h,bool help=false) {
         if(buildingPage>=0)y+=40;
-        auto child=CreateWindowExW(type==std::wstring_view(L"EDIT")?WS_EX_CLIENTEDGE:0,type,text,WS_CHILD|WS_VISIBLE|style,x,y,w,h,window,reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),GetModuleHandleW(nullptr),nullptr);
-        if(!child)throw std::runtime_error("Cannot create input settings control");controls.push_back({child,x,y,w,h,buildingPage});
+        auto child=CreateWindowExW(type==std::wstring_view(L"EDIT")?WS_EX_CLIENTEDGE:0,type,text,WS_CHILD|WS_VISIBLE|style,x,y,w,h,buildingPage>=0?content:window,reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),GetModuleHandleW(nullptr),nullptr);
+        if(!child)throw std::runtime_error("Cannot create input settings control");controls.push_back({child,x,y,w,h,buildingPage,help});
     }
     void scale(UINT dpi) {
         auto px=[&](int n){return MulDiv(n,static_cast<int>(dpi),96);};
-        auto next=CreateFontW(-px(16),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,0,L"Segoe UI");
+        auto next=CreateFontW(-px(16),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,0,L"DengXian");
         if(!next)throw std::runtime_error("Cannot create input settings font");
-        for(auto c:controls){SendMessageW(c.window,WM_SETFONT,reinterpret_cast<WPARAM>(next),TRUE);MoveWindow(c.window,px(c.x),px(c.y),px(c.w),px(c.h),TRUE);}
+        auto nextHelp=CreateFontW(-px(13),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,0,L"DengXian");
+        if(!nextHelp){DeleteObject(next);throw std::runtime_error("Cannot create settings description font");}
+        RECT pane{};
+        for(auto c:controls){
+            SendMessageW(c.window,WM_SETFONT,reinterpret_cast<WPARAM>(c.help && !(GetDlgCtrlID(c.window)==Notice && !error.empty())?nextHelp:next),TRUE);
+            if(c.window==content)MoveWindow(content,pane.left,pane.top,pane.right-pane.left,pane.bottom-pane.top,TRUE);
+            else MoveWindow(c.window,px(c.x)-(c.page>=0?pane.left:0),px(c.y)-(c.page>=0?pane.top:0),px(c.w),px(c.h),TRUE);
+            if(c.window==item(Pages)) {
+                GetClientRect(c.window,&pane);TabCtrl_AdjustRect(c.window,FALSE,&pane);
+                MapWindowPoints(c.window,window,reinterpret_cast<POINT*>(&pane),2);
+            }
+        }
         if(font)DeleteObject(font);font=next;
+        if(helpFont)DeleteObject(helpFont);helpFont=nextHelp;
         if(fonts)fonts->scale(dpi);
-        RECT bounds{0,0,px(620),px(500)};
+        RECT bounds{0,0,px(620),px(520)};
         if(!AdjustWindowRectExForDpi(&bounds,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,WS_EX_CONTROLPARENT,GetDpiForWindow(window)))throw std::runtime_error("Cannot size input settings window");
         SetWindowPos(window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     }
     void page(int selected) {
+        TabCtrl_SetCurSel(item(Pages),selected);
         for(auto c:controls)ShowWindow(c.window,c.page<0 || c.page==selected?SW_SHOW:SW_HIDE);
+        RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
     }
     // Render the real controls without showing or activating the test window.
     void captureSentence(const std::filesystem::path& destination,int selectedPage=3) {
@@ -74,7 +97,7 @@ struct Dialog {
         void* pixels=nullptr;HDC dc=CreateCompatibleDC(nullptr);
         HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,nullptr,0);
         if(!dc || !bitmap){if(bitmap)DeleteObject(bitmap);if(dc)DeleteDC(dc);throw std::runtime_error("Cannot create settings capture");}
-        const auto previous=SelectObject(dc,bitmap);FillRect(dc,&client,reinterpret_cast<HBRUSH>(COLOR_WINDOW+1));
+        const auto previous=SelectObject(dc,bitmap);FillRect(dc,&client,GetSysColorBrush(COLOR_BTNFACE));
         if(list)SendMessageW(list,WM_PRINT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT|PRF_NONCLIENT|PRF_ERASEBKGND);
         else for(auto c:controls)if(c.page<0 || c.page==selectedPage) {
             RECT rect{};GetWindowRect(c.window,&rect);MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
@@ -115,13 +138,19 @@ struct Dialog {
         result+=u"0X";result+=digits[vk>>4];result+=digits[vk&15];return result;
     }
     void create() {
-        control(InputPage,L"BUTTON",L"输入行为",WS_TABSTOP,18,10,140,30);
-        control(AppearancePage,L"BUTTON",L"候选外观",WS_TABSTOP,170,10,140,30);
-        control(ShortcutPage,L"BUTTON",L"操作快捷键",WS_TABSTOP,322,10,140,30);
-        control(SentencePage,L"BUTTON",L"整句输入",WS_TABSTOP,474,10,128,30);
+        control(Pages,WC_TABCONTROLW,L"",WS_TABSTOP|WS_CLIPSIBLINGS,8,8,604,408);
+        for(const auto title:{L"输入行为",L"候选外观",L"操作快捷键",L"整句输入"}) {
+            TCITEMW tab{};tab.mask=TCIF_TEXT;tab.pszText=const_cast<wchar_t*>(title);
+            TabCtrl_InsertItem(item(Pages),TabCtrl_GetItemCount(item(Pages)),&tab);
+        }
+        SetWindowPos(item(Pages),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+        control(222,L"STATIC",L"",WS_CLIPCHILDREN,12,40,596,372);
+        content=item(222);
+        SetWindowLongPtrW(content,GWL_EXSTYLE,GetWindowLongPtrW(content,GWL_EXSTYLE)|WS_EX_CONTROLPARENT);
+        if(!SetWindowSubclass(content,contentProcedure,1,0))throw std::runtime_error("Cannot initialize settings page container");
         buildingPage=0;
         for(int i=0;i<static_cast<int>(std::size(flags));++i) {
-            control(100+i,L"BUTTON",wide(flags[i].key),BS_AUTOCHECKBOX|WS_TABSTOP,18+(i/8)*302,18+(i%8)*32,290,27);
+            control(100+i,L"BUTTON",wide(flags[i].key),BS_AUTOCHECKBOX|WS_TABSTOP,18+(i/8)*302,18+(i%8)*32,280,27);
             SendMessageW(item(100+i),BM_SETCHECK,initial.*flags[i].member?BST_CHECKED:BST_UNCHECKED,0);
         }
         control(0,L"STATIC",L"最大码长（1–16）",0,18,284,180,25);
@@ -156,18 +185,18 @@ struct Dialog {
         control(CandidateDelay,L"EDIT",std::to_wstring(initialStyle.candidateDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,190,247,85,28);
         control(0,L"STATIC",L"注释／拆分延时",0,300,251,175,25);
         control(AnnotationDelay,L"EDIT",std::to_wstring(initialStyle.annotationDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,490,247,100,28);
-        control(0,L"STATIC",L"范围 0–60000；0 为立即显示，从本次输入开始分别计时。",0,18,281,580,20);
+        control(0,L"STATIC",L"范围 0–60000；0 为立即显示，从本次输入开始分别计时。",0,18,281,580,20,true);
         control(0,L"STATIC",L"编码伪装（留空关闭）",0,18,311,190,25);
         control(CodeMask,L"EDIT",wide(initialStyle.codeMask.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,215,307,375,28);
-        control(0,L"STATIC",L"如填 ●，ab 显示为 ●●；不改变实际查码和上屏文字。",0,18,341,580,20);
+        control(0,L"STATIC",L"如填 ●，ab 显示为 ●●；不改变实际查码和上屏文字。",0,18,341,580,20,true);
         buildingPage=2;
         control(AddEnabled,L"BUTTON",L"启用手动加词",BS_AUTOCHECKBOX|WS_TABSTOP,18,20,570,28);
         control(AddShortcut,HOTKEY_CLASSW,L"",WS_TABSTOP,18,60,570,32);
         control(RecentEnabled,L"BUTTON",L"启用最近方案切换",BS_AUTOCHECKBOX|WS_TABSTOP,18,125,570,28);
         control(RecentShortcut,HOTKEY_CLASSW,L"",WS_TABSTOP,18,165,570,32);
-        control(0,L"STATIC",L"点击快捷键框后直接按键；组合键需包含 Ctrl 或 Alt。",0,18,220,570,50);
+        control(0,L"STATIC",L"点击快捷键框后直接按键；组合键需包含 Ctrl 或 Alt。",0,18,220,570,50,true);
         control(SelectionEditor,L"BUTTON",L"编辑选重键…",WS_TABSTOP,18,290,220,32);
-        control(0,L"STATIC",L"选重键在独立窗口中保存。",0,260,295,320,25);
+        control(0,L"STATIC",L"选重键在独立窗口中保存。",0,260,295,320,25,true);
         SendMessageW(item(AddEnabled),BM_SETCHECK,initial.addWordEnabled?BST_CHECKED:BST_UNCHECKED,0);
         SendMessageW(item(RecentEnabled),BM_SETCHECK,initial.recentSchemaEnabled?BST_CHECKED:BST_UNCHECKED,0);
         SendMessageW(item(AddShortcut),HKM_SETHOTKEY,hotkey(initial.addWordShortcut),0);
@@ -183,15 +212,15 @@ struct Dialog {
         control(SentenceRetained,L"EDIT",std::to_wstring(initialSentence.minimumRetainedRaw).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,430,130,155,28);
         control(0,L"STATIC",L"仅使用最优码组句的高频字数量",0,18,180,390,28);
         control(SentenceCommon,L"EDIT",std::to_wstring(initialSentence.commonCharacterLimit).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,430,176,155,28);
-        control(0,L"STATIC",L"默认 1500；设为 0 时不按高频字限制全码。",0,18,214,580,28);
+        control(0,L"STATIC",L"默认 1500；设为 0 时不按高频字限制全码。",0,18,214,580,28,true);
         control(0,L"STATIC",L"允许全码组句的例外字符（可留空）",0,18,258,580,28);
         control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,18,292,567,30);
         SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
-        control(0,L"STATIC",L"直接填写汉字，无需分隔；这些字不受上方的最优码限制。",0,18,332,580,28);
+        control(0,L"STATIC",L"直接填写汉字，无需分隔；这些字不受上方的最优码限制。",0,18,332,580,28,true);
         buildingPage=-1;
-        control(Notice,L"STATIC",L"保存更改后自动更新设置，清除未完成编码，并应用默认中英文模式。",0,18,403,582,40);
-        control(Save,L"BUTTON",L"保存",BS_DEFPUSHBUTTON|WS_TABSTOP,390,452,95,30);
-        control(Cancel,L"BUTTON",L"取消",WS_TABSTOP,500,452,95,30);
+        control(Notice,L"STATIC",L"保存更改后自动更新设置，清除未完成编码，并应用默认中英文模式。",0,18,424,582,36,true);
+        control(Save,L"BUTTON",L"保存",BS_DEFPUSHBUTTON|WS_TABSTOP,390,480,95,30);
+        control(Cancel,L"BUTTON",L"取消",WS_TABSTOP,500,480,95,30);
         scale(GetDpiForWindow(window));page(0);
     }
     int number(int id,int limit) {
@@ -286,6 +315,17 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
     if(message==WM_NCCREATE){self=static_cast<Dialog*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);self->window=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     if(!self)return DefWindowProcW(window,message,w,l);
     try {
+        if(message==WM_CTLCOLORSTATIC) {
+            const auto dc=reinterpret_cast<HDC>(w);
+            bool help=false;for(auto c:self->controls)if(c.window==reinterpret_cast<HWND>(l)){help=c.help;break;}
+            HIGHCONTRASTW contrast{sizeof(contrast)};SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0);
+            const bool failure=reinterpret_cast<HWND>(l)==self->item(Notice) && !self->error.empty();
+            SetTextColor(dc,help && !failure && !(contrast.dwFlags&HCF_HIGHCONTRASTON)?RGB(96,96,96):GetSysColor(COLOR_BTNTEXT));SetBkColor(dc,GetSysColor(COLOR_BTNFACE));
+            return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_BTNFACE));
+        }
+        if(message==WM_NOTIFY && reinterpret_cast<NMHDR*>(l)->idFrom==Pages && reinterpret_cast<NMHDR*>(l)->code==TCN_SELCHANGE) {
+            self->page(TabCtrl_GetCurSel(self->item(Pages)));return 0;
+        }
         if(message==WM_DRAWITEM && w==FontName && self->fonts){self->fonts->draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_MEASUREITEM && w==FontName && self->fonts){self->fonts->measure(*reinterpret_cast<MEASUREITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_COMMAND && LOWORD(w)==FontName && HIWORD(w)==CBN_SELCHANGE){InvalidateRect(self->item(FontName),nullptr,TRUE);return 0;}
@@ -298,18 +338,18 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
         std::wstring detail(static_cast<std::size_t>(length),L'\0');
         if(length>0)MultiByteToWideChar(CP_UTF8,0,error.what(),-1,detail.data(),length);
         if(!detail.empty())detail.pop_back();
-        self->error=L"保存失败："+detail;SetWindowTextW(self->item(Notice),self->error.c_str());
+        self->error=L"保存失败："+detail;SendMessageW(self->item(Notice),WM_SETFONT,reinterpret_cast<WPARAM>(self->font),TRUE);SetWindowTextW(self->item(Notice),self->error.c_str());
     }
     return DefWindowProcW(window,message,w,l);
 }
 }
 bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode) {
-    INITCOMMONCONTROLSEX common{sizeof(common),ICC_HOTKEY_CLASS};if(!InitCommonControlsEx(&common))throw std::runtime_error("Cannot initialize shortcut controls");
+    INITCOMMONCONTROLSEX common{sizeof(common),ICC_HOTKEY_CLASS|ICC_TAB_CLASSES};if(!InitCommonControlsEx(&common))throw std::runtime_error("Cannot initialize settings controls");
     Dialog dialog;dialog.path=path;
     const auto settings=tiger::readConfiguration(path);
     dialog.initial=tiger::parseEngineSettings(settings);dialog.initialStyle=tiger::parseCandidateStyle(settings);
     dialog.initialSentence=tiger::parseSentenceSettings(settings);
-    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerInputSettings";type.hIcon=LoadIconW(type.hInstance,MAKEINTRESOURCEW(12));type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
+    WNDCLASSW type{};type.hInstance=GetModuleHandleW(nullptr);type.lpfnWndProc=procedure;type.lpszClassName=L"NativeTigerInputSettings";type.hIcon=LoadIconW(type.hInstance,MAKEINTRESOURCEW(12));type.hCursor=LoadCursorW(nullptr,IDC_ARROW);type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_BTNFACE+1);
     if(!RegisterClassW(&type) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)throw std::runtime_error("Cannot register input settings window");
     if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"虎娘 · 输入设置",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,640,460,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create input settings window");
     dialog.create();
@@ -343,13 +383,29 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         if(dialog.fonts->previewSize()!=dialog.initialStyle.fontSize)throw std::runtime_error("Preview did not use saved font size");
         for(UINT dpi:{96u,144u,192u}) {
             dialog.scale(dpi);RECT client{};GetClientRect(dialog.window,&client);
+            for(int page=0;page<4;++page) {
+                TabCtrl_SetCurSel(dialog.item(Pages),page);
+                NMHDR notification{dialog.item(Pages),Pages,TCN_SELCHANGE};
+                SendMessageW(dialog.window,WM_NOTIFY,Pages,reinterpret_cast<LPARAM>(&notification));
+                for(auto control:dialog.controls)if(control.page>=0 &&
+                    (((GetWindowLongPtrW(control.window,GWL_STYLE)&WS_VISIBLE)!=0)!=(control.page==page)))
+                    throw std::runtime_error("Native tab did not select the requested page");
+            }
             for(auto control:dialog.controls) {
                 RECT bounds{};GetWindowRect(control.window,&bounds);
                 MapWindowPoints(nullptr,dialog.window,reinterpret_cast<POINT*>(&bounds),2);
                 if(bounds.left<0 || bounds.top<0 || bounds.right>client.right || bounds.bottom>client.bottom)
                     throw std::runtime_error("Input settings control exceeds client bounds");
+                if(control.page>=0) {
+                    RECT pageBounds{};GetClientRect(dialog.content,&pageBounds);
+                    MapWindowPoints(dialog.window,dialog.content,reinterpret_cast<POINT*>(&bounds),2);
+                    if(GetParent(control.window)!=dialog.content || bounds.left<0 || bounds.top<0 ||
+                        bounds.right>pageBounds.right || bounds.bottom>pageBounds.bottom)
+                        throw std::runtime_error("Setting is outside its tab page container: "+std::to_string(GetDlgCtrlID(control.window)));
+                }
             }
             if(testMode==1){
+                dialog.page(0);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"input-settings-"+std::to_wstring(dpi)+L".bmp"),0);
                 if(dialog.fonts->items().size()<=3)throw std::runtime_error("System font catalog is incomplete");
                 const auto originalFont=dialog.fonts->selected();
                 if(!dialog.fonts->select(L"Segoe UI"))throw std::runtime_error("System font alias not recognized");
@@ -486,6 +542,10 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
     ShowWindow(dialog.window,SW_SHOW);SetFocus(dialog.item(100));
     MSG message{};while(IsWindow(dialog.window)) {
         const auto result=GetMessageW(&message,nullptr,0,0);if(result<=0){if(!result)PostQuitMessage(static_cast<int>(message.wParam));break;}
+        if(message.message==WM_KEYDOWN && message.wParam==VK_TAB && (GetKeyState(VK_CONTROL)&0x8000)) {
+            const int delta=(GetKeyState(VK_SHIFT)&0x8000)?3:1;
+            dialog.page((TabCtrl_GetCurSel(dialog.item(Pages))+delta)%4);SetFocus(dialog.item(Pages));continue;
+        }
         if(!IsDialogMessageW(dialog.window,&message)){TranslateMessage(&message);DispatchMessageW(&message);}
     }
     if(enabled){EnableWindow(owner,TRUE);SetActiveWindow(owner);}return dialog.saved;

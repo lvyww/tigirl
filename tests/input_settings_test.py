@@ -4,7 +4,7 @@ from PIL import Image
 from windows_process import run_windows, PS
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-EXE=ROOT/'build/ARM64X/ARM64EC/Release/Tigirl.exe'
+EXE=ROOT/'build/ARM64X/ARM64EC/Release/input_settings_probe.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as temporary:
  root=Path(temporary);(root/'.schema-manager-test').touch()
@@ -17,14 +17,16 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
  font_catalog=(root/'font-catalog.tsv').read_text().splitlines()
  assert font_catalog and font_catalog[0].startswith('#') and len(font_catalog)>3,font_catalog
  for dpi in [96,144,192]:
+  with Image.open(root/f'input-settings-{dpi}.bmp') as capture:
+   capture.convert('RGB').save(ROOT/f'build/input-settings-{dpi}.png')
   with Image.open(root/f'font-dropdown-{dpi}.bmp') as capture:
    capture.convert('RGB').save(ROOT/f'build/font-dropdown-{dpi}.png')
   with Image.open(root/f'font-settings-{dpi}.bmp') as capture:
    capture.convert('RGB').save(ROOT/f'build/font-settings-{dpi}.png')
   with Image.open(root/f'sentence-settings-{dpi}.bmp') as capture:
    for x,y,w,h in [(430,170,155,28),(430,216,155,28),(18,332,567,30)]:
-    box=tuple(round(n*dpi/96) for n in [x+5,y+5,x+w-5,y+h-5])
-    assert sum(value<64 for value in capture.convert('L').crop(box).tobytes())>10,(dpi,box,'Input field was not rendered')
+    box=tuple(round(n*dpi/96) for n in [x+2,y+3,x+w-3,y+h-3])
+    assert sum(value<160 for value in capture.convert('L').crop(box).tobytes())>10,(dpi,box,'Input field was not rendered')
    capture.convert('RGB').save(ROOT/f'build/sentence-settings-{dpi}.png')
  text=config.read_text(encoding='utf-8-sig')
  for expected in ['自动启用整句模式\t否','整句自动提前上屏\t是','允许单字重码组句\t否','保留最少编码数量\t32','高频字仅使用最优码组句\t0','整句允许全码组句白名单\t\n']:
