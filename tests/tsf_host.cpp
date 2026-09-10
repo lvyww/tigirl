@@ -674,6 +674,21 @@ int wmain(int argc,wchar_t** argv) {
                 wait(80);GetWindowRect(candidate,&middle);
                 wait(220);GetWindowRect(candidate,&after);
                 require(middle.bottom-middle.top>before.bottom-before.top && middle.bottom-middle.top<after.bottom-after.top,"No intermediate size frame");
+                // Emulate hosts which invalidate layout while appending text.
+                first.store->layoutReady=false;tapAsync(VK_BACK);tapAsync('B');
+                require(IsWindowVisible(candidate),"Transient layout loss hid the published frame");
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,2400),0);pump();
+                require(IsWindowVisible(candidate),"Queued refresh hid pending-layout frame");
+                first.store->layoutReady=true;
+                ComPtr<ITfTextLayoutSink> layoutSink;check(service.As(&layoutSink));
+                check(layoutSink->OnLayoutChange(first.context.Get(),TF_LC_CHANGE,nullptr));pump();
+                RECT recovered{},recoveredMiddle{},recoveredEnd{};GetWindowRect(candidate,&recovered);
+                wait(80);GetWindowRect(candidate,&recoveredMiddle);wait(220);GetWindowRect(candidate,&recoveredEnd);
+                require(recoveredMiddle.bottom-recoveredMiddle.top>recovered.bottom-recovered.top &&
+                    recoveredMiddle.bottom-recoveredMiddle.top<recoveredEnd.bottom-recoveredEnd.top,"Layout recovery skipped resize animation");
+                first.store->layoutReady=false;tapAsync(VK_BACK);wait(160);
+                require(!IsWindowVisible(candidate),"Unavailable layout retained stale frame past deadline");
+                first.store->layoutReady=true;tapAsync('B');pump();
                 // Retarget a running shrink through an input update, then commit
                 // while another frame notification is queued.
                 SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,static_cast<WORD>(-2400)),0);pump();
@@ -683,7 +698,7 @@ int wmain(int argc,wchar_t** argv) {
                 require(!IsWindow(candidate),"Commit did not immediately remove candidate");
                 wait(250);require(!ownCandidateWindow(),"Queued frame resurrected candidate");
                 SetKeyboardState(saved);check(service->Deactivate());
-                result<<"{\"status\":\"passed\",\"async_refresh_coalesced\":true,\"immediate_show_hide\":true,\"intermediate_geometry\":true,\"input_during_animation\":true,\"commit_cancels_pending_frame\":true,\"physical_focus_validated\":false,\"menu_validated\":false}";
+                result<<"{\"status\":\"passed\",\"async_refresh_coalesced\":true,\"immediate_show_hide\":true,\"intermediate_geometry\":true,\"transient_layout_animation\":true,\"layout_timeout_hides\":true,\"input_during_animation\":true,\"commit_cancels_pending_frame\":true,\"physical_focus_validated\":false,\"menu_validated\":false}";
                 return 0;
             }catch(const std::exception& error){result<<"{\"status\":\"failed\"}";std::ofstream(std::filesystem::path(argv[5])/L"error.txt")<<error.what();throw;}
         }
@@ -1523,8 +1538,10 @@ int wmain(int argc,wchar_t** argv) {
         BSTR label=nullptr; check(candidates->GetString(0,&label)); require(std::wstring(label,SysStringLen(label))==L"交","Wrong UI-less candidate"); SysFreeString(label);
         BOOL shown=TRUE; check(candidates->IsShown(&shown)); require((shown!=FALSE)==nativeUI,"Host UI choice ignored");
         if(nativeUI) {
+            const auto until=GetTickCount64()+160;
+            do{pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<until);
             HWND candidateWindow=ownCandidateWindow();
-            require(!candidateWindow || !IsWindowVisible(candidateWindow),"Stale candidate geometry visible without layout");
+            require(!candidateWindow || !IsWindowVisible(candidateWindow),"Stale candidate geometry visible past layout deadline");
         }
         first.store->layoutReady=true;
         check(first.store->sink->OnLayoutChange(TS_LC_CHANGE,1)); pump();

@@ -13,7 +13,7 @@ public:
     ~CandidateUI();
     void detach();
     void setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts);
-    void update(const RECT* caret,HWND ownerWindow);
+    void update(const RECT* caret,HWND ownerWindow,bool layoutPending=false);
     const std::shared_ptr<Context>& context() const { return state_; }
     STDMETHODIMP QueryInterface(REFIID iid,void** object) override;
     STDMETHODIMP_(ULONG) AddRef() override;
@@ -44,7 +44,7 @@ private:
     CandidateSurface surface_;
     std::vector<std::uint32_t> finalPixels_,scratchPixels_;
     bool finalReady_=false;
-    std::uint64_t visualRevision_=0;
+    std::uint64_t visualRevision_=0,layoutDeadline_=0;
     CandidatePresentation cachedPresentation_;
     UINT cachedDpi_=0,cachedSelection_=UINT_MAX;
     float cachedMaxWidth_=0;

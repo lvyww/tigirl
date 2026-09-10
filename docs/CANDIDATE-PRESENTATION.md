@@ -17,8 +17,13 @@ A 10 ms `WM_TIMER` request draws at most one frame per dispatch. Elapsed wall
 clock time selects the frame, so delayed ticks skip forward rather than
 extending the animation. A changed target starts from the currently published
 rectangle; an unchanged target does not restart the timeline. A pending input
-refresh takes precedence over an old animation frame. Commit, cancel, missing
-caret, UI suppression and teardown stop animation and hide immediately.
+refresh takes precedence over an old animation frame. Commit, cancel, UI suppression and teardown stop animation and hide immediately.
+A transient `TS_E_NOLAYOUT` from the current composition freezes the last
+published frame for at most 100 ms and disables its hit targets. A layout
+notification within that interval resumes animation from the displayed rectangle.
+The deadline does not restart on repeated failures; expiry hides the window.
+Other missing-caret failures still hide immediately. This prevents asynchronous
+host text layout from turning each append into an unanimated first appearance.
 
 Settings on the appearance page:
 

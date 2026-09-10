@@ -32,7 +32,7 @@ void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
     owner_=nullptr; shown_=false; reveal_.reset(); placement_.reset();
     if(window_) {
-        KillTimer(window_,1);KillTimer(window_,3);
+        KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
         const auto window=window_; window_=nullptr;
         SetWindowLongPtrW(window,GWLP_USERDATA,0);
         DestroyWindow(window);
@@ -56,7 +56,7 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { ++visualRevision_;stopAnimation();reveal_.reset(); placement_.reset(); if(window_) { KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
+    if(!shown_) { ++visualRevision_;stopAnimation();reveal_.reset(); placement_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
     else if(window_)schedulePaint();
     return S_OK;
 }
@@ -116,7 +116,7 @@ HRESULT CandidateUI::Abort() {
     ComPtr<ITfTextInputProcessorEx> keepAlive=owner_;
     return owner_->choose(state_,0,true);
 }
-void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
+void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending) {
     if(!owner_ || !state_) return;
     engine_=state_->engine; snapshot_=engine_.snapshot();
     selected_=snapshot_.selectedCandidate>=0?static_cast<UINT>(snapshot_.selectedCandidate):static_cast<UINT>(snapshot_.page*engine_.pageSize());
@@ -124,13 +124,21 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
     for(UINT i=0;i<snapshot_.total;i+=static_cast<UINT>(engine_.pageSize())) pages_.push_back(i);
     if(shown_)reveal_.update(snapshot_,style_,GetTickCount64());
     // The candidate model must advance even while the application has no layout.
-    // Hide stale geometry until a subsequent layout notification supplies it.
+    // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into
+    // a fresh appearance. Freeze the published frame, with a bounded deadline.
     hasCaret_=caret!=nullptr;
     if(!caret) {
         ++visualRevision_;stopAnimation();itemRects_.clear();
-        if(window_) ShowWindow(window_,SW_HIDE);
+        if(layoutPending && shown_ && window_ && IsWindowVisible(window_)) {
+            const auto now=GetTickCount64();
+            if(!layoutDeadline_)layoutDeadline_=now+100;
+            if(now<layoutDeadline_ && SetTimer(window_,4,static_cast<UINT>(layoutDeadline_-now),nullptr))return;
+        }
+        layoutDeadline_=0;
+        if(window_){KillTimer(window_,4);ShowWindow(window_,SW_HIDE);}
         return;
     }
+    layoutDeadline_=0;if(window_)KillTimer(window_,4);
     caret_=candidatePhysicalCaret(*caret,ownerWindow);
     CandidateDpiScope dpiScope;
     if(!shown_) return;
@@ -168,6 +176,7 @@ void CandidateUI::refreshReveal() {
     if(!window_)return;
     KillTimer(window_,1);
     if(!owner_ || !state_ || !shown_)return;
+    if(!hasCaret_ && layoutDeadline_)return;
     if(rendererDirty_ || !renderer_) {
         const auto revision=visualRevision_;
         auto next=std::make_shared<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});
@@ -268,6 +277,14 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
             self->refreshPending_=false;
             try{self->refreshReveal();}catch(...){self->stopAnimation();self->itemRects_.clear();if(self->window_ && self->retryCount_++<3)SetTimer(window,3,100,nullptr);}
             return 0;
+        }
+        if(message==WM_TIMER && w==4) {
+            if(self->layoutDeadline_ && !self->hasCaret_) {
+                const auto now=GetTickCount64();
+                if(now<self->layoutDeadline_){SetTimer(window,4,static_cast<UINT>(self->layoutDeadline_-now),nullptr);return 0;}
+                self->layoutDeadline_=0;self->stopAnimation();self->itemRects_.clear();ShowWindow(window,SW_HIDE);
+            }
+            KillTimer(window,4);return 0;
         }
         if(message==WM_TIMER && w==1) {KillTimer(window,1);self->schedulePaint();return 0;}
         if(message==WM_TIMER && w==2) {self->animate();return 0;}

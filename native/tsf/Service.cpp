@@ -505,15 +505,18 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
         ui_->Show(show);
     }
     ComPtr<ITfContextView> view; ComPtr<ITfRange> range;
-    RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false;
+    RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false,layoutPending=false;
     if(SUCCEEDED(context->context->GetActiveView(&view))) {
         view->GetWnd(&owner);
         if(context->composition && SUCCEEDED(context->composition->GetRange(&range))) {
-            if(SUCCEEDED(range->Collapse(cookie,TF_ANCHOR_END)))
-                hasCaret=SUCCEEDED(view->GetTextExt(cookie,range.Get(),&caret,&clipped)) && caret.bottom>caret.top;
+            if(SUCCEEDED(range->Collapse(cookie,TF_ANCHOR_END))) {
+                const auto layout=view->GetTextExt(cookie,range.Get(),&caret,&clipped);
+                hasCaret=SUCCEEDED(layout) && caret.bottom>caret.top;
+                layoutPending=layout==TS_E_NOLAYOUT;
+            }
         }
     }
-    ui_->update(hasCaret?&caret:nullptr,owner);
+    ui_->update(hasCaret?&caret:nullptr,owner,layoutPending);
     if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->UpdateUIElement(uiId_);
 }
 void Service::reloadSchema(std::u16string name) {
