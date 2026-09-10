@@ -105,10 +105,12 @@ inline void run(ITfThreadMgr* manager,HWND host,const std::filesystem::path& out
     addWordSeen=false;const auto timer=SetTimer(nullptr,0,100,closeAddWord);require(timer!=0,"Cannot schedule add-word close");
     check(button->OnMenuSelect(5));pump();KillTimer(nullptr,timer);
     require(addWordSeen,"Menu add-word dialog did not open");
-    check(button->OnMenuSelect(8));pump();
     ComPtr<ITfCompartmentMgr> modes;check(manager->QueryInterface(IID_PPV_ARGS(&modes)));
     ComPtr<ITfCompartment> open;check(modes->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE,&open));
+    VARIANT before;VariantInit(&before);check(open->GetValue(&before));
+    require(button->OnMenuSelect(8)==E_INVALIDARG,"Removed English menu action was accepted");pump();
     VARIANT value;VariantInit(&value);check(open->GetValue(&value));
-    require(value.vt==VT_I4 && value.lVal==0,"English menu action did not update system mode");VariantClear(&value);
+    require(value.vt==before.vt && (value.vt!=VT_I4 || value.lVal==before.lVal),"Removed menu action changed system mode");
+    VariantClear(&before);VariantClear(&value);
 }
 }

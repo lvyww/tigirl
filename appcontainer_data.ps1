@@ -2,7 +2,7 @@
 # installation directory, external scheme source, or executable directory.
 function Set-NativeTigerAppContainerAccess([string]$Root) {
     $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
-    if ([IO.Path]::GetFileName($Root) -ne 'NativeTiger') { throw 'Expected a NativeTiger data directory.' }
+    if ([IO.Path]::GetFileName($Root) -ne 'Tigirl') { throw 'Expected a Tigirl data directory.' }
     New-Item -ItemType Directory -Force -Path $Root | Out-Null
     $items = @((Get-Item -LiteralPath $Root)) + @(Get-ChildItem -LiteralPath $Root -Recurse -Force)
     foreach ($item in $items) {

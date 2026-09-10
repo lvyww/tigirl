@@ -5,8 +5,13 @@ if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne '
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $before=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'))
-$config=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'NativeTiger\config.txt'
-$hash=(Get-FileHash $config).Hash
+function Get-ConfigSnapshot {
+ @('Tigirl','NativeTiger')|ForEach-Object {
+  $file=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ($_+'\config.txt')
+  if(Test-Path -LiteralPath $file){$file+':'+(Get-FileHash -LiteralPath $file).Hash}else{$file+':absent'}
+ }
+}
+$configBefore=(Get-ConfigSnapshot) -join '|'
 $existed=Test-Path (Join-Path $env:ProgramFiles 'Tigirl')
 $launch=Get-Date;$p=Start-Process $Installer -PassThru
 $window=$null;$button=$null;$dialog=''
@@ -28,7 +33,7 @@ try{
 if(!$p.WaitForExit(5000)){throw 'Architecture rejection did not terminate.'}
 if($p.ExitCode -eq 0){throw 'Installer accepted ARM64.'}
 $after=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'))
-if(($before -join '|') -ne ($after -join '|') -or (Get-FileHash $config).Hash -ne $hash){throw 'Rejected installer changed live registration or configuration.'}
+if(($before -join '|') -ne ($after -join '|') -or ((Get-ConfigSnapshot) -join '|') -ne $configBefore){throw 'Rejected installer changed live registration or configuration.'}
 if((Test-Path (Join-Path $env:ProgramFiles 'Tigirl')) -ne $existed){throw 'Rejected installer created a program directory.'}
 $result=@{status='passed';exit_code=$p.ExitCode;dialog=$dialog;live_registration_preserved=$true;configuration_preserved=$true;program_directory_preserved=$true}
 $result|ConvertTo-Json|Set-Content "$PSScriptRoot\..\build\setup-arm64-rejection.json" -Encoding UTF8

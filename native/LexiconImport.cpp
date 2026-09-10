@@ -4,6 +4,7 @@
 #include "AddWord.h"
 #include "Text.h"
 #include "OrdinalCase.h"
+#include "Unicode.h"
 #include <cstdint>
 #include <algorithm>
 #include <map>
@@ -81,7 +82,7 @@ std::map<std::u16string,std::u16string> constructLookup(const std::vector<Import
         const auto code=normalizeAddedCode(row.code);const auto text=commitText(row.text);
         if(!code.empty() && wordTextElements(text).size()==1) result.emplace(text,code);
     }
-    auto rank=[](std::u16string_view code) {return !u_isalpha(code.front())?0:code.front()==u'o'?1:code.front()==u'z'?2:3;};
+    auto rank=[](std::u16string_view code) {return !unicode::isLetter(code.front())?0:code.front()==u'o'?1:code.front()==u'z'?2:3;};
     for(const auto& entry:main) {
         const auto code=normalizeAddedCode(entry.code);if(code.size()<2) continue;
         for(const auto& packed:entry.candidates) {

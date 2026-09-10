@@ -8,7 +8,7 @@ The first load builds a native binary automatically. Subsequent loads compare
 SHA-256 content fingerprints and reuse unchanged validated caches. Ordinary TSF
 input continues to map the same read-only binary; no per-key helper or IPC was added.
 
-The default root is `%LOCALAPPDATA%\NativeTiger\码表`. The selected root is saved
+The default root is `%LOCALAPPDATA%\Tigirl\码表`. The selected root is saved
 in `config.txt` as `码表存储位置`. To use the existing TigerClaw tables, browse to
 `C:\Users\yc\Desktop\bime_codex_src_20260513\release_arm64\码表` (the root, not
 one individual schema). Source directories are only read, never rewritten.

@@ -4,7 +4,7 @@ $Package=[IO.Path]::GetFullPath($Package)
 . "$Package\common.ps1"
 $manifest=Assert-Package $Package
 $fixture=Join-Path $env:TEMP ('NativeTiger-release-'+[guid]::NewGuid().ToString('N'))
-$env:NATIVE_TIGER_USER_ROOT=Join-Path $fixture 'NativeTiger'
+$env:NATIVE_TIGER_USER_ROOT=Join-Path $fixture 'Tigirl'
 $root=$env:NATIVE_TIGER_USER_ROOT
 function Check($Condition,$Message){if(!$Condition){throw $Message}}
 function Tool($Action,$Value=''){

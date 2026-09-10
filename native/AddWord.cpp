@@ -1,6 +1,6 @@
 #define NOMINMAX
 #include <windows.h>
-#include <icu.h>
+#include "Unicode.h"
 #include "AddWord.h"
 #include <algorithm>
 #include <limits>
@@ -63,12 +63,12 @@ std::u16string parseAddedWord(std::u16string_view text) {
 std::u16string normalizeAddedCode(std::u16string_view code) {
     auto input=trim(code); std::u16string normalized;
     for(std::size_t i=0;i<input.size();) {
-        UChar32 c=input[i++];
+        std::uint32_t c=input[i++];
         if(c>=0xd800 && c<=0xdbff && i<input.size() && input[i]>=0xdc00 && input[i]<=0xdfff)
             c=0x10000+((c-0xd800)<<10)+(input[i++]-0xdc00);
         // .NET invariant casing preserves capital I-with-dot instead of
         // ICU's locale-independent simple mapping to ASCII i.
-        if(c!=0x0130) c=u_tolower(c);
+        if(c!=0x0130) c=unicode::toLower(c);
         if(c>0xffff) { normalized+=static_cast<char16_t>(0xd800+((c-0x10000)>>10)); normalized+=static_cast<char16_t>(0xdc00+((c-0x10000)&1023)); }
         else normalized+=static_cast<char16_t>(c);
     }

@@ -25,7 +25,7 @@ schemas/
 Set `当前码表 SchemaName` to select one. The table must already be a validated
 native v2 binary. This is an interim configuration interface; original text-table
 import and schema selection UI remain unfinished.
-The default root is `%LOCALAPPDATA%\NativeTiger`; isolated tests override it with
+The default root is `%LOCALAPPDATA%\Tigirl`; isolated tests override it with
 `NATIVE_TIGER_USER_ROOT`. Secure-mode activation ignores user schemas.
 
 The short-lived ARM64 native selector provides a validated configuration update:
@@ -230,7 +230,7 @@ executables beside the DLL and dictionary in `build/ARM64/Release`. Installation
 includes their hashes in the immutable package generation and validates every DLL/
 EXE as ARM64. `Tigirl.exe` supports no-argument startup: dictionary and
 companion tools are resolved beside the executable, with the normal
-`%LOCALAPPDATA%/NativeTiger` user root (or the existing `NATIVE_TIGER_USER_ROOT`
+`%LOCALAPPDATA%/Tigirl` user root (or the existing `NATIVE_TIGER_USER_ROOT`
 override). Explicit-path launch and marked test modes remain available.
 
 `tests/package_arm64_test.py` passes read-only installer preflight, verifies staged

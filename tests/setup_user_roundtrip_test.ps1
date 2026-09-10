@@ -2,10 +2,15 @@
 $ErrorActionPreference='Stop'
 $fixture=Join-Path $env:TEMP ('Tigirl-user-roundtrip-'+[guid]::NewGuid().ToString('N'))
 $saved=$env:NATIVE_TIGER_USER_ROOT
-$env:NATIVE_TIGER_USER_ROOT=Join-Path $fixture 'NativeTiger'
+$env:NATIVE_TIGER_USER_ROOT=Join-Path $fixture 'Tigirl'
 $root=$env:NATIVE_TIGER_USER_ROOT
 New-Item $root -ItemType Directory -Force|Out-Null
-$config="当前码表`t虎码字词`r`nCtrl+空格切换中英文`t否`r`n"
+$legacy=Join-Path $fixture 'NativeTiger'
+New-Item "$legacy\码表","$legacy\拼音反查码表" -ItemType Directory -Force|Out-Null
+[IO.File]::WriteAllText("$legacy\码表\legacy-only.txt","ab`t旧数据")
+[IO.File]::WriteAllText("$legacy\拼音反查码表\legacy-only.txt","ceshi 测试")
+$legacyHash=(Get-FileHash "$legacy\码表\legacy-only.txt").Hash
+$config="码表存储位置`t$legacy\码表`r`n拼音反查目录`t$legacy\拼音反查码表`r`n当前码表`t虎码字词`r`nCtrl+空格切换中英文`t否`r`n"
 [IO.File]::WriteAllText("$root\config.txt",$config,[Text.UTF8Encoding]::new($true))
 $hash=(Get-FileHash "$root\config.txt").Hash
 function Check($Value,$Message){if(!$Value){throw $Message}}
@@ -15,6 +20,9 @@ function Run($Action){
 }
 try{
  Run 'Initialize'
+ Check (!(Test-Path "$root\码表\legacy-only.txt") -and !(Test-Path "$root\拼音反查码表\legacy-only.txt")) 'Legacy external data was migrated'
+ Check (!(Test-Path "$root\fixed-path-migrated.txt")) 'Legacy migration marker was created'
+ Check ((Get-FileHash "$legacy\码表\legacy-only.txt").Hash -eq $legacyHash) 'Legacy source changed'
  Check (Test-Path "$root\.setup-user-transaction.json") 'Pending journal missing'
  Check (Test-Path "$root\schemas\虎整句\current.txt") 'Compiled sentence descriptor missing'
  Run 'Rollback'

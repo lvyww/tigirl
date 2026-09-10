@@ -3,5 +3,5 @@
   <PropertyGroup><NativeProbeName>reminder_ledger_probe</NativeProbeName></PropertyGroup>
   <Import Project="EngineProbe.vcxproj" />
   <ItemGroup><ClCompile Remove="engine_probe.cpp" /><ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" /><ClCompile Include="reminder_ledger_probe.cpp" /></ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

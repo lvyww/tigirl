@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\packaging\data.ps1"
 $fixture=Join-Path $env:TEMP ('NativeTiger-package-test-'+[guid]::NewGuid().ToString('N'))
-$source=Join-Path $fixture 'source';$target=Join-Path $fixture 'NativeTiger';$backup=Join-Path $fixture 'backup'
+$source=Join-Path $fixture 'source';$target=Join-Path $fixture 'Tigirl';$backup=Join-Path $fixture 'backup'
 New-Item -ItemType Directory -Force $source,$target|Out-Null
 function Put($Path,$Value){[IO.File]::WriteAllText($Path,$Value)}
 function Check($Condition,$Message){if(!$Condition){throw $Message}}

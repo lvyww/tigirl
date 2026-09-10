@@ -33,11 +33,10 @@ public:
     STDMETHODIMP Abort() override;
 private:
     static LRESULT CALLBACK windowProc(HWND,UINT,WPARAM,LPARAM);
-    void paint(HDC dc);
+    bool paint(HDC dc,const POINT* destination=nullptr);
     void refreshReveal();
     CandidateReveal reveal_;
     void layoutAndPaint();
-    void place();
     LONG refs_=1;
     Service* owner_=nullptr; // detached before service destruction; no ownership cycle
     std::shared_ptr<Context> state_;

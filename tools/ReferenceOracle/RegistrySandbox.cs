@@ -9,7 +9,7 @@ namespace NativeTiger.Tools;
 internal sealed class RegistrySandbox : IDisposable
 {
     private static readonly IntPtr CurrentUser = new IntPtr(unchecked((int)0x80000001));
-    private readonly string path = @"Software\NativeTiger\OracleSandbox\" + Guid.NewGuid().ToString("N");
+    private readonly string path = @"Software\Tigirl\OracleSandbox\" + Guid.NewGuid().ToString("N");
     private IntPtr handle;
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]

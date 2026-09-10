@@ -92,7 +92,7 @@ def main():
             os.link(original, target)
     shutil.copyfile(BUILD / 'Win32/Release/Tigirl.dll', x86 / 'Tigirl.dll')
     manifest = x86 / 'NativeTiger.x86.manifest'
-    manifest.write_text((ROOT / 'tests/NativeTiger.Test.manifest').read_text().replace('processorArchitecture="arm64"', 'processorArchitecture="x86"'))
+    manifest.write_text((ROOT / 'tests/Tigirl.Test.manifest').read_text().replace('processorArchitecture="arm64"', 'processorArchitecture="x86"'))
     selected.append(('Win32', BUILD / 'tests/Win32/tsf_host.exe', manifest, x86 / 'Tigirl.dll'))
     results = []
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"

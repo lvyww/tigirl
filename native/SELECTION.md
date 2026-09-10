@@ -1,7 +1,7 @@
 # Custom selection keys
 
 The native TSF source reads UTF-8 (optional BOM), or UTF-16/UTF-32 with a BOM, from
-`%LOCALAPPDATA%\NativeTiger\自定义选重键.txt` on activation and document focus.
+`%LOCALAPPDATA%\Tigirl\自定义选重键.txt` on activation and document focus.
 It does not read or rewrite the daily TigerClaw installation. Create the file
 with, for example:
 

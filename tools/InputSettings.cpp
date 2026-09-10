@@ -18,8 +18,12 @@
 #include <cmath>
 #include <commctrl.h>
 #include <iomanip>
+#include <wincodec.h>
+#include <wrl/client.h>
+#pragma comment(lib,"windowscodecs.lib")
 namespace {
 constexpr int Pages=221;
+constexpr int Donation=223;
 struct Flag {const char16_t* key;bool tiger::Config::*member;};
 const Flag flags[]={
     {u"默认中文",&tiger::Config::defaultChinese},{u"shift切换中英文",&tiger::Config::shiftToggle},
@@ -37,18 +41,64 @@ constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDupl
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
 struct Dialog {
+    HBRUSH background=CreateSolidBrush(RGB(246,242,234)),panel=CreateSolidBrush(RGB(255,253,248));
+    static bool highContrast(){HIGHCONTRASTW value{sizeof(value)};return SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(value),&value,0) && (value.dwFlags&HCF_HIGHCONTRASTON);}
+    HBRUSH backgroundBrush(bool inPage=false)const{return highContrast()?GetSysColorBrush(COLOR_BTNFACE):(inPage?panel:background);}
+    static COLORREF textColor(bool help=false){return highContrast()?GetSysColor(COLOR_BTNTEXT):(help?RGB(125,107,93):RGB(58,42,32));}
     HWND window=nullptr,content=nullptr;HFONT font=nullptr,helpFont=nullptr;std::filesystem::path path;
     std::vector<std::u16string> themes;
     std::unique_ptr<FontChooser> fonts;
     tiger::Config initial;tiger::CandidateStyle initialStyle;int buildingPage=-1;bool saved=false;std::wstring error;
     tiger::SentenceSettings initialSentence;
+    std::vector<BYTE> donationPixels;BITMAPINFO donationInfo{};
+    void loadDonation() {
+        using Microsoft::WRL::ComPtr;
+        auto check=[](HRESULT result){if(FAILED(result))throw std::runtime_error("Cannot decode donation image");};
+        const auto module=GetModuleHandleW(nullptr);auto resource=FindResourceW(module,MAKEINTRESOURCEW(13),RT_RCDATA);
+        if(!resource)throw std::runtime_error("Donation image resource is missing");
+        auto data=LoadResource(module,resource);auto bytes=static_cast<BYTE*>(LockResource(data));const auto length=SizeofResource(module,resource);
+        if(!bytes || !length)throw std::runtime_error("Donation image is empty");
+        ComPtr<IWICImagingFactory> factory;check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory)));
+        ComPtr<IWICStream> stream;check(factory->CreateStream(&stream));check(stream->InitializeFromMemory(bytes,length));
+        ComPtr<IWICBitmapDecoder> decoder;check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,&decoder));
+        ComPtr<IWICBitmapFrameDecode> frame;check(decoder->GetFrame(0,&frame));
+        UINT width=0,height=0;check(frame->GetSize(&width,&height));
+        if(!width || !height || width>4096 || height>4096)throw std::runtime_error("Invalid donation image size");
+        ComPtr<IWICFormatConverter> converter;check(factory->CreateFormatConverter(&converter));
+        check(converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppBGR,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom));
+        donationPixels.resize(static_cast<size_t>(width)*height*4);check(converter->CopyPixels(nullptr,width*4,static_cast<UINT>(donationPixels.size()),donationPixels.data()));
+        auto& info=donationInfo.bmiHeader;info.biSize=sizeof(info);info.biWidth=width;info.biHeight=-static_cast<LONG>(height);info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;
+    }
+    void drawDonation(const DRAWITEMSTRUCT& draw) {
+        const int savedDc=SaveDC(draw.hDC);FillRect(draw.hDC,&draw.rcItem,backgroundBrush(true));
+        const int width=donationInfo.bmiHeader.biWidth,height=-donationInfo.bmiHeader.biHeight;
+        const int availableWidth=draw.rcItem.right-draw.rcItem.left,availableHeight=draw.rcItem.bottom-draw.rcItem.top;
+        int w=availableWidth,h=MulDiv(height,w,width);if(h>availableHeight){h=availableHeight;w=MulDiv(width,h,height);}
+        SetStretchBltMode(draw.hDC,HALFTONE);SetBrushOrgEx(draw.hDC,0,0,nullptr);
+        StretchDIBits(draw.hDC,draw.rcItem.left+(availableWidth-w)/2,draw.rcItem.top+(availableHeight-h)/2,w,h,0,0,width,height,donationPixels.data(),&donationInfo,DIB_RGB_COLORS,SRCCOPY);
+        RestoreDC(draw.hDC,savedDc);
+    }
     struct Control {HWND window;int x,y,w,h,page;bool help;};std::vector<Control> controls;
-    ~Dialog(){if(IsWindow(window))DestroyWindow(window);if(font)DeleteObject(font);if(helpFont)DeleteObject(helpFont);}
+    ~Dialog(){if(IsWindow(window))DestroyWindow(window);if(font)DeleteObject(font);if(helpFont)DeleteObject(helpFont);if(background)DeleteObject(background);if(panel)DeleteObject(panel);}
+    void drawTab(const DRAWITEMSTRUCT& draw) {
+        const int savedDc=SaveDC(draw.hDC);
+        const bool selected=static_cast<int>(draw.itemID)==TabCtrl_GetCurSel(item(Pages));
+        const bool contrast=highContrast();
+        SetDCBrushColor(draw.hDC,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_BTNFACE):(selected?RGB(242,199,157):RGB(246,242,234)));
+        FillRect(draw.hDC,&draw.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        if(selected && !contrast){auto stripe=draw.rcItem;stripe.top=stripe.bottom-MulDiv(2,GetDpiForWindow(window),96);SetDCBrushColor(draw.hDC,RGB(217,106,27));FillRect(draw.hDC,&stripe,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));}
+        wchar_t title[80]{};TCITEMW tab{};tab.mask=TCIF_TEXT;tab.pszText=title;tab.cchTextMax=80;TabCtrl_GetItem(item(Pages),draw.itemID,&tab);
+        SelectObject(draw.hDC,font);SetBkMode(draw.hDC,TRANSPARENT);
+        SetTextColor(draw.hDC,contrast && selected?GetSysColor(COLOR_HIGHLIGHTTEXT):textColor());
+        auto bounds=draw.rcItem;DrawTextW(draw.hDC,title,-1,&bounds,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+        if((draw.itemState&ODS_FOCUS) && !(draw.itemState&ODS_NOFOCUSRECT)){InflateRect(&bounds,-3,-3);DrawFocusRect(draw.hDC,&bounds);}
+        RestoreDC(draw.hDC,savedDc);
+    }
     HWND item(int id){for(auto c:controls)if(GetDlgCtrlID(c.window)==id)return c.window;return nullptr;}
     static LRESULT CALLBACK contentProcedure(HWND hwnd,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR) {
         switch(message) {
         case WM_COMMAND:case WM_NOTIFY:case WM_DRAWITEM:case WM_MEASUREITEM:
-        case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORBTN:
+        case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORBTN:case WM_CTLCOLORLISTBOX:
             return SendMessageW(GetParent(hwnd),message,w,l);
         }
         return DefSubclassProc(hwnd,message,w,l);
@@ -70,6 +120,7 @@ struct Dialog {
             if(c.window==content)MoveWindow(content,pane.left,pane.top,pane.right-pane.left,pane.bottom-pane.top,TRUE);
             else MoveWindow(c.window,px(c.x)-(c.page>=0?pane.left:0),px(c.y)-(c.page>=0?pane.top:0),px(c.w),px(c.h),TRUE);
             if(c.window==item(Pages)) {
+                TabCtrl_SetItemSize(c.window,px(570/TabCtrl_GetItemCount(c.window)),px(26));
                 GetClientRect(c.window,&pane);TabCtrl_AdjustRect(c.window,FALSE,&pane);
                 MapWindowPoints(c.window,window,reinterpret_cast<POINT*>(&pane),2);
             }
@@ -89,7 +140,7 @@ struct Dialog {
     // Render the real controls without showing or activating the test window.
     void captureSentence(const std::filesystem::path& destination,int selectedPage=3) {
         HWND list=nullptr;
-        if(selectedPage==4){COMBOBOXINFO info{sizeof(info)};if(!GetComboBoxInfo(item(FontName),&info))throw std::runtime_error("Cannot inspect font dropdown");list=info.hwndList;}
+        if(selectedPage==-2){COMBOBOXINFO info{sizeof(info)};if(!GetComboBoxInfo(item(FontName),&info))throw std::runtime_error("Cannot inspect font dropdown");list=info.hwndList;}
         RECT client{};GetClientRect(list?list:window,&client);
         BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
         info.bmiHeader.biWidth=client.right;info.bmiHeader.biHeight=-client.bottom;
@@ -97,7 +148,7 @@ struct Dialog {
         void* pixels=nullptr;HDC dc=CreateCompatibleDC(nullptr);
         HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,nullptr,0);
         if(!dc || !bitmap){if(bitmap)DeleteObject(bitmap);if(dc)DeleteDC(dc);throw std::runtime_error("Cannot create settings capture");}
-        const auto previous=SelectObject(dc,bitmap);FillRect(dc,&client,GetSysColorBrush(COLOR_BTNFACE));
+        const auto previous=SelectObject(dc,bitmap);FillRect(dc,&client,backgroundBrush());
         if(list)SendMessageW(list,WM_PRINT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT|PRF_NONCLIENT|PRF_ERASEBKGND);
         else for(auto c:controls)if(c.page<0 || c.page==selectedPage) {
             RECT rect{};GetWindowRect(c.window,&rect);MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
@@ -138,8 +189,9 @@ struct Dialog {
         result+=u"0X";result+=digits[vk>>4];result+=digits[vk&15];return result;
     }
     void create() {
-        control(Pages,WC_TABCONTROLW,L"",WS_TABSTOP|WS_CLIPSIBLINGS,8,8,604,408);
-        for(const auto title:{L"输入行为",L"候选外观",L"操作快捷键",L"整句输入"}) {
+        if(!background || !panel)throw std::runtime_error("Cannot create settings colors");
+        control(Pages,WC_TABCONTROLW,L"",WS_TABSTOP|WS_CLIPSIBLINGS|TCS_OWNERDRAWFIXED|TCS_FIXEDWIDTH,8,8,604,408);
+        for(const auto title:{L"输入行为",L"候选外观",L"操作快捷键",L"整句输入",L"赞赏"}) {
             TCITEMW tab{};tab.mask=TCIF_TEXT;tab.pszText=const_cast<wchar_t*>(title);
             TabCtrl_InsertItem(item(Pages),TabCtrl_GetItemCount(item(Pages)),&tab);
         }
@@ -217,6 +269,11 @@ struct Dialog {
         control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,18,292,567,30);
         SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
         control(0,L"STATIC",L"直接填写汉字，无需分隔；这些字不受上方的最优码限制。",0,18,332,580,28,true);
+        buildingPage=4;
+        loadDonation();
+        control(0,L"STATIC",L"感谢你对虎娘的支持",SS_CENTER,18,8,580,25);
+        control(Donation,L"STATIC",L"赞赏码",SS_OWNERDRAW,160,48,300,300);
+        control(0,L"STATIC",L"微信扫码赞赏，自愿支持。",SS_CENTER,18,352,580,18,true);
         buildingPage=-1;
         control(Notice,L"STATIC",L"保存更改后自动更新设置，清除未完成编码，并应用默认中英文模式。",0,18,424,582,36,true);
         control(Save,L"BUTTON",L"保存",BS_DEFPUSHBUTTON|WS_TABSTOP,390,480,95,30);
@@ -315,17 +372,24 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
     if(message==WM_NCCREATE){self=static_cast<Dialog*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);self->window=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     if(!self)return DefWindowProcW(window,message,w,l);
     try {
+        if(message==WM_ERASEBKGND){RECT client{};GetClientRect(window,&client);FillRect(reinterpret_cast<HDC>(w),&client,self->backgroundBrush());return 1;}
+        if(message==WM_SETTINGCHANGE || message==WM_SYSCOLORCHANGE || message==WM_THEMECHANGED)
+            RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
         if(message==WM_CTLCOLORSTATIC) {
             const auto dc=reinterpret_cast<HDC>(w);
             bool help=false;for(auto c:self->controls)if(c.window==reinterpret_cast<HWND>(l)){help=c.help;break;}
-            HIGHCONTRASTW contrast{sizeof(contrast)};SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0);
             const bool failure=reinterpret_cast<HWND>(l)==self->item(Notice) && !self->error.empty();
-            SetTextColor(dc,help && !failure && !(contrast.dwFlags&HCF_HIGHCONTRASTON)?RGB(96,96,96):GetSysColor(COLOR_BTNTEXT));SetBkColor(dc,GetSysColor(COLOR_BTNFACE));
-            return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_BTNFACE));
+            const bool inPage=reinterpret_cast<HWND>(l)==self->content || GetParent(reinterpret_cast<HWND>(l))==self->content;
+            const auto brush=self->backgroundBrush(inPage);LOGBRUSH colors{};GetObjectW(brush,sizeof(colors),&colors);
+            SetTextColor(dc,self->textColor(help && !failure));SetBkColor(dc,colors.lbColor);
+            return reinterpret_cast<LRESULT>(brush);
         }
+        if(message==WM_CTLCOLOREDIT || message==WM_CTLCOLORLISTBOX){const auto dc=reinterpret_cast<HDC>(w);SetTextColor(dc,Dialog::highContrast()?GetSysColor(COLOR_WINDOWTEXT):self->textColor());SetBkColor(dc,GetSysColor(COLOR_WINDOW));return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));}
         if(message==WM_NOTIFY && reinterpret_cast<NMHDR*>(l)->idFrom==Pages && reinterpret_cast<NMHDR*>(l)->code==TCN_SELCHANGE) {
             self->page(TabCtrl_GetCurSel(self->item(Pages)));return 0;
         }
+        if(message==WM_DRAWITEM && w==Pages){self->drawTab(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
+        if(message==WM_DRAWITEM && w==Donation){self->drawDonation(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_DRAWITEM && w==FontName && self->fonts){self->fonts->draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_MEASUREITEM && w==FontName && self->fonts){self->fonts->measure(*reinterpret_cast<MEASUREITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_COMMAND && LOWORD(w)==FontName && HIWORD(w)==CBN_SELCHANGE){InvalidateRect(self->item(FontName),nullptr,TRUE);return 0;}
@@ -383,7 +447,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         if(dialog.fonts->previewSize()!=dialog.initialStyle.fontSize)throw std::runtime_error("Preview did not use saved font size");
         for(UINT dpi:{96u,144u,192u}) {
             dialog.scale(dpi);RECT client{};GetClientRect(dialog.window,&client);
-            for(int page=0;page<4;++page) {
+            for(int page=0;page<TabCtrl_GetItemCount(dialog.item(Pages));++page) {
                 TabCtrl_SetCurSel(dialog.item(Pages),page);
                 NMHDR notification{dialog.item(Pages),Pages,TCN_SELCHANGE};
                 SendMessageW(dialog.window,WM_NOTIFY,Pages,reinterpret_cast<LPARAM>(&notification));
@@ -412,7 +476,8 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
                 if(dialog.fonts->selected()!=L"Segoe UI")throw std::runtime_error("System font alias resolves incorrectly");
                 dialog.fonts->select(originalFont);
                 dialog.page(1);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"font-settings-"+std::to_wstring(dpi)+L".bmp"),1);
-                if(isolatedCapture){SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,TRUE,0);dialog.captureSentence(path.parent_path()/(L"font-dropdown-"+std::to_wstring(dpi)+L".bmp"),4);SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,FALSE,0);}
+                if(isolatedCapture){SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,TRUE,0);dialog.captureSentence(path.parent_path()/(L"font-dropdown-"+std::to_wstring(dpi)+L".bmp"),-2);SendMessageW(dialog.item(FontName),CB_SHOWDROPDOWN,FALSE,0);}
+                dialog.page(4);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"donation-settings-"+std::to_wstring(dpi)+L".bmp"),4);
                 dialog.page(3);UpdateWindow(dialog.window);dialog.captureSentence(path.parent_path()/(L"sentence-settings-"+std::to_wstring(dpi)+L".bmp"));dialog.page(0);}
         }
         if(testMode==2) {
@@ -543,8 +608,9 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
     MSG message{};while(IsWindow(dialog.window)) {
         const auto result=GetMessageW(&message,nullptr,0,0);if(result<=0){if(!result)PostQuitMessage(static_cast<int>(message.wParam));break;}
         if(message.message==WM_KEYDOWN && message.wParam==VK_TAB && (GetKeyState(VK_CONTROL)&0x8000)) {
-            const int delta=(GetKeyState(VK_SHIFT)&0x8000)?3:1;
-            dialog.page((TabCtrl_GetCurSel(dialog.item(Pages))+delta)%4);SetFocus(dialog.item(Pages));continue;
+            const int count=TabCtrl_GetItemCount(dialog.item(Pages));
+            const int delta=(GetKeyState(VK_SHIFT)&0x8000)?count-1:1;
+            dialog.page((TabCtrl_GetCurSel(dialog.item(Pages))+delta)%count);SetFocus(dialog.item(Pages));continue;
         }
         if(!IsDialogMessageW(dialog.window,&message)){TranslateMessage(&message);DispatchMessageW(&message);}
     }

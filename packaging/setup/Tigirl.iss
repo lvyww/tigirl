@@ -5,10 +5,10 @@
  #error Generation is required
 #endif
 #ifndef ProductVersion
- #define ProductVersion "2026.9.10.2"
+ #define ProductVersion "2026.9.10.4"
 #endif
 [Setup]
-AppId=NativeTiger
+AppId=Tigirl
 AppName=虎娘
 AppVersion={#ProductVersion}
 AppVerName=虎娘 / Tigirl {#ProductVersion}
@@ -20,7 +20,7 @@ UsePreviousAppDir=no
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
-MinVersion=10.0.19041
+MinVersion=10.0.17763
 WizardStyle=modern
 WizardSizePercent=110
 SetupIconFile={#PackageDir}\Tigirl.ico
@@ -46,7 +46,7 @@ DisableWelcomePage=no
 [Languages]
 Name: "chinesesimp"; MessagesFile: "{#ChineseMessages}"
 [Messages]
-WindowsVersionNotSupported=此安装程序仅支持 Intel/AMD x64 Windows 10 2004 或更新版本，不支持 ARM64 和 32 位 Windows。
+WindowsVersionNotSupported=此安装程序仅支持 Intel/AMD x64 Windows 10 1809 或更新版本，不支持 ARM64 和 32 位 Windows。
 OnlyOnTheseArchitectures=此安装程序仅支持 Intel/AMD x64 Windows，包含 x86 程序支持；不支持 ARM64 和 32 位 Windows。
 [LangOptions]
 DialogFontName=Microsoft YaHei UI
@@ -81,8 +81,6 @@ begin Result:=Committed and not Failed and not Deferred; end;
 function InstallDirectory(Param: String): String;
 begin
   Result := ExpandConstant('{commonpf64}\Tigirl');
-  if not FileExists(Result+'\install.json') and FileExists(ExpandConstant('{commonpf64}\NativeTiger\install.json')) then
-    Result := ExpandConstant('{commonpf64}\NativeTiger');
 end;
 function PowerShell: String;
 begin Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'); end;
@@ -118,7 +116,7 @@ procedure InitializeWizard;
 begin
   Info:=CreateOutputMsgPage(wpWelcome,'安装说明','将安装完整的虎娘输入法',
     '支持 x64 和 x86 应用。'+#13#10+#13#10+
-    '程序安装到 Program Files，码表、设置和个人词条保存在当前用户的 %LOCALAPPDATA%\NativeTiger。'+#13#10+#13#10+
+    '程序安装到 Program Files，码表、设置和个人词条保存在当前用户的 %LOCALAPPDATA%\Tigirl。'+#13#10+#13#10+
     '已有设置将保留。同名码表内容不同时，可选择覆盖或跳过；覆盖前会自动备份。'+#13#10+#13#10+
     '安装完成后请重新打开需要输入的程序。');
   Progress:=CreateOutputProgressPage('准备安装','正在校验安装文件，请稍候。');

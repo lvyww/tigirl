@@ -6,7 +6,7 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\data.ps1"
 Assert-X64System
 if(!(Test-Administrator)){throw 'Administrator privileges are required.'}
-$allowed=@((Join-Path $env:ProgramFiles 'Tigirl'),(Join-Path $env:ProgramFiles 'NativeTiger'))
+$allowed=@((Join-Path $env:ProgramFiles 'Tigirl'))
 $InstallRoot=[IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
 if($InstallRoot -notin $allowed){throw 'Invalid installation root.'}
 Assert-PlainTree $InstallRoot
@@ -52,7 +52,7 @@ function Restore-Transaction {
   if((Get-ComPath 'Registry64') -or (Get-ComPath 'Registry32')){Invoke-Registration $j.directory -Remove}
   Remove-MachineEntries
   if(Test-Path $NativeTigerRecord){Remove-Item $NativeTigerRecord}
-  $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger_is1'
+  $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl_is1'
   if(Test-Path $arp){Remove-Item $arp -Recurse}
   $shortcut=Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '虎娘\输入设置.lnk'
   if(Test-Path $shortcut){Remove-Item $shortcut}
@@ -61,9 +61,9 @@ function Restore-Transaction {
 }
 function Set-GuiEntries($Record){
  Set-MachineEntries $Record.directory $Record.version
- $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger_is1'
+ $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl_is1'
  if(Test-Path $arp){Set-ItemProperty $arp UninstallString ('"'+$InstallRoot+'\Tigirl.Maintenance.exe"');Set-ItemProperty $arp QuietUninstallString ('"'+$InstallRoot+'\unins000.exe" /VERYSILENT /NORESTART');Set-ItemProperty $arp DisplayVersion $Record.version}
- $legacy='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger'
+ $legacy='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl'
  if(Test-Path $legacy){Remove-Item $legacy -Recurse}
  $shell=New-Object -ComObject WScript.Shell
  try{
@@ -116,7 +116,7 @@ try {
   if($record -and (Test-Path (Join-Path $record.directory 'setup\gui.txt'))){Set-GuiEntries $record}
   elseif($record){
    # A failed upgrade from the old ZIP package must not leave a second GUI uninstall entry.
-   $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger_is1'
+   $arp='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl_is1'
    if(Test-Path $arp){Remove-Item $arp -Recurse}
    $shortcut=Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '虎娘\输入设置.lnk'
    if(Test-Path $shortcut){Remove-Item $shortcut}

@@ -1,6 +1,6 @@
 # x64 Windows 安装包
 
-范围：Intel/AMD x64 Windows，包内包含 x64 和 x86 TSF DLL；不制作 32 位 Windows 独立包。暂定最低系统 Windows 10 2004。ARM64 开发机上的仿真验证不等同于目标系统验收。
+范围：Intel/AMD x64 Windows，包内包含 x64 和 x86 TSF DLL；不制作 32 位 Windows 独立包。暂定最低系统 Windows 10 1809。ARM64 开发机上的仿真验证不等同于目标系统验收。
 
 ## 构建
 
@@ -20,11 +20,11 @@
 
 ## 数据与方案
 
-用户根目录固定为 `%LOCALAPPDATA%/NativeTiger`。`码表/<方案名>` 中的 txt、dict.yaml 是源码表，`拼音反查码表` 是共享拼音来源。拼音在编译时编入每个方案的 tcd。`schemas` 是内部不可变版本和用户 journal；`cache/sentence` 是整句派生缓存。
+用户根目录固定为 `%LOCALAPPDATA%/Tigirl`。`码表/<方案名>` 中的 txt、dict.yaml 是源码表，`拼音反查码表` 是共享拼音来源。拼音在编译时编入每个方案的 tcd。`schemas` 是内部不可变版本和用户 journal；`cache/sentence` 是整句派生缓存。
 
 独立方案管理窗口已移除；`Tigirl.exe` 仅负责输入设置和按需操作（旧名 `schema_manager.exe`）。菜单枚举源码表直属有效目录，切换、重载、最近方案切换自动调用导入器 `--ensure`。新增文件夹无需手动导入；删除当前目录后回退可用方案。没有任何源码表时保留内置虎码字词兜底。
 
-旧“码表存储位置”“拼音反查目录”只由首次迁移逻辑读取，运行时不再使用。测试环境变量 `NATIVE_TIGER_USER_ROOT` 仍供隔离测试使用，带此覆盖不能执行正式用户启用。
+旧“码表存储位置”“拼音反查目录”不再读取，也不执行自动迁移。测试环境变量 `NATIVE_TIGER_USER_ROOT` 仍供隔离测试使用，带此覆盖不能执行正式用户启用。
 
 相同文件自动跳过；内容冲突集中选择覆盖或跳过。覆盖前保存备份和映射清单。配置、选重键、用户词条不参与默认文件覆盖。首次安装的默认配置关闭输入法自己的 Ctrl+Space 处理，保留系统切换。失败恢复源文件及方案指针；保留生成的新不可变缓存供诊断。
 
@@ -45,4 +45,4 @@
 
 Windows URI API 依据：https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-app
 
-品牌名称为“虎娘 / Tigirl”。既有 NativeTiger 安装沿用原安装目录和记录；用户数据目录、CLSID、协议标识保留兼容。
+品牌名称为“虎娘 / Tigirl”。程序及用户数据目录统一使用 Tigirl，不读取、迁移或兼容旧 NativeTiger/SampleIME 目录。

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'shortcut_arm64.ps1')
 . (Join-Path $PSScriptRoot 'sentence_package.ps1')
 . (Join-Path $PSScriptRoot 'appcontainer_data.ps1')
-Assert-NativeTigerShortcutAvailable ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME"
+Assert-NativeTigerShortcutAvailable ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\Tigirl"
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 $transcribing = $false
 function Test-NativeTigerDeployment([string]$Directory, $Hashes, [switch]$Arm64X) {
@@ -56,7 +56,7 @@ try {
     try { $packageHash = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($packageText))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
     $generation = $packageHash.Substring(0, 16)
-    $destination = "$env:ProgramFiles\SampleIME\versions\$generation"
+    $destination = "$env:ProgramFiles\Tigirl\versions\$generation"
     $dll = "$destination\Tigirl.dll"
 
     foreach ($executable in $executables) {
@@ -106,7 +106,7 @@ try {
         }
     }
     $installedLoadChecks = Test-NativeTigerDeployment $destination $hashes -Arm64X:$Arm64X
-    Set-NativeTigerAppContainerAccess (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'NativeTiger')
+    Set-NativeTigerAppContainerAccess (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tigirl')
     $registration = Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList @('/s', ('"' + $dll + '"')) -Wait -PassThru
     if ($registration.ExitCode -ne 0) { throw "regsvr32 failed: $($registration.ExitCode)" }
     $registered = (Get-Item "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32").GetValue('')
@@ -133,7 +133,7 @@ public static class SampleImeInstall {
     foreach ($file in $artifacts) {
         if ((Get-FileHash -LiteralPath "$destination\$file").Hash -ne $hashes[$file]) { throw "Installed hash mismatch: $file" }
     }
-    $shortcut = Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\SampleIME" (Join-Path $destination 'Tigirl.exe')
+    $shortcut = Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\Tigirl" (Join-Path $destination 'Tigirl.exe')
     @{ dll = $dll; generation = $generation; dll_hash = (Get-FileHash $dll).Hash;
        dictionary_hash = (Get-FileHash "$destination\tiger-v2.tcd").Hash; package_hash = $packageHash; artifacts = $hashes; tip = $tip; manager_shortcut = $shortcut; architecture = $architecture; load_checks = $loadChecks; installed_load_checks = $installedLoadChecks } |
         ConvertTo-Json -Depth 6 | Set-Content "$PSScriptRoot\build\native-install.json" -Encoding UTF8

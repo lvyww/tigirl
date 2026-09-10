@@ -38,7 +38,7 @@ bytes are a prefix of the exact magic. Records are bounded to 16 MiB and journal
 to 128 MiB. Refresh currently replays the journal; compaction and notifications
 remain future lifecycle work. The TSF DLL now drains actual dispatch
 changes into this store and refreshes on focus. The current journal is
-`%LOCALAPPDATA%/NativeTiger/user/tiger-words.tcu`. Adjustment failures produce
+`%LOCALAPPDATA%/Tigirl/user/tiger-words.tcu`. Adjustment failures produce
 debug output/a beep and a language-bar warning icon/text/tooltip. The tooltip
 asks the user to check storage and explicitly repeat the adjustment. The warning
 persists through ordinary typing and reads, clearing after a successful user-word

@@ -360,7 +360,7 @@
   </Target>
   <ItemDefinitionGroup>
     <ClCompile><LanguageStandard>stdcpp17</LanguageStandard><ExceptionHandling>Sync</ExceptionHandling></ClCompile>
-    <Link><AdditionalDependencies>d2d1.lib;dwrite.lib;windowscodecs.lib;shell32.lib;oleaut32.lib;icu.lib;imm32.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies>d2d1.lib;dwrite.lib;windowscodecs.lib;shell32.lib;oleaut32.lib;imm32.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\native\Dictionary.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>

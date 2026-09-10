@@ -1,9 +1,10 @@
 #include <windows.h>
 #pragma code_page(65001)
+13 RCDATA "..\\assets\\Tigirl-donate.png"
 12 ICON "..\\assets\\Tigirl.ico"
 1 VERSIONINFO
- FILEVERSION 2026,9,10,2
- PRODUCTVERSION 2026,9,10,2
+ FILEVERSION 2026,9,10,4
+ PRODUCTVERSION 2026,9,10,4
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
 BEGIN
@@ -15,8 +16,8 @@ BEGIN
    VALUE "InternalName", "Tigirl"
    VALUE "OriginalFilename", "Tigirl.exe"
    VALUE "ProductName", "Tigirl"
-   VALUE "FileVersion", "2026.9.10.2"
-   VALUE "ProductVersion", "2026.9.10.2"
+   VALUE "FileVersion", "2026.9.10.4"
+   VALUE "ProductVersion", "2026.9.10.4"
   END
  END
  BLOCK "VarFileInfo"

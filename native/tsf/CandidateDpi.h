@@ -1,6 +1,13 @@
 #pragma once
 #include <windows.h>
+#include <shellscalingapi.h>
+#pragma comment(lib,"shcore.lib")
 namespace tiger::tsf {
+// Resolve the destination monitor before moving a visible candidate HWND.
+inline UINT candidateMonitorDpi(HMONITOR monitor) {
+    UINT x=96,y=96;
+    return SUCCEEDED(GetDpiForMonitor(monitor,MDT_EFFECTIVE_DPI,&x,&y)) && x?x:96;
+}
 // Scope only the candidate's operations; never change the host process default.
 class CandidateDpiScope final {
 public:

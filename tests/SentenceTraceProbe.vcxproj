@@ -26,5 +26,5 @@
 <ClCompile Include="..\native\LexiconDecode.cpp" />
 <ClCompile Include="..\native\AddWord.cpp" />
 </ItemGroup>
-<ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\native;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><Optimization>MaxSpeed</Optimization><ExceptionHandling>Sync</ExceptionHandling></ClCompile><Link><AdditionalDependencies>icu.lib;psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+<ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\native;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><Optimization>MaxSpeed</Optimization><ExceptionHandling>Sync</ExceptionHandling></ClCompile><Link><AdditionalDependencies>psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

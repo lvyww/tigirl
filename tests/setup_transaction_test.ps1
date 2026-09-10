@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\packaging\user_transaction.ps1"
 function Check($Value,$Message){if(!$Value){throw $Message}}
 $fixture=Join-Path $env:TEMP ('Tigirl-transaction-'+[guid]::NewGuid().ToString('N'))
-$root=Join-Path $fixture 'NativeTiger';$source=Join-Path $fixture 'source';$backup=Join-Path $root 'backups\test'
+$root=Join-Path $fixture 'Tigirl';$source=Join-Path $fixture 'source';$backup=Join-Path $root 'backups\test'
 New-Item $root,$source -ItemType Directory -Force|Out-Null
 try{
  [IO.File]::WriteAllText("$source\table.txt",'new')

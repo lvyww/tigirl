@@ -38,7 +38,7 @@ try {
         $ticket=& $ledgerProbe $ledger reserve 1
         Require ($LASTEXITCODE -eq 0) 'Cannot reserve handoff ticket'
         $parts=$ticket.Trim().Split(' ')
-        $prefix='Local\NativeTiger.HandoffTest.'+[Guid]::NewGuid().ToString('N')
+        $prefix='Local\Tigirl.HandoffTest.'+[Guid]::NewGuid().ToString('N')
         $fired=New-Object Threading.EventWaitHandle($false,[Threading.EventResetMode]::ManualReset,"$prefix.fired")
         $proceed=New-Object Threading.EventWaitHandle($false,[Threading.EventResetMode]::ManualReset,"$prefix.proceed")
         $events.Add($fired);$events.Add($proceed)

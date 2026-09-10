@@ -8,11 +8,11 @@ try{
  Check ((Get-PackageTool $fixture) -eq "$fixture\x64\Tigirl.exe") 'Missing helper changed URI identity'
  [IO.File]::WriteAllText("$fixture\x64\SampleIME.dll",'fixture')
  [IO.File]::WriteAllText("$fixture\x64\schema_manager.exe",'fixture')
- Check ((Get-PackageDll $fixture 'x64') -eq "$fixture\x64\SampleIME.dll") 'Legacy DLL not adopted'
- Check ((Get-PackageTool $fixture) -eq "$fixture\x64\schema_manager.exe") 'Legacy helper not adopted'
+ Check ((Get-PackageDll $fixture 'x64') -eq "$fixture\x64\Tigirl.dll") 'Legacy DLL must not be adopted'
+ Check ((Get-PackageTool $fixture) -eq "$fixture\x64\Tigirl.exe") 'Legacy helper must not be adopted'
  [IO.File]::WriteAllText("$fixture\x64\Tigirl.dll",'fixture')
  [IO.File]::WriteAllText("$fixture\x64\Tigirl.exe",'fixture')
  Check ((Get-PackageDll $fixture 'x64') -eq "$fixture\x64\Tigirl.dll") 'Current DLL lost precedence'
  Check ((Get-PackageTool $fixture) -eq "$fixture\x64\Tigirl.exe") 'Current helper lost precedence'
- 'PASS: missing-file repair identity, legacy adoption, current filename precedence.'
+ 'PASS: missing-file repair identity, legacy rejection, current filename precedence.'
 }finally{Remove-Item $fixture -Recurse -Force}

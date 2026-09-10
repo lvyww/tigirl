@@ -1,14 +1,14 @@
 虎娘 / Tigirl 图形安装程序
 
-分发文件：Tigirl-2026.9.10.2-x64-Setup.exe。
+分发文件：Tigirl-2026.9.10.4-x64-Setup.exe。
 双击单文件安装程序，按中文向导操作，无需手工解压。
-只支持 Intel/AMD x64 Windows 10 2004 及以上，包含 x86 程序支持。
+只支持 Intel/AMD x64 Windows 10 1809（含 LTSC 2019） 及以上，包含 x86 程序支持。
 不适用于 ARM64 和 32 位 Windows。
 
-用户数据固定在 %LOCALAPPDATA%\NativeTiger：
+用户数据固定在 %LOCALAPPDATA%\Tigirl：
 码表、拼音反查码表、config.txt、schemas、user 和 backups。
 已有设置与个人词条保留。码表同名但内容不同，可覆盖或跳过；覆盖前备份。
-旧版自定义源码目录只用于一次性复制迁移，原文件不会删除。
+不读取或迁移旧版目录；首次使用从安装包初始化 Tigirl 数据目录。
 
 安装完成后请重开微信、Word 等程序。从开始菜单“虎娘 → 输入设置”调整设置。
 以管理员身份直接启动安装时，用户初始化可能暂缓到日常账号下一次登录。

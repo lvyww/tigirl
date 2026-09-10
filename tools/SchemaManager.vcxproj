@@ -9,6 +9,6 @@
     <ClCompile Include="..\native\SentenceSettings.cpp" />
     <ClCompile Include="SelectionSettings.cpp" />
   </ItemGroup>
-  <ItemDefinitionGroup><Link><SubSystem>Windows</SubSystem><AdditionalDependencies>dwrite.lib;d2d1.lib;comctl32.lib;icu.lib;ole32.lib;shell32.lib;user32.lib;gdi32.lib;uuid.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><SubSystem>Windows</SubSystem><AdditionalDependencies>dwrite.lib;d2d1.lib;comctl32.lib;ole32.lib;shell32.lib;user32.lib;gdi32.lib;uuid.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ResourceCompile Include="SchemaManager.rc" /></ItemGroup>
 </Project>

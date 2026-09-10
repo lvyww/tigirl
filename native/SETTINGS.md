@@ -1,6 +1,6 @@
 # Ordinary engine settings
 
-The pending native build reads `%LOCALAPPDATA%\NativeTiger\config.txt` on TSF
+The pending native build reads `%LOCALAPPDATA%\Tigirl\config.txt` on TSF
 activation and document focus. It keeps the daily TigerClaw configuration separate.
 A missing file uses defaults. New contexts use 默认中文; reloading an existing
 context preserves the user's current Chinese/English mode and resets its page.
@@ -9,7 +9,7 @@ Normal key preview/dispatch does not read the settings file.
 A host may set `NATIVE_TIGER_USER_ROOT` to an absolute Windows directory before
 activating the TIP. This redirects its configuration, selection bindings and
 user-word journal together; dictionaries and fonts still come from the DLL's
-directory. The default remains LocalAppData/NativeTiger. Secure activation does
+directory. The default remains LocalAppData/Tigirl. Secure activation does
 not read user data or this override. A relative/oversized override fails
 activation rather than falling back to a different user's data location.
 The mixed TSF fixture uses this process-local option with a disposable directory.

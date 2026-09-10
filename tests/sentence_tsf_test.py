@@ -13,7 +13,7 @@ model_setting='' if bundled else '整句语言模型\t'+win(model)+'\n'
 for arm64x in ([True] if os.environ.get('SENTENCE_ARM64X_ONLY') else [False]):
  if os.environ.get('SENTENCE_X86'):
   dll=Path(os.environ.get('SENTENCE_X86_PACKAGE_DIR',str(BUILD/'Win32/Release')))/'Tigirl.dll';manifest=dll.parent/'NativeTiger.x86.manifest'
-  manifest.write_text((ROOT/'tests/NativeTiger.Test.manifest').read_text().replace('processorArchitecture="arm64"','processorArchitecture="x86"'))
+  manifest.write_text((ROOT/'tests/Tigirl.Test.manifest').read_text().replace('processorArchitecture="arm64"','processorArchitecture="x86"'))
   hosts=[('Win32',BUILD/'tests/Win32/tsf_host.exe',manifest)]
  else:dll,hosts=variants(arm64x)
  for platform,host,manifest in hosts:

@@ -29,8 +29,8 @@ IDI_PUNCTUATION_OFF     ICON                    "image\\PunctuationOff.ico"
 //
 
 IDR_VERSION2 VERSIONINFO
- FILEVERSION 2026,9,10,2
- PRODUCTVERSION 2026,9,10,2
+ FILEVERSION 2026,9,10,4
+ PRODUCTVERSION 2026,9,10,4
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -47,12 +47,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", ""
             VALUE "FileDescription", "虎娘 / Tigirl"
-            VALUE "FileVersion", "2026.9.10.2"
+            VALUE "FileVersion", "2026.9.10.4"
             VALUE "InternalName", "Tigirl.dll"
             VALUE "LegalCopyright", "Copyright (C)"
             VALUE "OriginalFilename", "Tigirl.dll"
             VALUE "ProductName", "Tigirl"
-            VALUE "ProductVersion", "2026.9.10.2"
+            VALUE "ProductVersion", "2026.9.10.4"
         END
     END
     BLOCK "VarFileInfo"

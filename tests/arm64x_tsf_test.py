@@ -16,7 +16,7 @@ def registered():
     return subprocess.check_output([PS, '-NoProfile', '-Command', code], text=True).strip()
 
 before = registered()
-manifest_source = (ROOT / 'tests/NativeTiger.Test.manifest').read_text()
+manifest_source = (ROOT / 'tests/Tigirl.Test.manifest').read_text()
 reports = {}
 for platform, architecture, machine in [('ARM64', 'arm64', 0xaa64), ('x64', 'amd64', 0x8664)]:
     host = ROOT / 'build/tests' / platform / 'tsf_host.exe'

@@ -5,5 +5,5 @@
   <ItemGroup><ClCompile Remove="architecture_load_probe.cpp" />
     <ClCompile Include="sentence_auto_commit_probe.cpp" /><ClCompile Include="..\native\SentenceAutoCommit.cpp" />
   </ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

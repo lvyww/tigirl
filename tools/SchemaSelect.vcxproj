@@ -8,6 +8,6 @@
     <ClCompile Include="..\native\UserStore.cpp" />
     <ClCompile Include="schema_select.cpp" />
   </ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ResourceCompile Include="SchemaSelect.rc" /></ItemGroup>
 </Project>

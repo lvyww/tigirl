@@ -23,7 +23,7 @@ try:
    source=ROOT/'build/ARM64X/ARM64EC/Release';dll=ROOT/'build/Win32/Release/Tigirl.dll' if arch=='Win32' else source/'Tigirl.dll'
    if '--release-x64' in sys.argv and arch=='x64':dll=ROOT/'build/x64/Release/Tigirl.dll'
    shutil.copy2(dll,package/'Tigirl.dll');shutil.copy2(source/'tiger-v2.tcd',package/'tiger-v2.tcd')
-   manifest=package/'NativeTiger.Test.manifest';manifest.write_text((ROOT/'tests/NativeTiger.Test.manifest').read_text().replace('processorArchitecture="arm64"',f'processorArchitecture="{machine}"'),encoding='utf-8-sig')
+   manifest=package/'NativeTiger.Test.manifest';manifest.write_text((ROOT/'tests/Tigirl.Test.manifest').read_text().replace('processorArchitecture="arm64"',f'processorArchitecture="{machine}"'),encoding='utf-8-sig')
    (root/'config.txt').write_text('默认中文\t是\n编码伪装\t甲😀\n最大码长\t2\n中英文不限长混合输入\t是\n',encoding='utf-8-sig')
    exe=ROOT/'build/tests'/arch/'tsf_host.exe'
    result=run_windows([str(exe),win(package/'Tigirl.dll'),'-',win(manifest),'--mask-detached',win(root)],capture_output=True,text=True,timeout=30)

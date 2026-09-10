@@ -47,7 +47,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         length=GetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",path,32768);
         if(length>=32768)throw std::runtime_error("User root override is too long");
         if(length)root=path;
-        else {PWSTR local=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local)))throw std::runtime_error("Cannot locate user data");root=std::filesystem::path(local)/L"NativeTiger";CoTaskMemFree(local);}
+        else {PWSTR local=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local)))throw std::runtime_error("Cannot locate user data");root=std::filesystem::path(local)/L"Tigirl";CoTaskMemFree(local);}
         if(!root.is_absolute())throw std::runtime_error("User root must be absolute");
         auto source=root/L"码表",pinyin=root/L"拼音反查码表";
         auto names=tiger::schemaNames(root);

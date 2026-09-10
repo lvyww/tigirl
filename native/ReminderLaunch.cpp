@@ -28,7 +28,7 @@ LaunchedReminder launchReminder(const std::filesystem::path& executable,const st
     if(!std::filesystem::is_regular_file(executable))throw std::runtime_error("Reminder executable is missing");
     GUID id{};wchar_t identifier[40]{};
     if(FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id,identifier,40))throw std::runtime_error("Cannot identify reminder launch");
-    const auto prefix=L"Local\\NativeTiger.ReminderLaunch."+std::wstring(identifier);
+    const auto prefix=L"Local\\Tigirl.ReminderLaunch."+std::wstring(identifier);
     const auto readyName=prefix+L".ready",goName=prefix+L".go",cancelName=prefix+L".cancel";
     Handle ready{CreateEventW(nullptr,TRUE,FALSE,readyName.c_str())};
     Handle go{CreateEventW(nullptr,TRUE,FALSE,goName.c_str())};

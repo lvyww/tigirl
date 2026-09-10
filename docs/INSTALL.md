@@ -52,13 +52,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1
 ```
 
-脚本会请求管理员权限，将完整包放入 `C:\Program Files\SampleIME\versions`
+脚本会请求管理员权限，将完整包放入 `C:\Program Files\Tigirl\versions`
 下由包哈希确定的独立目录，注册“虎娘”，并创建开始菜单
 “虎娘 → 方案管理”。安装结果记录在 `build\native-install.json`。
 安装后重新启动要使用输入法的应用，让它们加载新一代 DLL。
 
 可从语言栏右键菜单进入“方案管理”或“输入设置”。用户配置默认位于
-`%LOCALAPPDATA%\NativeTiger`；开发测试可通过 `NATIVE_TIGER_USER_ROOT`
+`%LOCALAPPDATA%\Tigirl`；开发测试可通过 `NATIVE_TIGER_USER_ROOT`
 指定独立绝对路径。正常打字在 TSF 进程内执行，不启动原版 Core。
 计时命令使用一次性提醒进程，管理和导入使用短时工具进程。
 

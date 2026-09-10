@@ -2,28 +2,16 @@
 $NativeTigerClsid='{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
 $NativeTigerProfile='{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
 $NativeTigerInstallRoot=Join-Path $env:ProgramFiles 'Tigirl'
-# Adopt an existing package installation without splitting its version history.
-$legacyInstallRoot=Join-Path $env:ProgramFiles 'NativeTiger'
-if(!(Test-Path -LiteralPath (Join-Path $NativeTigerInstallRoot 'install.json')) -and (Test-Path -LiteralPath (Join-Path $legacyInstallRoot 'install.json'))){$NativeTigerInstallRoot=$legacyInstallRoot}
 function Get-PackageDll([string]$Directory,[string]$Architecture) {
-    $new=Join-Path $Directory ($Architecture+'\Tigirl.dll')
-    if(Test-Path -LiteralPath $new){return $new}
-    $legacy=Join-Path $Directory ($Architecture+'\SampleIME.dll')
-    if(Test-Path -LiteralPath $legacy){return $legacy}
-    # Missing current binaries are repairable; do not reinterpret them as another installation.
-    return $new
+    return Join-Path $Directory ($Architecture+'\Tigirl.dll')
 }
 function Get-PackageTool([string]$Directory) {
-    $new=Join-Path $Directory 'x64\Tigirl.exe'
-    if(Test-Path -LiteralPath $new){return $new}
-    $legacy=Join-Path $Directory 'x64\schema_manager.exe'
-    if(Test-Path -LiteralPath $legacy){return $legacy}
-    return $new
+    return Join-Path $Directory 'x64\Tigirl.exe'
 }
 $NativeTigerRecord=Join-Path $NativeTigerInstallRoot 'install.json'
 function Assert-X64System {
     if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'X64' -or ![Environment]::Is64BitProcess){throw 'This package requires x64 Windows and 64-bit PowerShell.'}
-    if([Environment]::OSVersion.Version.Build -lt 19041){throw 'Windows 10 version 2004 or later is required.'}
+    if([Environment]::OSVersion.Version.Build -lt 17763){throw 'Windows 10 version 1809 or later is required.'}
 }
 function Test-Administrator { return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
 function Get-ComPath([string]$View) {
@@ -71,7 +59,7 @@ function Set-MachineEntries([string]$Directory,[string]$Version) {
     Set-ItemProperty $active -Name Version -Value ($Version.Replace('.',','))
     Set-ItemProperty $active -Name StubPath -Value ('"'+$env:windir+'\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "'+$Directory+'\initialize.ps1" -Quiet -SkipConflicts -RequireStandardUser')
     if(Test-Path -LiteralPath (Join-Path $Directory 'setup\gui.txt')){return}
-    $uninstall='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger'
+    $uninstall='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl'
     New-Item -Path $uninstall -Force|Out-Null
     Set-ItemProperty $uninstall -Name DisplayName -Value '虎娘'
     Set-ItemProperty $uninstall -Name DisplayVersion -Value $Version
@@ -79,5 +67,5 @@ function Set-MachineEntries([string]$Directory,[string]$Version) {
     Set-ItemProperty $uninstall -Name UninstallString -Value ('"'+$env:windir+'\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "'+$Directory+'\uninstall.ps1"')
 }
 function Remove-MachineEntries {
-    foreach($key in @('HKLM:\SOFTWARE\Classes\nativetiger',"HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$NativeTigerClsid",'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NativeTiger')){if(Test-Path $key){Remove-Item -LiteralPath $key -Recurse}}
+    foreach($key in @('HKLM:\SOFTWARE\Classes\nativetiger',"HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$NativeTigerClsid",'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tigirl')){if(Test-Path $key){Remove-Item -LiteralPath $key -Recurse}}
 }

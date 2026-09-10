@@ -80,7 +80,7 @@ this explicitly supplied row-order test.
 
 The comparison found that Windows `CompareStringOrdinal` differed from the
 original .NET ICU behavior for final sigma and micro sign. `OrdinalCase.h` now
-uses simple ICU uppercase while preserving U+0131 and U+017F, following the
+uses a built-in Unicode 15.1 simple-uppercase table while preserving U+0131 and U+017F, following the
 [.NET 10 ordinal-casing implementation](https://github.com/dotnet/runtime/blob/v10.0.0/src/native/libs/System.Globalization.Native/pal_common.c).
 Schema catalog, MRU metadata, service loading and the selector share this rule;
 the selector additionally verifies `ς方案` resolves to a prepared `Σ方案` directory
@@ -173,12 +173,12 @@ reading plus parsing, not the remaining directory precedence or full binary impo
 `LexiconOrder.h/.cpp` now implements Windows top-level file enumeration and main
 table ordering. It concatenates TXT files followed by `.dict.yaml` files in native
 enumeration order, promotes names matching the directory's schema name with the
-shared ordinal-ignore-case rule, then uses stable ICU culture collation. Directories
+shared ordinal-ignore-case rule, then uses stable Windows NLS culture collation (see `docs/WINDOWS-COMPATIBILITY.md`). Directories
 and unrelated extensions are excluded; missing directories report an error. The
 caller supplies its current culture explicitly (empty means invariant).
 
-`tests/lexicon_order_parity.py` compares actual Windows directory results with the
-unchanged original `GetOrderedLexiconFiles`. Forty cases pass across invariant,
+Before ICU removal, `tests/lexicon_order_parity.py` compared Windows directory results
+with the original `GetOrderedLexiconFiles`. Forty cases passed across invariant,
 en-US, zh-CN, zh-TW, sv-SE, tr-TR, de-DE and ja-JP, including real staging filenames,
 empty directories, schema-name priority, mixed-case extensions, composed/decomposed
 accents, soft hyphens and other collation ties, CJK and supplementary characters.

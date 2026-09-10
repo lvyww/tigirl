@@ -1,5 +1,5 @@
 #pragma once
-#include <icu.h>
+#include "Unicode.h"
 #include <string>
 #include <string_view>
 namespace tiger {
@@ -8,10 +8,10 @@ namespace tiger {
 inline std::u16string ordinalCaseKey(std::u16string_view text) {
     std::u16string result;result.reserve(text.size());
     for(std::size_t i=0;i<text.size();) {
-        UChar32 c=text[i++];
+        std::uint32_t c=text[i++];
         if(c>=0xd800 && c<=0xdbff && i<text.size() && text[i]>=0xdc00 && text[i]<=0xdfff)
             c=0x10000+((c-0xd800)<<10)+(text[i++]-0xdc00);
-        if(c!=0x0131 && c!=0x017f) c=u_toupper(c);
+        if(c!=0x0131 && c!=0x017f) c=unicode::toUpper(c);
         if(c>0xffff) {result+=static_cast<char16_t>(0xd800+((c-0x10000)>>10));result+=static_cast<char16_t>(0xdc00+((c-0x10000)&1023));}
         else result+=static_cast<char16_t>(c);
     }

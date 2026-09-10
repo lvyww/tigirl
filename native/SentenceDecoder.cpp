@@ -1,7 +1,7 @@
 #include "SentenceDecoder.h"
 #include "SentenceCharacterRanks.h"
 #include "Grapheme.h"
-#include <icu.h>
+#include "Unicode.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -62,7 +62,7 @@ struct Bucket {
         decltype(indices)().swap(indices);
     }
 };
-bool digit(char16_t c){return u_charType(c)==U_DECIMAL_DIGIT_NUMBER;}
+bool digit(char16_t c){return unicode::isDecimalDigit(c);}
 int suffix(std::u16string_view raw,int end,int& rank) {
     rank=0;if(end==static_cast<int>(raw.size()))return end;
     char16_t c=raw[end];
@@ -108,7 +108,7 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
     std::shared_ptr<const SentenceLockedPrefix> lockedPrefix) {
     std::lock_guard<std::mutex> lock(decodeMutex_);
     auto raw=normalizeRawCode(input);
-    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return u_isalpha(c)!=0;})){cache_.reset();return {};}
+    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return unicode::isLetter(c)!=0;})){cache_.reset();return {};}
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
     if(lockedPrefix) {
         // Decode only the tail. Reconstruct model and supplement context from
@@ -160,7 +160,7 @@ bool SentenceDecoder::isProperCodePrefix(std::u16string_view raw) const {
 bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16string_view required,
     std::optional<std::u16string_view> excluded,bool groupEligibleOnly,const SentenceLockedPrefix* lockedPrefix) const {
     auto raw=normalizeRawCode(input);
-    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return u_isalpha(c)!=0;}))return false;
+    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return unicode::isLetter(c)!=0;}))return false;
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
     bool firstOnly=groupEligibleOnly && !std::any_of(raw.begin(),raw.end(),[](char16_t c){return digit(c) || c==u';' || c==u'\'';});
     int length=static_cast<int>(raw.size());std::vector<std::set<std::pair<int,int>>> states(length+1);
@@ -220,7 +220,7 @@ SentenceDecoder::SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
 }
 std::u16string SentenceDecoder::normalizeRawCode(std::u16string_view raw) {
     std::u16string result;result.reserve(raw.size());
-    for(char16_t c:raw)if(!u_isUWhiteSpace(c))result+=static_cast<char16_t>(c==0x0130?c:u_tolower(c));
+    for(char16_t c:raw)if(!unicode::isWhitespace(c))result+=static_cast<char16_t>(c==0x0130?c:unicode::toLower(c));
     return result;
 }
 double SentenceDecoder::transition(Lattice& lattice,std::u16string_view a,std::u16string_view b,std::u16string_view c) const {
@@ -267,7 +267,7 @@ SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int c
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
     auto raw=normalizeRawCode(input);
     // char.IsLetter operates on UTF-16 code units, not supplementary scalars.
-    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return u_isalpha(c)!=0;}))return {};
+    if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return unicode::isLetter(c)!=0;}))return {};
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
     Lattice lattice(static_cast<int>(raw.size()));
     int expanded=expand(raw,lattice,0);
@@ -361,7 +361,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         int maxCode=1;for(int n:lexicon_->codeLengths())maxCode=std::max(maxCode,n);
         for(int tailLength=1;tailLength<=std::min(maxCode-1,length-1);++tailLength) {
             int consumed=length-tailLength;auto tail=std::u16string_view(raw).substr(consumed);
-            if(!std::all_of(tail.begin(),tail.end(),[](char16_t c){return u_isalpha(c)!=0;}) ||
+            if(!std::all_of(tail.begin(),tail.end(),[](char16_t c){return unicode::isLetter(c)!=0;}) ||
                 !lexicon_->isProperCodePrefix(tail) || (tailLength>=2 && !lexicon_->candidates(tail).empty()))continue;
             auto& partial=states[consumed];partial.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters);
             bool added=false;

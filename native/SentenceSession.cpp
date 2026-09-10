@@ -2,11 +2,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#ifdef _WIN32
-#include <icu.h>
-#else
-#include <unicode/uchar.h>
-#endif
+#include "Unicode.h"
 namespace tiger {
 namespace {
 std::atomic<std::uint64_t> nextIdentity{1};
@@ -34,7 +30,7 @@ void SentenceSession::invalidatePending(bool discardResult){
 void SentenceSession::edited(){selected_=0;++generation_;}
 bool SentenceSession::append(char16_t code) {
     if(raw_.size()-committedRaw_>=128)return false;
-    raw_+=static_cast<char16_t>(code==0x0130?code:u_tolower(code));edited();return true;
+    raw_+=static_cast<char16_t>(code==0x0130?code:unicode::toLower(code));edited();return true;
 }
 void SentenceSession::backspace() {
     resetAutomaticState();
@@ -65,7 +61,7 @@ bool SentenceSession::apply(const SentenceDecodeTicket& ticket,SentenceDecodeRes
     // Failure/empty results must still consume the request generation. Raw
     // identity retains original casing; the decoder normalizes only lookup.
     result.rawCode=ticket.raw;
-    bool implicit=continuation_ && !std::any_of(raw_.begin(),raw_.end(),[](char16_t c){return u_charType(c)==U_DECIMAL_DIGIT_NUMBER || c==u';' || c==u'\'';});
+    bool implicit=continuation_ && !std::any_of(raw_.begin(),raw_.end(),[](char16_t c){return unicode::isDecimalDigit(c) || c==u';' || c==u'\'';});
     auto& list=result.candidates;
     list.erase(std::remove_if(list.begin(),list.end(),[&](const SentenceCandidate& c){
         // Segmented paths already passed the decoder's duplicate-single,
@@ -133,7 +129,7 @@ void SentenceSession::resetAutomaticState(){autoCommit_.reset();resetEmptyCodePe
 std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,bool enabled,int minimumRetained,
     const SentencePathQueries& queries) {
     if(raw_.size()-committedRaw_>=128)return {};
-    const auto normalized=static_cast<char16_t>(code==0x0130?code:u_tolower(code));
+    const auto normalized=static_cast<char16_t>(code==0x0130?code:unicode::toLower(code));
     const bool letter=normalized>=u'a' && normalized<=u'z';
     const bool confirm=tabPending_ && letter;tabPending_=false;
     if(confirm && current() && selected_<static_cast<int>(result_->candidates.size())) {
@@ -156,7 +152,7 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
     std::optional<EmptyCodePending> captured;
     if(letter && !emptyCodePending_ && !suspended_ && current()) {
         const bool explicitSelection=std::any_of(raw_.begin(),raw_.end(),[](char16_t c){
-            return u_charType(c)==U_DECIMAL_DIGIT_NUMBER || c==u';' || c==u'\'';
+            return unicode::isDecimalDigit(c) || c==u';' || c==u'\'';
         });
         std::vector<const SentenceCandidate*> eligible;
         // Legal duplicate singles must compete in both uniqueness and confidence,

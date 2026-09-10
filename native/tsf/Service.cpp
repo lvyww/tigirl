@@ -38,7 +38,7 @@ std::filesystem::path userRoot() {
     // Resolve the path without probing the inaccessible parent directory.
     if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local))) return {};
     std::filesystem::path root;
-    try { root=std::filesystem::path(local)/L"NativeTiger"; }
+    try { root=std::filesystem::path(local)/L"Tigirl"; }
     catch(...) { CoTaskMemFree(local); throw; }
     CoTaskMemFree(local); return root;
 }

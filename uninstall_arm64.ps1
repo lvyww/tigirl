@@ -10,12 +10,12 @@ if ($x86Base.OpenSubKey("CLSID\$clsid\InprocServer32")) { throw 'Remove the x86 
 $profile = '{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
 $tip = "0804:$clsid$profile"
 if ($installed.tip -ne $tip) { throw 'Installation record belongs to another input profile.' }
-$installRoot = [IO.Path]::GetFullPath("$env:ProgramFiles\SampleIME")
+$installRoot = [IO.Path]::GetFullPath("$env:ProgramFiles\Tigirl")
 $dll = [IO.Path]::GetFullPath($installed.dll)
 $versions = $installRoot.TrimEnd('\') + '\versions\'
 $generation = Split-Path (Split-Path $dll -Parent) -Leaf
 if (!$dll.StartsWith($versions, [StringComparison]::OrdinalIgnoreCase) -or
-    [IO.Path]::GetFileName($dll) -notin @('Tigirl.dll','SampleIME.dll') -or $generation -notmatch '^[0-9a-f]{16}$' -or
+    [IO.Path]::GetFileName($dll) -ne 'Tigirl.dll' -or $generation -notmatch '^[0-9a-f]{16}$' -or
     [IO.Path]::GetFullPath((Join-Path $versions ("$generation\"+[IO.Path]::GetFileName($dll)))) -ne $dll) {
     throw 'Installation record does not identify a native immutable generation.'
 }

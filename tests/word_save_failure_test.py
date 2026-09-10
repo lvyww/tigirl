@@ -25,7 +25,7 @@ def registration():
     return subprocess.check_output([PS, '-NoProfile', '-Command', script], text=True).strip()
 
 before = registration()
-shutil.copyfile(ROOT / 'tests/NativeTiger.Test.manifest', MANIFEST)
+shutil.copyfile(ROOT / 'tests/Tigirl.Test.manifest', MANIFEST)
 with tempfile.TemporaryDirectory(prefix='word-save-failure-', dir=BUILD) as temporary:
     root = Path(temporary)
     (root / '.tsf-word-save-test').touch()

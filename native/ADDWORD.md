@@ -34,7 +34,7 @@ packs `display=>commit` aliases. Equal display/commit text stays unpacked.
 Code normalization follows invariant lowercase, including supplementary letters
 and the original preservation of capital I-with-dot.
 
-Windows ICU supplies Unicode property/casing data. Segmentation implements the
+Built-in Unicode 15.1 tables supply Unicode property/casing data. Segmentation implements the
 reference StringInfo rules explicitly: default ICU character segmentation has
 additional Indic tailoring and failed the original oracle. The native routine
 now matches the tested original boundaries for those cases, combining marks,
@@ -128,6 +128,6 @@ python3 tests/add_word_key_parity.py --replay --windows
 python3 tests/add_word_ui.py
 ```
 
-The model/UI link Windows `icu.lib`; the UI also uses `imm32.lib`,
+The model/UI use built-in Unicode tables; the UI also uses `imm32.lib`,
 `comctl32.lib`, `user32.lib` and GDI. Deployment keeps typing entirely in the
 native TSF process with no resident Core or per-key IPC.

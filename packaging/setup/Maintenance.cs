@@ -8,13 +8,13 @@ using System.Windows.Forms;
 using System.Runtime.InteropServices;
 [assembly: System.Reflection.AssemblyTitle("虎娘卸载")]
 [assembly: System.Reflection.AssemblyProduct("Tigirl")]
-[assembly: System.Reflection.AssemblyVersion("2026.9.10.2")]
+[assembly: System.Reflection.AssemblyVersion("2026.9.10.4")]
 class Maintenance : Form {
  [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
  readonly CheckBox erase = new CheckBox { Text="同时删除当前用户的码表、设置和个人词条（包括备份）",AutoSize=true };
  readonly Button uninstall = new Button {Text="卸载", AutoSize=true};
  readonly Label status = new Label {AutoSize=true,MaximumSize=new Size(560,0)};
- readonly string data=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NativeTiger");
+ readonly string data=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Tigirl");
  readonly string root=AppDomain.CurrentDomain.BaseDirectory;
  bool busy, complete;
  static bool Elevated(){return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);}

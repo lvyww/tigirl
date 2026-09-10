@@ -7,7 +7,7 @@ $stalledHelper = Join-Path $root 'build\tests\ARM64\reminder_stall_probe.exe'
 $temporary = Join-Path $root ('build\reminder launch ' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporary | Out-Null
 $ledger = Join-Path $temporary 'timer record.txt'
-$name = 'Local\NativeTiger.ReminderLaunchTest.'+[Guid]::NewGuid().ToString('N')
+$name = 'Local\Tigirl.ReminderLaunchTest.'+[Guid]::NewGuid().ToString('N')
 $fired = New-Object Threading.EventWaitHandle($false,[Threading.EventResetMode]::ManualReset,$name)
 $child = $null
 function Require($condition,$message) { if (!$condition) { throw $message } }

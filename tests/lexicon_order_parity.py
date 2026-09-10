@@ -1,4 +1,6 @@
-"""Compare actual Windows directory enumeration/collation with original loader."""
+"""Historical ICU parity (pre-1809 compatibility). Current NLS behavior is tested
+by lexicon_order_nls_test.ps1; use this script to inspect ICU/NLS differences.
+"""
 import hashlib,json,random,subprocess,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build';EXE=BUILD/'tests/ARM64/lexicon_order_probe.exe'

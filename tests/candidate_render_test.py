@@ -30,6 +30,6 @@ except Exception as error:
     report['status']='failed';report['error']=str(error)
     raise
 finally:
-    sources=['native/tsf/CandidateRenderer.cpp','native/tsf/CandidateRenderer.h','native/tsf/CandidateDpi.h','tests/candidate_render_probe.cpp','tests/CandidateRenderProbe.vcxproj','tests/candidate_render_test.py','data/fonts/LXGWWenKaiGBScreen.ttf']
+    sources=['native/tsf/CandidateRenderer.cpp','native/tsf/CandidateRenderer.h','native/tsf/CandidateDpi.h','native/tsf/CandidateFrame.h','tests/candidate_render_probe.cpp','tests/CandidateRenderProbe.vcxproj','tests/candidate_render_test.py','data/fonts/LXGWWenKaiGBScreen.ttf']
     report['source_sha256']={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in sources}
     report_path.write_text(json.dumps(report,indent=2)+'\n')

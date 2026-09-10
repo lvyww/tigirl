@@ -19,7 +19,7 @@ foreach ($file in @($source, $probe)) {
 $loaded = (& $probe $source) | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or !$loaded.loaded -or !$loaded.class_instance) { throw 'x86 loader/class check failed.' }
 $hash = (Get-FileHash $source).Hash
-$destination = "$env:ProgramFiles\SampleIME\versions\x86-$($record.generation)-$($hash.Substring(0,16).ToLowerInvariant())"
+$destination = "$env:ProgramFiles\Tigirl\versions\x86-$($record.generation)-$($hash.Substring(0,16).ToLowerInvariant())"
 $dll = Join-Path $destination 'Tigirl.dll'
 $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32)
 $old = $base.OpenSubKey("CLSID\$clsid\InprocServer32")

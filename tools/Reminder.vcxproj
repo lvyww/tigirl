@@ -3,6 +3,6 @@
   <PropertyGroup><NativeProbeName>Tigirl.Reminder</NativeProbeName></PropertyGroup>
   <Import Project="..\tests\EngineProbe.vcxproj" />
   <ItemGroup><ClCompile Remove="engine_probe.cpp" /><ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" /><ClCompile Include="timer_reminder.cpp" /></ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>ole32.lib;user32.lib;icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>ole32.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ResourceCompile Include="Reminder.rc" /></ItemGroup>
 </Project>

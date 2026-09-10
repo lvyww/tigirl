@@ -9,7 +9,7 @@ $temporary = Join-Path $root ('build\reminder-test-' + [Guid]::NewGuid().ToStrin
 New-Item -ItemType Directory -Path $temporary | Out-Null
 function Require($condition, $message) { if (!$condition) { throw $message } }
 function New-EventPair {
-    $name = 'Local\NativeTiger.ReminderTest.' + [Guid]::NewGuid().ToString('N')
+    $name = 'Local\Tigirl.ReminderTest.' + [Guid]::NewGuid().ToString('N')
     $ready = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, "$name.ready")
     $fired = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, "$name.fired")
     $events.Add($ready); $events.Add($fired)
@@ -48,7 +48,7 @@ try {
     $old = Start-Reminder $scope 10 ([ReminderClock]::GetTickCount64()+5000) $first
     $deadline = [ReminderClock]::GetTickCount64()+1000
     $latest = Start-Reminder $scope 20 $deadline $second
-    $invalidReadyName = 'Local\NativeTiger.ReminderTest.missing.'+[Guid]::NewGuid().ToString('N')
+    $invalidReadyName = 'Local\Tigirl.ReminderTest.missing.'+[Guid]::NewGuid().ToString('N')
     $failed = Start-Owned $exe @('--timer',$scope,'40','0',$invalidReadyName)
     Require ($failed.WaitForExit(5000) -and $failed.ExitCode -eq 2) 'Invalid startup acknowledgement was accepted'
     $outdated = Start-Reminder $scope 15 0 $stale

@@ -1,3 +1,24 @@
+## Donation settings tab
+
+- Add a fifth native tab displaying the user-provided donation PNG, embedded
+  unchanged as RCDATA and decoded with Windows WIC. Preserve its aspect ratio.
+- Resize tab headers and keyboard cycling for five pages; keep font-dropdown
+  test capture separate from the new page index.
+- ARM64/x64 builds and 96/144/192-DPI settings regression pass. Source image
+  SHA256 matches the supplied original; phone scanning is not verified.
+- Source/build only; not installed or included in the distribution installer yet.
+
+## Tiger-colored settings
+
+- Add cream window and warm-white page backgrounds, brown labels and muted
+  descriptions. Preserve classic input controls and the compact layout.
+- Owner-draw native tab headers with a light-orange selected fill and orange
+  indicator, retaining tab labels, keyboard navigation and focus rectangles.
+- Use system palette in high contrast and repaint on system color/theme changes.
+- ARM64/x64 builds and isolated 96/144/192-DPI settings regression pass.
+  Screenshots reviewed; live high-contrast switching was not exercised.
+- Source/build only; local deployment and distribution installer remain unchanged.
+
 ## Compact native settings styling
 
 - Keep the existing dense four-page layout; replace page buttons with a native
@@ -3008,7 +3029,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
 - `tests/run_tsf_host.ps1` captures both UI variants serially, with test/DLL hashes
   and failure logs. Its layout-recovery checks require the pending fixed build.
 - Installation copies DLL/data into immutable hash-named directories under
-  Program Files/SampleIME/versions and verifies registration and hashes.
+  Program Files/Tigirl/versions and verifies registration and hashes.
   `rollback_arm64.ps1 -CheckOnly` validates the saved original baseline target;
   an actual rollback has not been performed. Daily TigerClaw remains separate.
 
@@ -3023,7 +3044,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
   without BOM, both UTF-16 and UTF-32 byte orders, malformed data and preservation
   of input bytes. The loader has a 4 MiB bound and rejects malformed Unicode;
   the original .NET reader can substitute replacement characters.
-- TSF source now loads `%LOCALAPPDATA%/NativeTiger/自定义选重键.txt` at activation
+- TSF source now loads `%LOCALAPPDATA%/Tigirl/自定义选重键.txt` at activation
   and document focus, using defaults for missing/invalid files. No file I/O occurs
   in key preview. This source builds for ARM64, but is not installed because the
   previous elevation was canceled. Custom key-trace parity now passes as detailed below; actual
@@ -3052,7 +3073,7 @@ The complete ordinary-input acceptance scope is not yet satisfied.
 ## Ordinary settings update
 
 - `native/Settings.*` parses 17 original ordinary-engine settings. The TSF source
-  loads the independent `%LOCALAPPDATA%/NativeTiger/config.txt` at activation and
+  loads the independent `%LOCALAPPDATA%/Tigirl/config.txt` at activation and
   document focus, then overlays the separate selection bindings. New contexts
   receive the configured default language; existing contexts retain their current
   language on reload. No per-key settings I/O was added.

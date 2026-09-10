@@ -117,8 +117,7 @@ void LanguageBar::refreshMenu() {
     for(const auto name:candidateThemeNames)themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
     menu_={{7,L"虎爪 Github 页面",L"official"},{},
         {3,L"方案文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
-        {5,L"加词"},std::move(schemas),std::move(themes),{2,L"输入设置"},{},
-        {8,L"切换到英文"}};
+        {5,L"加词"},std::move(schemas),std::move(themes),{2,L"输入设置"}};
 }
 HRESULT LanguageBar::InitMenu(ITfMenu* menu) {
     traceMenu("InitMenu");
@@ -147,7 +146,6 @@ HRESULT LanguageBar::OnMenuSelect(UINT id) {
     if(secure_ || !manager_)return S_FALSE;
     try {
         if(id==5){if(!addWord_)return S_FALSE;auto callback=addWord_;callback();return S_OK;}
-        if(id==8){if(!compartment_)return S_FALSE;VARIANT value;VariantInit(&value);value.vt=VT_I4;value.lVal=0;return compartment_->SetValue(client_,&value);}
         std::wstring action,value;
         if(id!=1 && id!=2) {
             const MenuEntry* selected=nullptr;

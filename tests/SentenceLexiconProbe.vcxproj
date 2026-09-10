@@ -7,5 +7,5 @@
     <ClCompile Include="..\native\Dictionary.cpp" /><ClCompile Include="..\native\AddWord.cpp" />
     <ClCompile Include="..\native\LexiconSerialize.cpp" />
   </ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>icu.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

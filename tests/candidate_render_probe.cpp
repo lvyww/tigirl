@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include "../native/tsf/CandidateRenderer.h"
 #include "../native/tsf/CandidateDpi.h"
+#include "../native/tsf/CandidateFrame.h"
 #include "../native/tsf/CandidatePlacement.h"
 #include <iostream>
 #include <cmath>
@@ -40,6 +41,32 @@ int wmain(int argc,wchar_t** argv) {
             }
             require(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),context)!=FALSE,"Host DPI context not restored");
             DestroyWindow(owner);SetThreadDpiAwarenessContext(original);
+        }
+        {
+            CandidateDpiScope scope;
+            HWND window=CreateWindowExW(WS_EX_LAYERED|WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,L"STATIC",L"Atomic frame probe",WS_POPUP,50,60,1,1,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+            require(window!=nullptr,"Cannot create frame probe");
+            RECT original{};GetWindowRect(window,&original);
+            HDC memory=CreateCompatibleDC(nullptr);
+            BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=120;info.bmiHeader.biHeight=-80;
+            info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;void* bits=nullptr;
+            HBITMAP bitmap=CreateDIBSection(memory,&info,DIB_RGB_COLORS,&bits,nullptr,0);
+            require(memory && bitmap && bits,"Cannot prepare backing frame");
+            auto old=SelectObject(memory,bitmap);
+            std::fill_n(static_cast<std::uint32_t*>(bits),120*80,0xffee9933u);
+            RECT prepared{};GetWindowRect(window,&prepared);
+            require(EqualRect(&original,&prepared) && !IsWindowVisible(window),"Preparation changed window geometry or visibility");
+            BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+            require(!publishCandidateFrame(window,nullptr,{300,200},{120,80},blend),"Incomplete frame accepted");
+            GetWindowRect(window,&prepared);require(EqualRect(&original,&prepared),"Rejected frame changed geometry");
+            require(publishCandidateFrame(window,memory,{300,200},{120,80},blend),"Frame publication failed");
+            RECT published{};GetWindowRect(window,&published);
+            require(published.left==300 && published.top==200 && published.right==420 && published.bottom==280,"Pixels and final geometry not published together");
+            require(!IsWindowVisible(window),"Publication showed intentionally hidden window");
+            require(publishCandidateFrame(window,memory,{200,300},{60,40},blend),"Shrinking frame failed");
+            GetWindowRect(window,&published);
+            require(published.left==200 && published.top==300 && published.right==260 && published.bottom==340,"Shrinking frame kept stale geometry");
+            SelectObject(memory,old);DeleteObject(bitmap);DeleteDC(memory);DestroyWindow(window);
         }
         const std::filesystem::path output=argv[2];std::filesystem::create_directories(output);
         const std::vector<std::filesystem::path> files={argv[1]};

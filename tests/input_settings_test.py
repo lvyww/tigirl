@@ -17,6 +17,8 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
  font_catalog=(root/'font-catalog.tsv').read_text().splitlines()
  assert font_catalog and font_catalog[0].startswith('#') and len(font_catalog)>3,font_catalog
  for dpi in [96,144,192]:
+  with Image.open(root/f'donation-settings-{dpi}.bmp') as capture:
+   capture.convert('RGB').save(ROOT/f'build/donation-settings-{dpi}.png')
   with Image.open(root/f'input-settings-{dpi}.bmp') as capture:
    capture.convert('RGB').save(ROOT/f'build/input-settings-{dpi}.png')
   with Image.open(root/f'font-dropdown-{dpi}.bmp') as capture:

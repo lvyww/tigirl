@@ -45,13 +45,19 @@ std::vector<std::filesystem::path> orderedLexiconFiles(
         else if(ends(u".DICT.YAML")) yaml.push_back({file,std::move(name),primary});
     }
     txt.insert(txt.end(),std::make_move_iterator(yaml.begin()),std::make_move_iterator(yaml.end()));
-    UErrorCode status=U_ZERO_ERROR;
-    std::unique_ptr<UCollator,decltype(&ucol_close)> collator(ucol_open(culture.empty()?"root":culture.c_str(),&status),ucol_close);
-    if(U_FAILURE(status) || !collator) throw std::runtime_error("Cannot create table collation");
+    // Use Windows NLS collation, available on every supported OS. Primary
+    // files and equal-name enumeration order retain their existing precedence.
+    std::wstring locale(culture.begin(),culture.end());
+    std::replace(locale.begin(),locale.end(),L'_',L'-');
+    if(!locale.empty() && !IsValidLocaleName(locale.c_str()))
+        throw std::runtime_error("Invalid table collation locale");
     std::stable_sort(txt.begin(),txt.end(),[&](const Row& a,const Row& b) {
         if(a.primary!=b.primary) return a.primary;
-        return ucol_strcoll(collator.get(),reinterpret_cast<const UChar*>(a.name.data()),static_cast<int32_t>(a.name.size()),
-            reinterpret_cast<const UChar*>(b.name.data()),static_cast<int32_t>(b.name.size()))==UCOL_LESS;
+        const auto order=CompareStringEx(locale.empty()?LOCALE_NAME_INVARIANT:locale.c_str(),0,
+            reinterpret_cast<LPCWCH>(a.name.data()),static_cast<int>(a.name.size()),
+            reinterpret_cast<LPCWCH>(b.name.data()),static_cast<int>(b.name.size()),nullptr,nullptr,0);
+        if(!order)throw std::system_error(static_cast<int>(GetLastError()),std::system_category(),"Compare table filenames");
+        return order==CSTR_LESS_THAN;
     });
     std::vector<std::filesystem::path> result;result.reserve(txt.size());
     for(auto& row:txt) result.push_back(std::move(row.path));

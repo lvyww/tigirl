@@ -3,6 +3,7 @@
 #include "../../SampleIME/Globals.h"
 #include "CandidateUI.h"
 #include "CandidateDpi.h"
+#include "CandidateFrame.h"
 #include <algorithm>
 #include <cmath>
 #include "../CandidateTheme.h"
@@ -102,7 +103,7 @@ HRESULT CandidateUI::GetCurrentPage(UINT* page) {
 HRESULT CandidateUI::SetSelection(UINT index) {
     if(index>=snapshot_.total) return E_INVALIDARG;
     selected_=index;
-    if(window_) paint(nullptr);
+    try {if(window_) layoutAndPaint();} catch(...) {itemRects_.clear();return E_FAIL;}
     return S_OK;
 }
 HRESULT CandidateUI::Finalize() {
@@ -143,15 +144,9 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
     }
     try {
     if(!renderer_)renderer_=std::make_unique<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});
-    // Move to the caret monitor first, so GetDpiForWindow returns its DPI.
-    if(MonitorFromWindow(window_,MONITOR_DEFAULTTONEAREST)!=MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST)) {
-        layingOut_=true;
-        SetWindowPos(window_,nullptr,caret_.left,caret_.bottom,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER);
-        layingOut_=false;
-    }
     refreshReveal();
     } catch(...) {
-        ShowWindow(window_,SW_HIDE);
+        itemRects_.clear();
         OutputDebugStringW(L"NativeTiger: DirectWrite candidate layout failed\n");
     }
 }
@@ -175,58 +170,56 @@ void CandidateUI::layoutAndPaint() {
        (presentation_.code.empty() && presentation_.items.empty()))return;
     CandidateDpiScope scope;
     struct Guard {bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}} guard(layingOut_);
-    for(int attempt=0;attempt<2;++attempt) {
-        dpi_=GetDpiForWindow(window_);if(!dpi_)dpi_=96;
-        MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
-        if(!GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor))return;
-        renderer_->layout(presentation_,std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_));
-        width_=static_cast<int>(renderer_->pixelWidth(dpi_));height_=static_cast<int>(renderer_->pixelHeight(dpi_));
-        itemRects_.clear();const float scale=dpi_/96.f;
-        for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
-            static_cast<LONG>(std::floor(r.left*scale)),static_cast<LONG>(std::floor(r.top*scale)),
-            static_cast<LONG>(std::ceil(r.right*scale)),static_cast<LONG>(std::ceil(r.bottom*scale))});
-        const auto laidOutDpi=dpi_;place();
-        if(GetDpiForWindow(window_)==laidOutDpi)break;
-    }
-    paint(nullptr);
-}
-void CandidateUI::place() {
-    MONITORINFO monitor{}; monitor.cbSize=sizeof(monitor);
-    GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor);
-    width_=std::min(width_,static_cast<int>(monitor.rcWork.right-monitor.rcWork.left));
     const auto monitorId=MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST);
-    if(placementMonitor_!=monitorId){placement_.reset();placementMonitor_=monitorId;}
-    const auto point=placement_.place(caret_,monitor.rcWork,width_,height_);
-    SetWindowPos(window_,HWND_TOPMOST,point.x,point.y,width_,height_,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+    MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
+    if(!GetMonitorInfoW(monitorId,&monitor))return;
+    dpi_=candidateMonitorDpi(monitorId);
+    renderer_->layout(presentation_,std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_));
+    width_=static_cast<int>(renderer_->pixelWidth(dpi_));height_=static_cast<int>(renderer_->pixelHeight(dpi_));
+    auto nextPlacement=placement_;
+    if(placementMonitor_!=monitorId)nextPlacement.reset();
+    const auto position=nextPlacement.place(caret_,monitor.rcWork,width_,height_);
+    // No HWND move/resize/show until the complete frame has been prepared.
+    // UpdateLayeredWindow publishes pixels, dimensions and position together.
+    if(!paint(nullptr,&position)){itemRects_.clear();return;}
+    placement_=nextPlacement;placementMonitor_=monitorId;
+    itemRects_.clear();const float scale=dpi_/96.f;
+    for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
+        static_cast<LONG>(std::floor(r.left*scale)),static_cast<LONG>(std::floor(r.top*scale)),
+        static_cast<LONG>(std::ceil(r.right*scale)),static_cast<LONG>(std::ceil(r.bottom*scale))});
 }
-void CandidateUI::paint(HDC target) {
-    if(!window_ || !renderer_ || width_<=0 || height_<=0) return;
+bool CandidateUI::paint(HDC target,const POINT* destination) {
+    if(!window_ || !renderer_ || width_<=0 || height_<=0) return false;
     CandidateDpiScope dpiScope;
     HDC memory=CreateCompatibleDC(nullptr);
-    if(!memory) return;
+    if(!memory) return false;
     BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
     info.bmiHeader.biWidth=width_; info.bmiHeader.biHeight=-height_;
     info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=32; info.bmiHeader.biCompression=BI_RGB;
     void* bits=nullptr;
     HBITMAP bitmap=CreateDIBSection(memory,&info,DIB_RGB_COLORS,&bits,nullptr,0);
-    if(!bitmap) { DeleteDC(memory); return; }
+    if(!bitmap) { DeleteDC(memory); return false; }
     auto old=SelectObject(memory,bitmap);
+    bool published=false;
     try {
         std::vector<std::uint32_t> rendered;
         const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
         renderer_->render(dpi_,selected_>=first?selected_-first:UINT_MAX,rendered);
         if(rendered.size()!=static_cast<std::size_t>(width_)*height_)throw std::runtime_error("Candidate surface/layout mismatch");
         std::memcpy(bits,rendered.data(),rendered.size()*sizeof(std::uint32_t));
-        if(target) BitBlt(target,0,0,width_,height_,memory,0,0,SRCCOPY);
+        if(target) published=BitBlt(target,0,0,width_,height_,memory,0,0,SRCCOPY)!=FALSE;
         else {
             RECT rect; GetWindowRect(window_,&rect);
-            POINT position{rect.left,rect.top},source{}; SIZE size{width_,height_};
+            POINT position=destination?*destination:POINT{rect.left,rect.top}; SIZE size{width_,height_};
             BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
-            if(!UpdateLayeredWindow(window_,nullptr,&position,&size,memory,&source,0,&blend,ULW_ALPHA))
-                OutputDebugStringW(L"NativeTiger: layered candidate update failed\n");
+            published=publishCandidateFrame(window_,memory,position,size,blend);
+            if(!published)OutputDebugStringW(L"NativeTiger: layered candidate update failed\n");
+            else if(shown_ && hasCaret_ && !IsWindowVisible(window_))
+                SetWindowPos(window_,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
         }
     } catch(...) { OutputDebugStringW(L"NativeTiger: candidate rendering failed\n"); }
     GdiFlush(); SelectObject(memory,old); DeleteObject(bitmap); DeleteDC(memory);
+    return published;
 }
 LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARAM l) {
     auto self=reinterpret_cast<CandidateUI*>(GetWindowLongPtrW(window,GWLP_USERDATA));

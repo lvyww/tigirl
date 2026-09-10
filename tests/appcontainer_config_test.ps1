@@ -5,7 +5,7 @@ $probe = Join-Path $repo 'build\tests\ARM64\appcontainer_config_probe.exe'
 if (!(Test-Path -LiteralPath $probe)) { throw 'Build AppContainerConfigProbe.vcxproj for ARM64 first.' }
 $processes = @(Get-Process QQMusic,SearchHost -ErrorAction SilentlyContinue)
 if (!$processes.Count) { throw 'Open QQ Music UWP or Windows Search before running the token tests.' }
-$fixture = Join-Path $repo ('build\appcontainer-config-' + [Guid]::NewGuid().ToString('N') + '\NativeTiger')
+$fixture = Join-Path $repo ('build\appcontainer-config-' + [Guid]::NewGuid().ToString('N') + '\Tigirl')
 New-Item -ItemType Directory -Path $fixture -Force | Out-Null
 New-Item -ItemType File -Path (Join-Path $fixture '.appcontainer-config-test') | Out-Null
 Set-NativeTigerAppContainerAccess $fixture
