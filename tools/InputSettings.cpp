@@ -1,4 +1,4 @@
-#define NOMINMAX
+﻿#define NOMINMAX
 #include "InputSettings.h"
 #include "SelectionSettings.h"
 #include "SelectionKeys.h"
@@ -24,6 +24,7 @@
 namespace {
 constexpr int Pages=221;
 constexpr int Donation=223;
+constexpr int AnimationEnabled=224,AnimationDuration=225;
 struct Flag {const char16_t* key;bool tiger::Config::*member;};
 const Flag flags[]={
     {u"默认中文",&tiger::Config::defaultChinese},{u"shift切换中英文",&tiger::Config::shiftToggle},
@@ -237,10 +238,13 @@ struct Dialog {
         control(CandidateDelay,L"EDIT",std::to_wstring(initialStyle.candidateDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,190,247,85,28);
         control(0,L"STATIC",L"注释／拆分延时",0,300,251,175,25);
         control(AnnotationDelay,L"EDIT",std::to_wstring(initialStyle.annotationDelayMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,490,247,100,28);
-        control(0,L"STATIC",L"范围 0–60000；0 为立即显示，从本次输入开始分别计时。",0,18,281,580,20,true);
         control(0,L"STATIC",L"编码伪装（留空关闭）",0,18,311,190,25);
         control(CodeMask,L"EDIT",wide(initialStyle.codeMask.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,215,307,375,28);
         control(0,L"STATIC",L"如填 ●，ab 显示为 ●●；不改变实际查码和上屏文字。",0,18,341,580,20,true);
+        control(AnimationEnabled,L"BUTTON",L"候选窗动效",BS_AUTOCHECKBOX|WS_TABSTOP,18,280,200,26);
+        SendMessageW(item(AnimationEnabled),BM_SETCHECK,initialStyle.animationEnabled?BST_CHECKED:BST_UNCHECKED,0);
+        control(0,L"STATIC",L"动效时间（毫秒）",0,265,284,210,22);
+        control(AnimationDuration,L"EDIT",std::to_wstring(initialStyle.animationDurationMs).c_str(),ES_NUMBER|ES_AUTOHSCROLL|WS_TABSTOP,490,278,100,28);
         buildingPage=2;
         control(AddEnabled,L"BUTTON",L"启用手动加词",BS_AUTOCHECKBOX|WS_TABSTOP,18,20,570,28);
         control(AddShortcut,HOTKEY_CLASSW,L"",WS_TABSTOP,18,60,570,32);
@@ -321,6 +325,10 @@ struct Dialog {
         std::istringstream input(ascii);input.imbue(std::locale::classic());double size=0;
         if(!(input>>size) || input.peek()!=std::char_traits<char>::eof() || !std::isfinite(size) || size<3 || size>200)
             throw std::runtime_error("Font size must be between 3 and 200");
+        const bool animation=SendMessageW(item(AnimationEnabled),BM_GETCHECK,0,0)==BST_CHECKED;
+        const auto duration=text(AnimationDuration).empty()?200:delay(AnimationDuration);
+        if(animation!=initialStyle.animationEnabled)changes.emplace_back(u"候选窗动效",animation?u"是":u"否");
+        if(duration!=initialStyle.animationDurationMs)changes.emplace_back(u"候选窗动效时间(毫秒)",numberText(duration));
         const auto candidateDelay=delay(CandidateDelay),annotationDelay=delay(AnnotationDelay);
         if(candidateDelay!=initialStyle.candidateDelayMs)changes.emplace_back(u"延时显示候选(毫秒)",numberText(candidateDelay));
         if(annotationDelay!=initialStyle.annotationDelayMs)changes.emplace_back(u"延时展开注释和拆分(毫秒)",numberText(annotationDelay));
@@ -482,6 +490,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         }
         if(testMode==2) {
             if(dialog.initialStyle.codeMask!=u"甲😀乙")throw std::runtime_error("Mask setting did not reopen");
+            if(dialog.initialStyle.animationEnabled || dialog.initialStyle.animationDurationMs!=321)throw std::runtime_error("Animation settings did not reopen");
             SetWindowTextW(dialog.item(CodeMask),L"");
             if(dialog.initialStyle.candidateDelayMs!=250 || dialog.initialStyle.annotationDelayMs!=60000)
                 throw std::runtime_error("Saved reveal delays did not reopen");
@@ -563,6 +572,8 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             SetWindowTextW(dialog.item(id),L"0");if(dialog.delay(id)!=0)throw std::runtime_error("Zero delay is not immediate");
         }
         SetWindowTextW(dialog.item(CodeMask),L"甲😀乙");
+        SendMessageW(dialog.item(AnimationEnabled),BM_SETCHECK,BST_UNCHECKED,0);
+        SetWindowTextW(dialog.item(AnimationDuration),L"321");
         SetWindowTextW(dialog.item(CandidateDelay),L"250");SetWindowTextW(dialog.item(AnnotationDelay),L"60000");
         SetWindowTextW(dialog.item(FontSize),L"17.5");if(!dialog.fonts->select(L"Segoe UI"))throw std::runtime_error("System font missing from picker");
         SendMessageW(dialog.item(300),BM_SETCHECK,BST_UNCHECKED,0);

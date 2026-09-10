@@ -12,7 +12,7 @@ class CandidateRenderer final {
 public:
     CandidateRenderer(const CandidateStyle&,const std::vector<std::filesystem::path>&);
     void layout(const CandidatePresentation&,float maxWidthDip);
-    void render(UINT dpi,UINT selection,std::vector<std::uint32_t>& pixels);
+    void render(UINT dpi,UINT selection,std::vector<std::uint32_t>& pixels,const SIZE* frameSize=nullptr);
     const std::vector<D2D1_RECT_F>& items() const { return items_; }
     float width() const { return width_; }
     float height() const { return height_; }
@@ -22,7 +22,7 @@ public:
 private:
     using Layout=Microsoft::WRL::ComPtr<IDWriteTextLayout>;
     Layout makeLayout(std::u16string_view,float,float);
-    Microsoft::WRL::ComPtr<ID2D1PathGeometry> outline(float inset) const;
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> outline(float inset,float width,float height) const;
     Microsoft::WRL::ComPtr<ID2D1Factory> drawing_;
     Microsoft::WRL::ComPtr<IDWriteFactory3> writing_;
     Microsoft::WRL::ComPtr<IWICImagingFactory> imaging_;

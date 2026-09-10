@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
   copies=list(root.glob(broken.name+'.invalid.*'))
   assert len(copies)==1 and copies[0].read_bytes()==original+b'\0',(index,copies)
   assert broken.read_text(encoding='utf-8-sig').startswith('1选 0x31')
- for expected in ['编码伪装\t甲😀乙','延时显示候选(毫秒)\t250','延时展开注释和拆分(毫秒)\t60000','# 用户注释','未知设置\t保留原值','默认中文\t否','最大码长\t6','每页候选个数\t10','当前码表\t并发方案','翻页键\tPageUp/PageDown','字体\tSegoe UI','字体大小\t17.5','竖排候选\t否','候选窗显示编码\t是','主题\t清晨','手动加词快捷键\tCtrl+Alt+0X4B','切换最近码表快捷键\tCtrl+Alt+0X4A','Ctrl+m切换最近码表\t是']:
+ for expected in ['候选窗动效\t否','候选窗动效时间(毫秒)\t321','编码伪装\t甲😀乙','延时显示候选(毫秒)\t250','延时展开注释和拆分(毫秒)\t60000','# 用户注释','未知设置\t保留原值','默认中文\t否','最大码长\t6','每页候选个数\t10','当前码表\t并发方案','翻页键\tPageUp/PageDown','字体\tSegoe UI','字体大小\t17.5','竖排候选\t否','候选窗显示编码\t是','主题\t清晨','手动加词快捷键\tCtrl+Alt+0X4B','切换最近码表快捷键\tCtrl+Alt+0X4A','Ctrl+m切换最近码表\t是']:
   assert expected in text,(expected,text)
  selected=selection.read_text(encoding='utf-8-sig')
  for expected in ['# 选重备注','3选 999 VK_F3','1选\t0x31 0x51','2选\t','9选\t0x78']:
@@ -72,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
  shortcut=json.loads(result.stdout)
  assert shortcut.get('openAddWord') and shortcut['handled'],shortcut
  report={'status' :'passed','ui_saved_addword_shortcut_engine_dispatch':True,'ui_saved_binding_engine_dispatch':True,'restored_defaults_engine_dispatch':True,'cleared_binding_not_selected':True,'engine_sha256':hashlib.sha256(engine.read_bytes()).hexdigest(),'selection_keys_saved':True,'selection_other_rows_preserved':True,'native_controls':True,'invalid_range_rejected':True,'edited_values_saved':True,'concurrent_unedited_field_preserved':True,'unknown_fields_and_comments_preserved':True,'invalid_or_reserved_shortcuts_rejected':2,'shortcut_conflict_rejected':True,'shortcuts_saved':True,'theme_choices':9,'theme_saved':True,'appearance_saved':True,'invalid_font_sizes_rejected':3,'paging_choices':4,'paging_saved':True,'cancel_preserved_file':True,'layout_dpis':[96,144,192],'physical_visual_validation':False,'exe_sha256':hashlib.sha256(EXE.read_bytes()).hexdigest()}
- report.update(code_mask_saved_reopened_cancelled=True,reveal_delays_saved_reopened=True,reveal_delay_invalid_rejected=8,reveal_delay_cancel_preserved=True,malformed_selection_repaired=True, malformed_selection_backup_exact=True,
+ report.update(animation_saved_reopened=True,code_mask_saved_reopened_cancelled=True,reveal_delays_saved_reopened=True,reveal_delay_invalid_rejected=8,reveal_delay_cancel_preserved=True,malformed_selection_repaired=True, malformed_selection_backup_exact=True,
                isolated_capture_desktop=True, input_desktop_switched=False,
                capture_method='WM_PRINT of actual controls on a separate, inactive desktop',
                rendered_sentence_input_fields=True,

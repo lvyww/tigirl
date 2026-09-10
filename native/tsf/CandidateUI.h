@@ -2,6 +2,8 @@
 #include "Service.h"
 #include "CandidateRenderer.h"
 #include "CandidatePlacement.h"
+#include "FrameTransition.h"
+#include "CandidateFrame.h"
 #include "../CandidateReveal.h"
 
 namespace tiger::tsf {
@@ -33,7 +35,20 @@ public:
     STDMETHODIMP Abort() override;
 private:
     static LRESULT CALLBACK windowProc(HWND,UINT,WPARAM,LPARAM);
-    bool paint(HDC dc,const POINT* destination=nullptr);
+    bool paint(HDC dc,const POINT* destination=nullptr,const SIZE* size=nullptr);
+    void schedulePaint();
+    void stopAnimation();
+    void animate();
+    bool refreshPending_=false,rendererDirty_=false;
+    FrameTransition transition_;
+    CandidateSurface surface_;
+    std::vector<std::uint32_t> finalPixels_,scratchPixels_;
+    bool finalReady_=false;
+    std::uint64_t visualRevision_=0;
+    CandidatePresentation cachedPresentation_;
+    UINT cachedDpi_=0,cachedSelection_=UINT_MAX;
+    float cachedMaxWidth_=0;
+    unsigned retryCount_=0;
     void refreshReveal();
     CandidateReveal reveal_;
     void layoutAndPaint();
@@ -51,7 +66,7 @@ private:
     std::vector<UINT> pages_;
     bool shown_=false,hasCaret_=false;
     HWND window_=nullptr;
-    std::unique_ptr<CandidateRenderer> renderer_;
+    std::shared_ptr<CandidateRenderer> renderer_;
     bool layingOut_=false;
     RECT caret_{};
     CandidatePlacement placement_;

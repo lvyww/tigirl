@@ -1,10 +1,26 @@
 #include "CandidateReveal.h"
 #include "Settings.h"
+#include "tsf/FrameTransition.h"
 #include <stdexcept>
 #include <iostream>
 using namespace tiger;
-void check(bool yes) {if(!yes)throw std::runtime_error("Candidate reveal mismatch");}
+void check(bool yes) {static int n=0;++n;if(!yes)throw std::runtime_error("Candidate reveal/animation mismatch at check "+std::to_string(n));}
 int main() {
+    {
+        using namespace tiger::tsf;
+        FrameTransition t;FrameRect a{10,20,100,80},b{110,120,200,160};
+        t.Start(a,b,1000,60,200);check(t.Sample(1000)==a);check(t.Active());
+        auto middle=t.Sample(1100);check(middle.x==60 && middle.width==150);
+        t.Start(middle,a,1100,60,200);check(t.Sample(1100)==middle);check(t.Sample(1500)==a && !t.Active());
+        t.Start(a,b,0,144,0);check(!t.Active() && t.Sample(0)==b);
+        t.Start(a,b,0,60,200);t.Cancel();check(!t.Active());
+        t.Start(a,b,0,60,60000);check(t.Sample(60001)==b && !t.Active());
+        check(parseCandidateStyle(u"").animationEnabled && parseCandidateStyle(u"").animationDurationMs==200);
+        check(!parseCandidateStyle(u"候选窗动效\t否").animationEnabled);
+        for(auto pair:{std::pair{u"",200},{u"bad",200},{u"0",0},{u"60000",60000},{u"200",200}})
+            check(parseCandidateStyle(std::u16string(u"候选窗动效时间(毫秒)\t")+pair.first).animationDurationMs==pair.second);
+        check(parseCandidateStyle(u"候选窗显示时间(毫秒)\t25\n候选窗隐藏时间(毫秒)\t400").animationDurationMs==200);
+    }
     CandidateStyle style;style.candidateDelayMs=250;style.annotationDelayMs=500;
     Snapshot s;s.mode=Mode::Composing;s.raw=u"ab";s.total=1;s.candidates={{u"交",u"交",u"拆分"}};
     CandidateReveal r;

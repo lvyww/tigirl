@@ -559,7 +559,8 @@ int wmain(int argc,wchar_t** argv) {
         const bool maskDetached=argc==6 && wcscmp(argv[4],L"--mask-detached")==0;
         const bool timerDetached=argc==6 && wcscmp(argv[4],L"--timer-detach")==0;
         const bool wordSaveFailure=argc==6 && wcscmp(argv[4],L"--word-save-failure")==0;
-        const bool candidateMouse=argc==6 && wcscmp(argv[4],L"--candidate-mouse")==0;
+        const bool candidateAsync=argc==6 && wcscmp(argv[4],L"--candidate-async")==0;
+        const bool candidateMouse=candidateAsync || (argc==6 && wcscmp(argv[4],L"--candidate-mouse")==0);
         const bool managementLaunch=argc==6 && wcscmp(argv[4],L"--management-launch")==0;
         const bool managementMenu=managementLaunch || (argc==6 && wcscmp(argv[4],L"--management-menu")==0);
         const bool activeMemory=argc==6 && wcscmp(argv[4],L"--memory-active")==0;
@@ -644,6 +645,47 @@ int wmain(int argc,wchar_t** argv) {
             const char* popup=managementLaunch?"false":"true";
             std::cout<<"{\"status\":\"passed\",\"management_actions\":2,\"popup_validated\":"<<popup<<",\"os_synthesized_menu_keys\":"<<popup<<",\"child_foreground\":"<<popup<<",\"host_foreground_restored\":"<<popup<<",\"physical_hardware_input\":false}\n";
             return 0;
+        }
+        if(candidateAsync) {
+            std::ofstream result(std::filesystem::path(argv[5])/L"result.json");
+            try {
+                check(profiles->DeactivateProfile(TF_PROFILETYPE_INPUTPROCESSOR,0x0804,clsid,profile,nullptr,TF_IPPMF_FORPROCESS));pump();
+                ComPtr<ITfLangBarItemMgr> bars;check(manager.As(&bars));ComPtr<ITfLangBarItem> oldItem;
+                if(SUCCEEDED(bars->GetItem(tiger::tsf::LanguageBar::ItemId,&oldItem)))check(bars->RemoveItem(oldItem.Get()));
+                check(factory->CreateInstance(nullptr,IID_PPV_ARGS(&service)));
+                ComPtr<ITfClientId> ids;check(manager.As(&ids));TfClientId nativeClient;check(ids->GetClientId(clsid,&nativeClient));
+                check(service->ActivateEx(manager.Get(),nativeClient,0));
+                ComPtr<ITfThreadMgrEventSink> focus;check(service.As(&focus));check(focus->OnSetFocus(first.manager.Get(),nullptr));
+                ComPtr<ITfKeyEventSink> input;check(service.As(&input));check(input->OnSetFocus(TRUE));
+                BYTE saved[256],empty[256]{};GetKeyboardState(saved);SetKeyboardState(empty);
+                auto tapAsync=[&](WPARAM key){BOOL eaten=FALSE;check(input->OnTestKeyDown(first.context.Get(),key,1,&eaten));require(eaten,"Async key not consumed");check(input->OnKeyDown(first.context.Get(),key,1,&eaten));check(input->OnTestKeyUp(first.context.Get(),key,1,&eaten));if(eaten)check(input->OnKeyUp(first.context.Get(),key,1,&eaten));};
+                tapAsync('A');tapAsync('B');
+                const auto candidate=ownCandidateWindow();
+                require(candidate && !IsWindowVisible(candidate),"Key callbacks rendered synchronously");
+                require(first.store->text==L"甲😀","Text edit waited for rendering");
+                MSG message{},refresh{};unsigned count=0;
+                while(PeekMessageW(&message,candidate,WM_APP+0x351,WM_APP+0x351,PM_REMOVE)){refresh=message;++count;}
+                require(count==1,"Refresh messages were not coalesced");DispatchMessageW(&refresh);
+                require(IsWindowVisible(candidate),"First complete frame did not appear");
+                auto wait=[&](unsigned ms){auto until=GetTickCount64()+ms;do{pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<until);};
+                RECT before{},start{},middle{},after{};GetWindowRect(candidate,&before);
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,2400),0);pump();GetWindowRect(candidate,&start);
+                require(start.bottom-start.top==before.bottom-before.top,"Resize bypassed animation");
+                wait(80);GetWindowRect(candidate,&middle);
+                wait(220);GetWindowRect(candidate,&after);
+                require(middle.bottom-middle.top>before.bottom-before.top && middle.bottom-middle.top<after.bottom-after.top,"No intermediate size frame");
+                // Retarget a running shrink through an input update, then commit
+                // while another frame notification is queued.
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,static_cast<WORD>(-2400)),0);pump();
+                tapAsync(VK_BACK);require(first.store->text==L"甲","Input failed during animation");
+                tapAsync('B');require(first.store->text==L"甲😀","Input retarget failed");
+                tapAsync(VK_SPACE);require(first.store->text==L"交","Commit waited for animation");
+                require(!IsWindow(candidate),"Commit did not immediately remove candidate");
+                wait(250);require(!ownCandidateWindow(),"Queued frame resurrected candidate");
+                SetKeyboardState(saved);check(service->Deactivate());
+                result<<"{\"status\":\"passed\",\"async_refresh_coalesced\":true,\"immediate_show_hide\":true,\"intermediate_geometry\":true,\"input_during_animation\":true,\"commit_cancels_pending_frame\":true,\"physical_focus_validated\":false,\"menu_validated\":false}";
+                return 0;
+            }catch(const std::exception& error){result<<"{\"status\":\"failed\"}";std::ofstream(std::filesystem::path(argv[5])/L"error.txt")<<error.what();throw;}
         }
         if(maskDetached) {
             try {
@@ -1348,6 +1390,7 @@ int wmain(int argc,wchar_t** argv) {
             std::cerr<<" selection="<<doc.store->selection.acpStart<<","<<doc.store->selection.acpEnd<<" tick="<<GetTickCount64();
             std::cerr<<" shift="<<GetKeyState(VK_SHIFT)<<" ctrl="<<GetKeyState(VK_CONTROL)<<" alt="<<GetKeyState(VK_MENU)<<"\n";
         };
+        bool deferCandidatePump=false;
         auto event=[&](Document& doc,WPARAM vk,bool down,bool duplicateTest=false) {
             recordTerminationStacks=true;
             observeKey(events,vk,down,false,false,doc);
@@ -1385,7 +1428,7 @@ int wmain(int argc,wchar_t** argv) {
                 const auto deadline=GetTickCount64()+2000;
                 do {pump();if(delivered)break;MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<deadline);
                 require(delivered,"Queued test key was not dispatched");
-            } else dispatch(); ++events; pump(); observeKey(events,vk,down,true,eaten!=FALSE,doc); traceState("after",doc,vk,down); return eaten!=FALSE;
+            } else dispatch(); ++events; if(!deferCandidatePump)pump(); observeKey(events,vk,down,true,eaten!=FALSE,doc); traceState("after",doc,vk,down); return eaten!=FALSE;
         };
         auto tap=[&](Document& doc,WPARAM vk) { const bool eaten=event(doc,vk,true,true); event(doc,vk,false); return eaten; };
         if(candidateMouse) {
@@ -1393,7 +1436,16 @@ int wmain(int argc,wchar_t** argv) {
             try {
                 ShowWindow(window,SW_SHOWNORMAL);SetForegroundWindow(window);SetFocus(window);
                 check(manager->SetFocus(first.manager.Get()));pump();
+                deferCandidatePump=true;
                 require(tap(first,'A') && tap(first,'B'),"Candidate input failed");
+                const auto pendingCandidate=ownCandidateWindow();
+                require(pendingCandidate && !IsWindowVisible(pendingCandidate),"Candidate rendered synchronously inside key callback");
+                MSG refresh{};unsigned refreshCount=0;
+                while(PeekMessageW(&refresh,pendingCandidate,WM_APP+0x351,WM_APP+0x351,PM_REMOVE))++refreshCount;
+                require(refreshCount==1,"Consecutive input did not coalesce candidate refresh");
+                require(first.store->text.size()>0,"Text edit waited for candidate rendering");
+                DispatchMessageW(&refresh);deferCandidatePump=false;
+                require(IsWindowVisible(pendingCandidate),"First complete frame did not appear immediately");
                 auto wait=[&](unsigned ms){auto until=GetTickCount64()+ms;do{pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<until);};
                 wait(150);
                 const auto candidate=ownCandidateWindow();require(candidate && IsWindowVisible(candidate),"Candidate missing");
@@ -1422,7 +1474,7 @@ int wmain(int argc,wchar_t** argv) {
                     while((popup=FindWindowExW(nullptr,popup,L"#32768",nullptr))) {
                         DWORD pid=0;GetWindowThreadProcessId(popup,&pid);if(pid!=GetCurrentProcessId())continue;
                         const auto menu=reinterpret_cast<HMENU>(SendMessageW(popup,0x01e1,0,0));
-                        if(menu && GetMenuItemCount(menu)==12)menuSeen=true;
+                        if(menu && GetMenuItemCount(menu)==9)menuSeen=true;
                     }
                     EndMenu();KillTimer(nullptr,id);
                 });
@@ -1434,15 +1486,19 @@ int wmain(int argc,wchar_t** argv) {
                 require(IsWindowVisible(candidate),"Menu hid candidate");
                 // Default vertical -> code-only -> horizontal -> vertical.
                 RECT verticalRect{},codeRect{},horizontalRect{},restoredRect{};GetWindowRect(candidate,&verticalRect);
-                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&codeRect);
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(300);GetWindowRect(candidate,&codeRect);
                 require(codeRect.bottom-codeRect.top<verticalRect.bottom-verticalRect.top,"Middle click did not enter code-only mode");
-                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&horizontalRect);
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(300);GetWindowRect(candidate,&horizontalRect);
                 require(horizontalRect.right-horizontalRect.left>codeRect.right-codeRect.left,"Middle click did not enter horizontal mode");
-                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(150);GetWindowRect(candidate,&restoredRect);
+                SendMessageW(candidate,WM_MBUTTONUP,0,0);wait(300);GetWindowRect(candidate,&restoredRect);
                 require(restoredRect.bottom-restoredRect.top==verticalRect.bottom-verticalRect.top,"Middle click did not restore vertical mode");
                 require(first.store->text==original && compositionCount(first)==1 && GetFocus()==window,"Middle cycle changed composition or focus");
+                deferCandidatePump=true;
+                SendMessageW(candidate,WM_MOUSEWHEEL,MAKEWPARAM(0,120),0);
                 tap(first,VK_SPACE);require(first.store->text==L"交","Commit after mouse actions failed");
-                result<<"{\"status\":\"passed\",\"mask_preedit_backspace_commit\":true,\"middle_cycle\":true,\"wheel_live_resize\":true,\"wheel_persisted\":true,\"menu_items\":12,\"composition_preserved\":true,\"focus_preserved\":true,\"commit_after_menu\":true}";
+                require(!IsWindow(candidate),"Commit did not immediately remove candidate window");
+                pump();require(!ownCandidateWindow(),"Queued refresh resurrected committed candidate");deferCandidatePump=false;
+                result<<"{\"status\":\"passed\",\"async_refresh_coalesced\":true,\"immediate_show_hide\":true,\"mask_preedit_backspace_commit\":true,\"middle_cycle\":true,\"wheel_live_resize\":true,\"wheel_persisted\":true,\"menu_items\":9,\"composition_preserved\":true,\"focus_preserved\":true,\"commit_after_menu\":true}";
                 SetKeyboardState(savedKeys);return 0;
             }catch(const std::exception& error){result<<"{\"status\":\"failed\"}";std::ofstream(std::filesystem::path(argv[5])/L"error.txt")<<error.what();throw;}
         }

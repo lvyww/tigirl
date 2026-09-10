@@ -12,6 +12,7 @@
 
 namespace tiger::tsf {
 namespace {
+constexpr UINT refreshMessage=WM_APP+0x351;
 constexpr wchar_t windowClass[]=L"NativeTiger.Candidate.v1";
 
 }
@@ -24,20 +25,19 @@ CandidateUI::CandidateUI(Service* owner,std::shared_ptr<Context> state,Candidate
 CandidateUI::~CandidateUI() { detach(); DllRelease(); }
 void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts) {
     if(style_==style && fonts_==fonts)return;
-    // Construct before replacing the working renderer; font errors keep the old UI.
-    auto renderer=std::make_unique<CandidateRenderer>(style,fonts?fonts->paths():std::vector<std::filesystem::path>{});
-    style_=style;fonts_=std::move(fonts);renderer_=std::move(renderer);
-    refreshReveal();
+    style_=style;fonts_=std::move(fonts);rendererDirty_=true;
+    schedulePaint();
 }
 void CandidateUI::detach() {
+    ++visualRevision_;stopAnimation();refreshPending_=false;
     owner_=nullptr; shown_=false; reveal_.reset(); placement_.reset();
     if(window_) {
-        KillTimer(window_,1);
+        KillTimer(window_,1);KillTimer(window_,3);
         const auto window=window_; window_=nullptr;
         SetWindowLongPtrW(window,GWLP_USERDATA,0);
         DestroyWindow(window);
     }
-    renderer_.reset();
+    surface_.clear();renderer_.reset();
     fonts_.reset();
     state_.reset();
 }
@@ -56,8 +56,8 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { reveal_.reset(); placement_.reset(); if(window_) { KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
-    else if(window_)refreshReveal();
+    if(!shown_) { ++visualRevision_;stopAnimation();reveal_.reset(); placement_.reset(); if(window_) { KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
+    else if(window_)schedulePaint();
     return S_OK;
 }
 HRESULT CandidateUI::IsShown(BOOL* value) { if(!value) return E_POINTER; *value=shown_?TRUE:FALSE; return S_OK; }
@@ -103,7 +103,7 @@ HRESULT CandidateUI::GetCurrentPage(UINT* page) {
 HRESULT CandidateUI::SetSelection(UINT index) {
     if(index>=snapshot_.total) return E_INVALIDARG;
     selected_=index;
-    try {if(window_) layoutAndPaint();} catch(...) {itemRects_.clear();return E_FAIL;}
+    if(window_)schedulePaint();
     return S_OK;
 }
 HRESULT CandidateUI::Finalize() {
@@ -127,6 +127,7 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
     // Hide stale geometry until a subsequent layout notification supplies it.
     hasCaret_=caret!=nullptr;
     if(!caret) {
+        ++visualRevision_;stopAnimation();itemRects_.clear();
         if(window_) ShowWindow(window_,SW_HIDE);
         return;
     }
@@ -142,18 +143,37 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow) {
             WS_POPUP,caret_.left,caret_.bottom,1,1,ownerWindow,nullptr,Global::dllInstanceHandle,this);
         if(!window_) return;
     }
-    try {
-    if(!renderer_)renderer_=std::make_unique<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});
-    refreshReveal();
-    } catch(...) {
-        itemRects_.clear();
-        OutputDebugStringW(L"NativeTiger: DirectWrite candidate layout failed\n");
-    }
+    schedulePaint();
 }
+void CandidateUI::stopAnimation() {
+    transition_.Cancel();if(window_){KillTimer(window_,2);KillTimer(window_,3);}
+}
+void CandidateUI::schedulePaint() {
+    if(!window_ || !owner_ || !shown_)return;
+    ++visualRevision_;itemRects_.clear();retryCount_=0;
+    if(!refreshPending_)refreshPending_=PostMessageW(window_,refreshMessage,0,0)!=FALSE;
+}
+void CandidateUI::animate() {
+    if(!window_ || !owner_ || !shown_ || !hasCaret_){stopAnimation();return;}
+    if(refreshPending_)return; // New input wins over an old animation target.
+    if(!transition_.Active()){KillTimer(window_,2);return;}
+    const auto rect=transition_.Sample(GetTickCount64());
+    const POINT position{rect.x,rect.y};const SIZE size{std::max(1,rect.width),std::max(1,rect.height)};
+    if(!paint(nullptr,&position,transition_.Active()?&size:nullptr)) {
+        stopAnimation();itemRects_.clear();if(retryCount_++<3)SetTimer(window_,3,100,nullptr);
+    } else if(!transition_.Active())KillTimer(window_,2);
+}
+
 void CandidateUI::refreshReveal() {
     if(!window_)return;
     KillTimer(window_,1);
     if(!owner_ || !state_ || !shown_)return;
+    if(rendererDirty_ || !renderer_) {
+        const auto revision=visualRevision_;
+        auto next=std::make_shared<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});
+        if(!window_ || !owner_ || revision!=visualRevision_)return;
+        renderer_=std::move(next);rendererDirty_=false;finalReady_=false;
+    }
     const auto now=GetTickCount64();
     reveal_.update(snapshot_,style_,now);
     presentation_=reveal_.presentation(snapshot_,style_);
@@ -161,7 +181,7 @@ void CandidateUI::refreshReveal() {
     if(remaining)SetTimer(window_,1,remaining,nullptr);
     itemRects_.clear();
     if(!hasCaret_ || (presentation_.code.empty() && presentation_.items.empty())) {
-        ShowWindow(window_,SW_HIDE);return;
+        stopAnimation();ShowWindow(window_,SW_HIDE);return;
     }
     layoutAndPaint();
 }
@@ -174,51 +194,65 @@ void CandidateUI::layoutAndPaint() {
     MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
     if(!GetMonitorInfoW(monitorId,&monitor))return;
     dpi_=candidateMonitorDpi(monitorId);
-    renderer_->layout(presentation_,std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_));
-    width_=static_cast<int>(renderer_->pixelWidth(dpi_));height_=static_cast<int>(renderer_->pixelHeight(dpi_));
+    const auto revision=visualRevision_;
+    auto drawing=renderer_;
+    const float maxWidth=std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_);
+    const bool changed=!finalReady_ || dpi_!=cachedDpi_ || maxWidth!=cachedMaxWidth_ ||
+        presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
+    if(changed)drawing->layout(presentation_,maxWidth);
+    width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
     auto nextPlacement=placement_;
     if(placementMonitor_!=monitorId)nextPlacement.reset();
     const auto position=nextPlacement.place(caret_,monitor.rcWork,width_,height_);
-    // No HWND move/resize/show until the complete frame has been prepared.
-    // UpdateLayeredWindow publishes pixels, dimensions and position together.
-    if(!paint(nullptr,&position)){itemRects_.clear();return;}
+    const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
+    const auto selection=selected_>=first?selected_-first:UINT_MAX;
+    if(changed || cachedSelection_!=selection){
+        finalReady_=false;drawing->render(dpi_,selection,finalPixels_);
+        if(!window_ || !owner_ || revision!=visualRevision_)return;
+        finalReady_=true;cachedPresentation_=presentation_;cachedDpi_=dpi_;cachedMaxWidth_=maxWidth;cachedSelection_=selection;
+    }
+    RECT current{};GetWindowRect(window_,&current);
+    const FrameRect from{current.left,current.top,current.right-current.left,current.bottom-current.top};
+    const FrameRect target{position.x,position.y,width_,height_};
+    if(IsWindowVisible(window_) && style_.animationEnabled && style_.animationDurationMs && from!=target) {
+        if(!transition_.Active() || transition_.Target()!=target || transition_.Duration()!=static_cast<unsigned>(style_.animationDurationMs))
+            transition_.Start(from,target,GetTickCount64(),60,static_cast<unsigned>(style_.animationDurationMs));
+        const auto frame=transition_.Sample(GetTickCount64());
+        const POINT at{frame.x,frame.y};const SIZE size{std::max(1,frame.width),std::max(1,frame.height)};
+        if(!paint(nullptr,&at,&size))throw std::runtime_error("Candidate animation publication failed");
+        if(!SetTimer(window_,2,10,nullptr)){stopAnimation();if(!paint(nullptr,&position))return;}
+    } else {
+        stopAnimation();if(!paint(nullptr,&position))throw std::runtime_error("Candidate publication failed");
+    }
+    if(!window_ || !owner_ || revision!=visualRevision_)return;
     placement_=nextPlacement;placementMonitor_=monitorId;
     itemRects_.clear();const float scale=dpi_/96.f;
     for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
         static_cast<LONG>(std::floor(r.left*scale)),static_cast<LONG>(std::floor(r.top*scale)),
         static_cast<LONG>(std::ceil(r.right*scale)),static_cast<LONG>(std::ceil(r.bottom*scale))});
 }
-bool CandidateUI::paint(HDC target,const POINT* destination) {
+bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSize) {
     if(!window_ || !renderer_ || width_<=0 || height_<=0) return false;
     CandidateDpiScope dpiScope;
-    HDC memory=CreateCompatibleDC(nullptr);
-    if(!memory) return false;
-    BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth=width_; info.bmiHeader.biHeight=-height_;
-    info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=32; info.bmiHeader.biCompression=BI_RGB;
-    void* bits=nullptr;
-    HBITMAP bitmap=CreateDIBSection(memory,&info,DIB_RGB_COLORS,&bits,nullptr,0);
-    if(!bitmap) { DeleteDC(memory); return false; }
-    auto old=SelectObject(memory,bitmap);
+    const int frameWidth=frameSize?frameSize->cx:width_,frameHeight=frameSize?frameSize->cy:height_;
+    if(target)return surface_.print(target);
     bool published=false;
+    const auto revision=visualRevision_;auto drawing=renderer_;
     try {
-        std::vector<std::uint32_t> rendered;
         const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
-        renderer_->render(dpi_,selected_>=first?selected_-first:UINT_MAX,rendered);
-        if(rendered.size()!=static_cast<std::size_t>(width_)*height_)throw std::runtime_error("Candidate surface/layout mismatch");
-        std::memcpy(bits,rendered.data(),rendered.size()*sizeof(std::uint32_t));
-        if(target) published=BitBlt(target,0,0,width_,height_,memory,0,0,SRCCOPY)!=FALSE;
-        else {
-            RECT rect; GetWindowRect(window_,&rect);
-            POINT position=destination?*destination:POINT{rect.left,rect.top}; SIZE size{width_,height_};
-            BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
-            published=publishCandidateFrame(window_,memory,position,size,blend);
-            if(!published)OutputDebugStringW(L"NativeTiger: layered candidate update failed\n");
-            else if(shown_ && hasCaret_ && !IsWindowVisible(window_))
-                SetWindowPos(window_,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-        }
+        if(frameSize)drawing->render(dpi_,selected_>=first?selected_-first:UINT_MAX,scratchPixels_,frameSize);
+        else if(!finalReady_)throw std::runtime_error("Candidate final frame unavailable");
+        const auto& rendered=frameSize?scratchPixels_:finalPixels_;
+        if(rendered.size()!=static_cast<std::size_t>(frameWidth)*frameHeight)throw std::runtime_error("Candidate surface/layout mismatch");
+        if(!window_ || !owner_ || !shown_ || !hasCaret_ || revision!=visualRevision_)return false;
+        const SIZE size{frameWidth,frameHeight};
+        if(!surface_.prepare(size,rendered))throw std::runtime_error("Candidate backing surface unavailable");
+        RECT rect{};GetWindowRect(window_,&rect);
+        const POINT position=destination?*destination:POINT{rect.left,rect.top};
+        published=surface_.publish(window_,position);
+        if(published && shown_ && hasCaret_ && !IsWindowVisible(window_))
+            SetWindowPos(window_,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
     } catch(...) { OutputDebugStringW(L"NativeTiger: candidate rendering failed\n"); }
-    GdiFlush(); SelectObject(memory,old); DeleteObject(bitmap); DeleteDC(memory);
     return published;
 }
 LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARAM l) {
@@ -230,11 +264,18 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
     if(!self) return DefWindowProcW(window,message,w,l);
     ComPtr<CandidateUI> keepAlive=self;
     try {
-        if(message==WM_TIMER && w==1) {self->refreshReveal();return 0;}
-        if(message==WM_DPICHANGED) {
-            self->dpi_=HIWORD(w);self->layoutAndPaint();return 0;
+        if(message==refreshMessage) {
+            self->refreshPending_=false;
+            try{self->refreshReveal();}catch(...){self->stopAnimation();self->itemRects_.clear();if(self->window_ && self->retryCount_++<3)SetTimer(window,3,100,nullptr);}
+            return 0;
         }
-        if(message==WM_DISPLAYCHANGE || message==WM_SETTINGCHANGE) {self->layoutAndPaint();return 0;}
+        if(message==WM_TIMER && w==1) {KillTimer(window,1);self->schedulePaint();return 0;}
+        if(message==WM_TIMER && w==2) {self->animate();return 0;}
+        if(message==WM_TIMER && w==3) {KillTimer(window,3);if(!self->refreshPending_)self->refreshPending_=PostMessageW(window,refreshMessage,0,0)!=FALSE;return 0;}
+        if(message==WM_DPICHANGED) {
+            if(!self->layingOut_)self->schedulePaint();return 0;
+        }
+        if(message==WM_DISPLAYCHANGE || message==WM_SETTINGCHANGE) {self->schedulePaint();return 0;}
         if(message==WM_MBUTTONUP) {if(self->owner_)self->owner_->candidateCycle();return 0;}
         if(message==WM_RBUTTONDOWN) {
             POINT point{};GetCursorPos(&point);
@@ -247,10 +288,11 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
         }
         if(message==WM_MOUSEACTIVATE) return MA_NOACTIVATE;
         if(message==WM_ERASEBKGND) return 1;
-        if(message==WM_PRINTCLIENT) { self->paint(reinterpret_cast<HDC>(w)); return 0; }
+        if(message==WM_PRINTCLIENT) { if(self->finalReady_)self->paint(reinterpret_cast<HDC>(w)); return 0; }
         if(message==WM_PAINT) { PAINTSTRUCT paint; BeginPaint(window,&paint); EndPaint(window,&paint); return 0; }
         if(message==WM_LBUTTONDOWN) {
             POINT point{static_cast<short>(LOWORD(l)),static_cast<short>(HIWORD(l))};
+            RECT client{};GetClientRect(window,&client);if(!PtInRect(&client,point) || self->refreshPending_)return 0;
             for(std::size_t i=0;i<self->itemRects_.size();++i) if(PtInRect(&self->itemRects_[i],point)) {
                 self->SetSelection(static_cast<UINT>(self->snapshot_.page*self->engine_.pageSize()+i));
                 self->Finalize(); break;

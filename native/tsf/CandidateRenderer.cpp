@@ -84,9 +84,9 @@ void CandidateRenderer::layout(const CandidatePresentation& presentation,float m
 }
 UINT CandidateRenderer::pixelWidth(UINT dpi) const { return static_cast<UINT>(std::max(1.,std::ceil(width_*dpi/96.))); }
 UINT CandidateRenderer::pixelHeight(UINT dpi) const { return static_cast<UINT>(std::max(1.,std::ceil(height_*dpi/96.))); }
-Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset) const {
+Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset,float frameWidth,float frameHeight) const {
     const auto& theme=candidateTheme(style_.theme);
-    const float left=inset,top=inset,right=std::max(inset,width_-inset),bottom=std::max(inset,height_-inset);
+    const float left=inset,top=inset,right=std::max(inset,frameWidth-inset),bottom=std::max(inset,frameHeight-inset);
     float r[4];for(int i=0;i<4;++i)r[i]=std::clamp(static_cast<float>(theme.corners[i])-inset,0.f,std::max(0.f,std::min(right-left,bottom-top)/2));
     Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;checked(drawing_->CreatePathGeometry(&path));
     Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;checked(path->Open(&sink));
@@ -98,9 +98,10 @@ Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset
     sink->AddLine(D2D1::Point2F(left,top+r[0]));arc(left+r[0],top,r[0]);
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);checked(sink->Close());return path;
 }
-void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>& pixels) {
+void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>& pixels,const SIZE* frameSize) {
     if(dpi<48 || dpi>960)throw std::invalid_argument("Invalid candidate DPI");
-    const UINT width=pixelWidth(dpi),height=pixelHeight(dpi);
+    const UINT width=frameSize?static_cast<UINT>(std::max(1L,frameSize->cx)):pixelWidth(dpi),height=frameSize?static_cast<UINT>(std::max(1L,frameSize->cy)):pixelHeight(dpi);
+    const float frameWidth=frameSize?width*96.f/dpi:width_,frameHeight=frameSize?height*96.f/dpi:height_;
     if(static_cast<std::uint64_t>(width)*height>16000000)throw std::length_error("Candidate surface exceeds limit");
     if(!target_ || width!=surfaceWidth_ || height!=surfaceHeight_) {
         target_.Reset();surface_.Reset();
@@ -113,11 +114,11 @@ void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>
     // Subpixel RGB coverage is unsuitable for per-pixel transparent windows.
     target_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;checked(target_->CreateSolidColorBrush(D2D1::ColorF(0,0.f),&brush));
-    const auto& theme=candidateTheme(style_.theme);auto shape=outline(0),border=outline(static_cast<float>(theme.borderWidth)/2);
+    const auto& theme=candidateTheme(style_.theme);auto shape=outline(0,frameWidth,frameHeight),border=outline(static_cast<float>(theme.borderWidth)/2,frameWidth,frameHeight);
     Microsoft::WRL::ComPtr<ID2D1Layer> clip;checked(target_->CreateLayer(&clip));
     target_->BeginDraw();target_->Clear(D2D1::ColorF(0,0.f));
     target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape.Get()),clip.Get());
-    brush->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,width_,height_),brush.Get());
+    brush->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush.Get());
     // The first candidate is the default choice, not a visually highlighted row.
     if(selected>0 && selected<items_.size()){brush->SetColor(color(theme.selection));target_->FillRectangle(items_[selected],brush.Get());}
     brush->SetColor(color(theme.border));target_->DrawGeometry(border.Get(),brush.Get(),static_cast<float>(theme.borderWidth));

@@ -70,6 +70,17 @@ int wmain(int argc,wchar_t** argv) {
         }
         const std::filesystem::path output=argv[2];std::filesystem::create_directories(output);
         const std::vector<std::filesystem::path> files={argv[1]};
+        {
+            CandidateStyle style;CandidateRenderer renderer(style,files);
+            renderer.layout({u"ab",{u"1 候选文字",u"2 字号保持正常"}},400);
+            std::vector<std::uint32_t> full,clippedPixels;renderer.render(96,0,full);
+            const auto width=renderer.pixelWidth(96),height=renderer.pixelHeight(96);
+            SIZE clip{static_cast<LONG>(width/2),static_cast<LONG>(height)};
+            renderer.render(96,0,clippedPixels,&clip);
+            // Interior text pixels remain at the same coordinates, not scaled.
+            for(UINT y=12;y+12<height;++y)for(UINT x=12;x+12<static_cast<UINT>(clip.cx);++x)
+                require(full[y*width+x]==clippedPixels[y*clip.cx+x],"Animation stretched text instead of clipping");
+        }
         unsigned cases=0;
         for(bool vertical:{false,true})for(const auto theme:candidateThemeNames) {
             CandidateStyle style;style.vertical=vertical;style.theme=theme;
