@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 deploy = (ROOT / "packaging" / "setup" / "deploy.ps1").read_text(encoding="utf-8-sig")
 iss = (ROOT / "packaging" / "setup" / "Tigirl.iss").read_text(encoding="utf-8-sig")
 zip_install = (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8-sig")
+initialize = (ROOT / "packaging" / "initialize.ps1").read_text(encoding="utf-8-sig")
 
 
 def require(condition: bool, message: str) -> None:
@@ -42,6 +43,16 @@ require("Machine registration is the commit point" in iss, "transaction boundary
 require("UserInitFailed:=True" in iss, "user initialization failure has no non-fatal state")
 require("码表初始化未完成，正在恢复原安装" not in iss, "old fatal user-initialization rollback path remains")
 
+# Because machine commit now precedes user initialization, the user journal must carry
+# its own completion state. A crash in the user step must restore a prepared journal,
+# while an initialized journal can be discarded when the matching machine tx committed.
+require("state='prepared'" in initialize, "user journal has no prepared state")
+require("state='initialized'" in initialize, "user journal has no initialized state")
+require(
+    "$committed -and $pending.state -eq 'initialized'" in initialize,
+    "machine commit alone still causes an interrupted user journal to be discarded",
+)
+
 # Uninstall commits at registration removal; damaged inventory only limits file cleanup.
 require("Uninstall inventory is incomplete; registration removal will continue" in deploy, "damaged manifest still blocks uninstall")
 require("Registration removal is the uninstall commit point" in deploy, "uninstall commit boundary is missing")
@@ -52,4 +63,4 @@ require("Input method registration belongs to another installation." in deploy, 
 require("The new machine registration remains active" in zip_install, "ZIP installer still treats user initialization as machine failure")
 require("$recovery=if($installed.previous)" not in zip_install, "ZIP user initialization still launches rollback/uninstall")
 
-print("PASS: repairable setup policy, commit boundary, persistent logs, and non-fatal file cleanup.")
+print("PASS: repairable setup policy, commit boundary, persistent logs, durable user journal, and non-fatal file cleanup.")
