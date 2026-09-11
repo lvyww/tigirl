@@ -32,10 +32,12 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
-      - name: Test script cleanup and failure propagation
+      - name: Test script cleanup, installer resilience and failure propagation
         shell: pwsh
         run: |
           python tests/test_candidate_ui_presentation_cleanup.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/setup_resilience_policy_test.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Compile DLL, loader probe and all production tools (no model)
         shell: pwsh
@@ -83,6 +85,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: python tests/test_candidate_ui_presentation_cleanup.py -v
+      - run: python tests/setup_resilience_policy_test.py
       - run: python tests/bundled_schemas_test.py --verify-only
       - run: python tests/run_core_tests.py --cxx clang++ --sanitize
         env:
