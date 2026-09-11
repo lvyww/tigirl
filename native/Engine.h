@@ -98,6 +98,9 @@ public:
     int pageSize() const { return config_.pageSize; }
     void setPage(int page);
     KeyResult select(int index);
+    // Select an absolute index from candidateAt()/Snapshot::total, independent
+    // of paging or filtered sentence rows. Invalid indices leave state intact.
+    std::optional<KeyResult> selectCandidate(std::uint32_t index);
     KeyResult setChinese(bool chinese);
     void cancel();
     void focusChanged();
@@ -119,6 +122,7 @@ private:
     KeyResult finishMixed(std::u16string text = {});
     void rebuildMixed();
     KeyResult selectRaw(int index);
+    int sentenceCandidateIndex(std::uint32_t index) const;
     KeyResult toggle();
     bool controlSpace(const KeyEvent& key, KeyResult& result);
     void resetControlSpace();

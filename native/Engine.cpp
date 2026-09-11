@@ -187,6 +187,18 @@ KeyResult Engine::select(int index) {
     return result;
 }
 
+std::optional<KeyResult> Engine::selectCandidate(std::uint32_t index) {
+    if (mode_ == Mode::Sentence) {
+        const int candidate = sentenceCandidateIndex(index);
+        if (candidate < 0) return {};
+        return select(candidate);
+    }
+    if (index >= entry().count) return {};
+    const auto size = static_cast<std::uint32_t>(config_.pageSize);
+    setPage(static_cast<int>(index / size));
+    return select(static_cast<int>(index % size));
+}
+
 int Engine::selection(int vk) const {
     if (vk < 0 || vk >= 256) return 0;
     if (config_.selection[vk]) return config_.selection[vk];
@@ -613,15 +625,22 @@ std::u16string Engine::annotation(std::u16string_view packed) const {
     }
     return result;
 }
+int Engine::sentenceCandidateIndex(std::uint32_t index) const {
+    // A pending result may still contain a candidate already committed in
+    // full. Display and selection must skip the same empty remaining text.
+    for (int i = 0; i < static_cast<int>(sentence_.result().candidates.size()); ++i) {
+        if (sentence_.candidateText(i).empty()) continue;
+        if (index == 0) return i;
+        --index;
+    }
+    return -1;
+}
 Candidate Engine::candidateAt(std::uint32_t index) const {
     if(mode_==Mode::Sentence) {
-        // A pending result may still contain a candidate already committed in
-        // full. Original published candidates omit its empty remaining text.
-        for(int i=0;i<static_cast<int>(sentence_.result().candidates.size());++i) {
-            auto text=sentence_.candidateText(i);if(text.empty())continue;
-            if(index--==0)return {convert(text),convert(text),annotation(text)};
-        }
-        return {};
+        const int candidate = sentenceCandidateIndex(index);
+        if (candidate < 0) return {};
+        const auto text = sentence_.candidateText(candidate);
+        return {convert(text),convert(text),annotation(text)};
     }
     const auto all = entry();
     if (index >= all.count) return {};
