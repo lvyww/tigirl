@@ -865,9 +865,9 @@ HRESULT Service::choose(const std::shared_ptr<Context>& current,UINT index,bool 
         if(abort) { next.cancel(); result.handled=true; result.cancelComposition=true; }
         else {
             completeSentenceNow(current,next);
-            if(index>=next.snapshot().total) return E_INVALIDARG;
-            next.setPage(static_cast<int>(index/static_cast<UINT>(next.pageSize())));
-            result=next.select(static_cast<int>(index%static_cast<UINT>(next.pageSize())));
+            auto selection=next.selectCandidate(index);
+            if(!selection) return E_INVALIDARG;
+            result=std::move(*selection);
         }
         return apply(current,std::move(next),result,cookie);
     });
