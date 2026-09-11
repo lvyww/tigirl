@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>candidate_layout_host</NativeProbeName></PropertyGroup>
+  <Import Project="TsfHost.vcxproj" />
+  <ItemGroup>
+    <ClCompile Remove="tsf_host.cpp" />
+    <ClCompile Include="candidate_layout_host.cpp" />
+  </ItemGroup>
+</Project>
