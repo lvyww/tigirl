@@ -44,6 +44,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/setup_resilience_policy_test.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:TIGIRL_PLATFORM -eq 'x64') {
+            & ./tests/setup_machine_recovery_test.ps1
+            & ./tests/setup_locked_cleanup_test.ps1
+            & ./tests/setup_transaction_test.ps1
+            & ./tests/setup_repair_adoption_test.ps1
+          }
       - name: Compile DLL, loader probe and all production tools (no model)
         shell: pwsh
         run: ./build_native.ps1 -Platform $env:TIGIRL_PLATFORM -PlatformToolset v145
