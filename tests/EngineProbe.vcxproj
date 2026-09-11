@@ -1,22 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <NativeProbeName Condition="'$(NativeProbeName)'==''">engine_probe</NativeProbeName>
-    <IntDir>$(MSBuildProjectDirectory)\..\build\obj\engine-probe\</IntDir>
-  </PropertyGroup>
-  <Import Project="DictionaryProbe.vcxproj" />
-  <ItemGroup>
-    <ClCompile Remove="dictionary_probe.cpp" />
-    <ClCompile Include="..\native\SentenceSession.cpp" />
-    <ClCompile Include="..\native\SentenceAutoCommit.cpp" />
-    <ClCompile Include="..\native\Engine.cpp" />
-    <ClCompile Include="..\native\DynamicText.cpp" />
-    <ClCompile Include="..\native\UppercaseText.cpp" />
-    <ClCompile Include="..\native\Lexicon.cpp" />
-    <ClCompile Include="..\native\Text.cpp" />
-    <ClCompile Include="..\native\SelectionKeys.cpp" />
-    <ClCompile Include="..\native\Settings.cpp" />
-    <ClCompile Include="engine_probe.cpp" />
-  </ItemGroup>
-  <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <PropertyGroup><NativeProbeName Condition="'$(NativeProbeName)'==''">engine_probe</NativeProbeName></PropertyGroup>
+  <Import Project="..\msbuild\NativeApp.props" />
+  <Import Project="..\msbuild\EngineSources.props" />
+  <ItemGroup><ClCompile Include="engine_probe.cpp" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
