@@ -35,12 +35,11 @@ jobs:
       - name: Test script cleanup, installer resilience and failure propagation
         shell: pwsh
         run: |
-          $tokens=$null; $errors=$null
-          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path packaging/setup/deploy.ps1),[ref]$tokens,[ref]$errors)
-          if ($errors) { throw ($errors | Out-String) }
-          $tokens=$null; $errors=$null
-          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path packaging/install.ps1),[ref]$tokens,[ref]$errors)
-          if ($errors) { throw ($errors | Out-String) }
+          foreach ($script in @('packaging/setup/deploy.ps1','packaging/install.ps1','packaging/initialize.ps1')) {
+            $tokens=$null; $errors=$null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+            if ($errors) { throw (($errors | ForEach-Object { "$script: $_" }) -join "`n") }
+          }
           python tests/test_candidate_ui_presentation_cleanup.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/setup_resilience_policy_test.py
