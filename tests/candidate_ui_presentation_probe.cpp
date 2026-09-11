@@ -20,7 +20,7 @@
 
 namespace candidate_probe {
 ULONGLONG now=1000;
-unsigned checks=0,cases=0;
+unsigned checks=0,cases=0,combinedCases=0;
 unsigned failPrepare=0,failPublish=0,failShow=0;
 std::map<std::pair<HWND,UINT_PTR>,UINT> timers;
 struct Frame { tiger::tsf::FrameRect rect;std::vector<std::uint32_t> pixels;bool success=false; };
@@ -109,7 +109,12 @@ struct CandidateUIPresentationProbe {
         for(const auto& value:values) { SentenceCandidate c;c.text=value;c.segmentedCode=ticket->raw;result.candidates.push_back(std::move(c)); }
         candidate_probe::require(state->engine.applySentenceResult(*ticket,std::move(result)),"Sentence fixture rejected");
     }
-    void update(bool layout=true,bool pending=false) { ui->update(layout?&caret:nullptr,nullptr,pending); }
+    void update(bool available=true,bool pending=false) {
+        ui->update(available?&caret:nullptr,nullptr,pending,CandidateUpdate::Content);
+    }
+    void layout(bool available=true,bool pending=false) {
+        ui->update(available?&caret:nullptr,nullptr,pending,CandidateUpdate::Layout);
+    }
     void pump() {
         MSG message{};unsigned count=0;
         while(PeekMessageW(&message,nullptr,WM_APP+0x351,WM_APP+0x351,PM_REMOVE)) {
@@ -157,7 +162,7 @@ struct CandidateUIPresentationProbe {
             {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.pump();
                 // Even an already-running code-only motion must be cancelled.
-                p.caret.left+=80;p.caret.right+=80;p.update();p.pump();
+                p.caret.left+=80;p.caret.right+=80;p.layout();p.pump();
                 require(p.ui->transition_.Active(),"Placeholder-motion precondition failed");
                 p.decode({u"first",u"second"});p.update();p.pump();p.finalFrame();++cases;
             }
@@ -187,17 +192,17 @@ struct CandidateUIPresentationProbe {
             }
             {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.first();p.change();p.timer(2,50);
-                const auto frozen=p.rect();p.update(false,true);
+                const auto frozen=p.rect();p.layout(false,true);
                 require(p.visible() && p.rect()==frozen && p.ui->hasPresentedCandidates_,"Short layout loss reset/hid prior frame");
                 require(!p.ui->transition_.Active(),"Layout-pending animation not stopped");
-                now+=40;p.update(false,true);p.pump();
+                now+=40;p.layout(false,true);p.pump();
                 require(p.visible() && p.ui->hasPresentedCandidates_,"Queued refresh broke layout grace");
-                p.update();p.pump();require(p.ui->transition_.Active(),"QQ-style layout recovery lost animation");
+                p.layout();p.pump();require(p.ui->transition_.Active(),"QQ-style layout recovery lost animation");
                 p.timer(4);require(p.visible() && p.ui->hasPresentedCandidates_,"Old layout deadline hid restored frame");
                 p.timer(2,201);p.finalFrame();
-                p.update(false,true);p.timer(4,101);
+                p.layout(false,true);p.timer(4,101);
                 require(!p.visible() && !p.ui->hasPresentedCandidates_,"Actual layout timeout did not reset state");
-                p.update();p.pump();p.finalFrame();++cases;
+                p.layout();p.pump();p.finalFrame();++cases;
             }
             {
                 CandidateUIPresentationProbe p(dictionary,vertical,250,500,true);
@@ -236,6 +241,58 @@ struct CandidateUIPresentationProbe {
                 require(!p.ui->window_ && !p.ui->hasPresentedCandidates_,"External window destruction retained session");
                 p.update();p.pump();p.finalFrame();++cases;
             }
+            {
+                // Both fixes must coexist in the same sentence display session:
+                // first publication is atomic, layout preserves host state, and
+                // later geometry/content updates still animate normally.
+                CandidateUIPresentationProbe p(dictionary,vertical);p.pump();
+                require(p.visible() && !p.ui->hasPresentedCandidates_,"Joint fixture lacks a code placeholder");
+                const auto firstFrame=frames.size();
+                p.decode({u"first",u"second",u"third",u"fourth",u"fifth",u"sixth",u"seventh"});
+                p.update();p.pump();p.finalFrame();
+                require(frames.size()==firstFrame+1,"Joint first presentation emitted interpolation frames");
+                UINT custom[]={0,2,5};
+                require(SUCCEEDED(p.ui->SetPageIndex(custom,3)) && SUCCEEDED(p.ui->SetSelection(5)),
+                        "Joint fixture failed to set host selection/pages");
+                const auto revision=p.ui->modelRevision_;
+                const auto flags=p.ui->updatedFlags_;
+                auto preserved=[&] {
+                    UINT selected=0,page=0,count=0,indices[3]{};
+                    require(SUCCEEDED(p.ui->GetSelection(&selected)) && SUCCEEDED(p.ui->GetCurrentPage(&page)) &&
+                            SUCCEEDED(p.ui->GetPageIndex(indices,3,&count)),"Joint host query failed");
+                    require(selected==5 && page==2 && count==3 && std::equal(indices,indices+3,custom),
+                            "Joint layout reset host selection or paging");
+                    require(p.ui->modelRevision_==revision && p.ui->updatedFlags_==flags,
+                            "Joint layout rebuilt or dirtied the candidate model");
+                    require(p.ui->hasPresentedCandidates_,"Joint layout reset first-presentation state");
+                };
+                p.caret.left+=80;p.caret.right+=80;p.layout();p.pump();preserved();
+                require(p.ui->transition_.Active(),"Joint post-presentation motion lost animation");
+                p.timer(2,50);const auto frozen=p.rect();p.layout(false,true);preserved();
+                require(p.visible() && p.rect()==frozen && !p.ui->transition_.Active(),
+                        "Joint layout grace did not freeze the last frame");
+                now+=40;p.layout();p.pump();preserved();
+                require(p.ui->transition_.Active(),"Joint layout recovery lost animation");
+                p.timer(4);preserved();p.timer(2,201);p.finalFrame();
+                p.press('B');p.decode({u"a much wider next candidate",u"second",u"third",u"fourth",u"fifth",u"sixth next",u"seventh"});
+                p.update();p.pump();
+                require(p.ui->transition_.Active() && p.ui->hasPresentedCandidates_,
+                        "Joint content update was incorrectly treated as first presentation");
+                UINT selected=0,count=0,indices[2]{};
+                require(SUCCEEDED(p.ui->GetSelection(&selected)) && selected==0 &&
+                        SUCCEEDED(p.ui->GetPageIndex(indices,2,&count)) && count==2 && indices[0]==0 && indices[1]==5,
+                        "Joint content update did not restore engine selection/pages");
+                require(p.ui->modelRevision_>revision,"Joint content update did not advance model revision");
+                require(SUCCEEDED(p.ui->SetSelection(5)),"Joint final selection failed");
+                const auto window=p.ui->window_;const auto published=frames.size();
+                PostMessageW(window,WM_TIMER,2,0);PostMessageW(window,WM_APP+0x351,0,0);
+                require(SUCCEEDED(p.ui->Finalize()) && committed==u"sixth next", "Joint finalization chose the wrong candidate");
+                require(!IsWindow(window) && !p.ui->hasPresentedCandidates_ && p.ui->updatedFlags_==0,
+                        "Joint detach did not reset both presentation and notification state");
+                MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE))DispatchMessageW(&message);
+                require(frames.size()==published,"Joint old message republished a detached frame");
+                ++combinedCases;++cases;
+            }
         }
     }
 };
@@ -255,6 +312,7 @@ int wmain(int argc,wchar_t** argv) {
         require(dllRefs==0,"CandidateUI lifetime leaked module references");
         CoUninitialize();
         std::cout<<"{\"status\":\"passed\",\"cases\":"<<cases<<",\"checks\":"<<checks
+                 <<",\"combined_layout_presentation_cases\":"<<combinedCases
                  <<",\"real_layered_windows\":true,\"real_renderer\":true,\"controlled_clock\":true,\"tsf_host_mocked\":true,\"physical_input_tested\":false}\n";
         return 0;
     } catch(const std::exception& error) { std::cerr<<error.what()<<'\n';return 1; }

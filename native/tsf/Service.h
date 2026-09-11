@@ -19,6 +19,8 @@
 
 namespace tiger::tsf {
 template<class T> using ComPtr=Microsoft::WRL::ComPtr<T>;
+// Input/model changes and caret/layout notifications have different ownership.
+enum class CandidateUpdate { Content, Layout };
 class CandidateUI;
 class AddWordUI;
 class ManualTimer;
@@ -80,7 +82,7 @@ private:
     HRESULT edit(const std::shared_ptr<Context>&,DWORD flags,std::function<HRESULT(TfEditCookie)> fn);
     HRESULT apply(const std::shared_ptr<Context>&,Engine next,KeyResult result,TfEditCookie cookie);
     HRESULT end(const std::shared_ptr<Context>&,TfEditCookie cookie);
-    void updateUI(const std::shared_ptr<Context>&,TfEditCookie cookie);
+    void updateUI(const std::shared_ptr<Context>&,TfEditCookie cookie,CandidateUpdate update=CandidateUpdate::Content);
     void hideUI();
     void forget(const std::shared_ptr<Context>&);
     void refreshFocus(ITfContext*);

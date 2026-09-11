@@ -45,7 +45,7 @@ jobs:
         run: |
           python tests/bundled_schemas_test.py --platform $env:TIGIRL_PLATFORM
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run core and CandidateUI regressions with MSVC
+      - name: Run core and candidate layout/presentation regressions with MSVC
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -56,7 +56,19 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=$arch -host_arch=x64"
           python tests/run_core_tests.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_ui_layout_test.py --negative-control
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_presentation_test.py --negative-control
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: TSF edit-session candidate layout regression (no registration or model)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (!$vs) { throw 'MSBuild unavailable' }
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/CandidateLayoutHost.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_layout_test.py --platform $env:TIGIRL_PLATFORM
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   portable:

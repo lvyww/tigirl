@@ -494,15 +494,27 @@ void Service::hideUI() {
     if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->EndUIElement(uiId_);
     uiId_=TF_INVALID_UIELEMENTID; ui_.Reset();
 }
-void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cookie) {
+void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cookie,CandidateUpdate update) {
     if(!active_ || !foreground_ || !context->engine.composing() || (focused_ && focused_.Get()!=context->context.Get())) {
         hideUI(); return;
     }
-    if(!ui_ || ui_->context()!=context) {
+    const bool created=!ui_ || ui_->context()!=context;
+    if(created) {
         hideUI(); ui_.Attach(new CandidateUI(this,context,candidateStyle_,fonts_));
-        BOOL show=TRUE;
-        if(uiManager_ && FAILED(uiManager_->BeginUIElement(ui_.Get(),&show,&uiId_))) uiId_=TF_INVALID_UIELEMENTID;
-        ui_->Show(show);
+    }
+    auto ui=ui_; // Begin/UpdateUIElement can reenter and detach this element.
+    if(created) {
+        BOOL show=TRUE;DWORD id=TF_INVALID_UIELEMENTID;
+        auto manager=uiManager_;
+        if(manager && FAILED(manager->BeginUIElement(ui.Get(),&show,&id)))id=TF_INVALID_UIELEMENTID;
+        if(!active_ || ui_.Get()!=ui.Get() || ui->context()!=context) {
+            if(manager && id!=TF_INVALID_UIELEMENTID)manager->EndUIElement(id);
+            return;
+        }
+        uiId_=id;ui->Show(show);
+        // The constructor already published the initial model. Preserve any
+        // selection/page table the host installed during BeginUIElement.
+        update=CandidateUpdate::Layout;
     }
     ComPtr<ITfContextView> view; ComPtr<ITfRange> range;
     RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false,layoutPending=false;
@@ -516,8 +528,10 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
             }
         }
     }
-    ui_->update(hasCaret?&caret:nullptr,owner,layoutPending);
-    if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->UpdateUIElement(uiId_);
+    if(!active_ || ui_.Get()!=ui.Get() || ui->context()!=context)return;
+    ui->update(hasCaret?&caret:nullptr,owner,layoutPending,update);
+    if(ui_.Get()==ui.Get() && FAILED(ui->notifyUpdated(uiManager_.Get(),uiId_)))
+        report("Candidate model notification failed");
 }
 void Service::reloadSchema(std::u16string name) {
     if(secure_ || userRoot_.empty()) return;
@@ -852,7 +866,13 @@ HRESULT Service::OnLayoutChange(ITfContext* context,TfLayoutCode code,ITfContext
         auto current=state(context,false);
         if(!current || current->editing) return S_OK;
         if(code==TF_LC_DESTROY) { if(ui_ && ui_->context()==current) hideUI(); return S_OK; }
-        if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current](TfEditCookie cookie) { updateUI(current,cookie); return S_OK; });
+        if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current](TfEditCookie cookie) {
+            // Queued layout work must not recreate an ended UI or hide a new
+            // focused context's candidates after focus/pop/deactivation.
+            if(!active_ || !foreground_ || !current->composition ||
+                focused_.Get()!=current->context.Get() || state(current->context.Get(),false)!=current)return S_FALSE;
+            updateUI(current,cookie,CandidateUpdate::Layout);return S_OK;
+        });
         return S_OK;
     } catch(...) { return E_FAIL; }
 }
