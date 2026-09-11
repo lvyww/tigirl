@@ -40,9 +40,10 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ITfTextInputProcessorEx> service; check(factory->CreateInstance(nullptr,IID_PPV_ARGS(&service)));
         ComPtr<ITfThreadMgrEx> manager;
         check(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&manager)));
-        TfClientId appClient; check(manager->ActivateEx(&appClient,TF_TMAE_NOACTIVATEKEYBOARDLAYOUT));
-        ComPtr<ITfClientId> ids; check(manager.As(&ids));
-        TfClientId serviceClient; check(ids->GetClientId(clsid,&serviceClient));
+        TfClientId appClient; check(manager->ActivateEx(&appClient,TF_TMAE_NOACTIVATETIP|TF_TMAE_NOACTIVATEKEYBOARDLAYOUT));
+        // A GetClientId(CLSID) value alone is not an activated key-event client.
+        // This in-process probe uses the client returned by ActivateEx instead.
+        const TfClientId serviceClient=appClient;
         ComPtr<ITfSource> source; check(manager.As(&source));
         ComPtr<UISink> ui; ui.Attach(new UISink); DWORD uiCookie=TF_INVALID_COOKIE;
         check(source->AdviseSink(IID_ITfUIElementSink,ui.Get(),&uiCookie));
