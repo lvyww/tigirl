@@ -58,3 +58,28 @@ assertion (a compiler failure does not count). Tracked sources are never mutated
 This is an actual window/rendering regression, not physical-keyboard acceptance,
 real QQ validation, a full TSF document-transaction test, or full-model sentence
 quality evaluation. Those remain separate checks.
+
+## Test-runner cleanup
+
+Windows may temporarily deny deletion of an executable after its process exits.
+The runner explicitly cleans up its TemporaryDirectory, with at most six passes
+and waits of 0.1, 0.2, 0.4, 0.8 and 1.6 seconds between failures (3.1 seconds of
+retry waits total). Successful cleanup has no added wait. It retains the standard
+handling of read-only files and partially removed directories.
+
+If every pass raises an OSError, stderr gets a separate JSON cleanup warning with
+the residual directory, attempts and last error. The directory may need manual
+removal once the lock is released. This warning does not change the functional
+result or exit code, even under `-Werror`. Compilation, linking, functional probe,
+negative-control failures, timeouts and interrupts still propagate; compilation
+failure is never accepted as a successful negative control.
+
+```sh
+python tests/test_candidate_ui_presentation_cleanup.py -v
+```
+
+These runner regressions execute on Windows and Linux without a compiler. They
+inject cleanup failures and check real child-process exit codes. Windows also
+holds a real file handle without delete sharing to test transient and persistent
+locks, without background threads or timing-dependent sleeps. The native window
+regressions above remain separate and still run in both Windows CI jobs.

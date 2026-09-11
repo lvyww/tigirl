@@ -5,11 +5,16 @@ No installed IME, private fonts, dictionary/model downloads or user data require
 The TSF owner is mocked; this is not a physical-input/QQ acceptance test.
 """
 import argparse
+from collections.abc import Iterator
+from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON = [
@@ -24,6 +29,42 @@ LIBS = ["ole32.lib", "oleaut32.lib", "uuid.lib", "user32.lib", "gdi32.lib",
         "shcore.lib", "d2d1.lib", "dwrite.lib", "windowscodecs.lib"]
 
 
+# Six cleanup passes at most; only failed passes wait (3.1 seconds total).
+# These delays belong to the test runner, never to CandidateUI or the DLL.
+CLEANUP_RETRY_DELAYS = (0.1, 0.2, 0.4, 0.8, 1.6)
+
+
+def _cleanup_work_directory(directory: tempfile.TemporaryDirectory) -> None:
+    for attempt in range(len(CLEANUP_RETRY_DELAYS) + 1):
+        try:
+            # Keep TemporaryDirectory's handling of read-only/partly removed files.
+            # Explicit cleanup also detaches its finalizer, including on failure.
+            directory.cleanup()
+        except OSError as error:
+            if attempt < len(CLEANUP_RETRY_DELAYS):
+                time.sleep(CLEANUP_RETRY_DELAYS[attempt])
+                continue
+            # An executable can remain locked after the test process exits.
+            # Do not replace a test exception, or fail a passing test, on cleanup.
+            # Avoid warnings.warn(): -Werror would change the test result again.
+            print(json.dumps({"phase": "cleanup", "status": "warning",
+                              "directory": directory.name, "attempts": attempt + 1,
+                              "error": f"{type(error).__name__}: {error}",
+                              "test_result_unchanged": True}), file=sys.stderr, flush=True)
+        return
+
+
+@contextmanager
+def _temporary_work_directory() -> Iterator[Path]:
+    directory = tempfile.TemporaryDirectory(prefix="tigirl-ui-presentation-")
+    try:
+        yield Path(directory.name)
+    finally:
+        # No return/except around yield: compilation, probe and control failures
+        # (including timeouts, SystemExit and Ctrl+C) must keep propagating.
+        _cleanup_work_directory(directory)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cxx", default="cl")
@@ -35,8 +76,7 @@ def main() -> None:
     compiler = shutil.which(args.cxx)
     if not compiler:
         parser.error(f"Compiler not found: {args.cxx}; run in an MSVC developer shell")
-    with tempfile.TemporaryDirectory(prefix="tigirl-ui-presentation-") as tmp:
-        work = Path(tmp)
+    with _temporary_work_directory() as work:
         flags = ["/nologo", "/std:c++17", "/EHsc", "/utf-8", "/O2", "/MT",
                  "/DUNICODE", "/D_UNICODE", f"/I{ROOT / 'native'}",
                  f"/I{ROOT / 'native/tsf'}", f"/I{ROOT / 'tests'}"]
