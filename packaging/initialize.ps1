@@ -20,7 +20,10 @@ try {
         $machineRecord=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'install.json'
         $committed=$false
         if(Test-Path $machineRecord){$m=Get-Content $machineRecord -Raw|ConvertFrom-Json;$committed=($pending.id -and $m.transaction -eq $pending.id)}
-        if($committed){Remove-Item $userJournal}else{Restore-UserJournal $root}
+        # Machine registration now commits before user initialization. Only a journal
+        # explicitly marked initialized can be discarded after a committed machine tx;
+        # a prepared journal means the user step was interrupted and must be restored.
+        if($committed -and $pending.state -eq 'initialized'){Remove-Item $userJournal}else{Restore-UserJournal $root}
     }
     $version=(Get-Content -LiteralPath "$PSScriptRoot\manifest.json" -Raw|ConvertFrom-Json).version
     $marker=Join-Path $root 'installed-data-version.txt'
@@ -31,7 +34,7 @@ try {
     # Snapshot descriptors before the compiler publishes any generations.
     $paths=@($config,(Join-Path $root 'installed-data-version.txt'))+@(Get-ChildItem -LiteralPath (Join-Path $root 'schemas') -Filter current.txt -Recurse -ErrorAction SilentlyContinue|ForEach-Object FullName)
     foreach($path in $paths){$snapshots+= [pscustomobject]@{Path=$path;Bytes=$(if(Test-Path -LiteralPath $path){[IO.File]::ReadAllBytes($path)}else{$null})}}
-    Save-UserJournal @{id=$Transaction;backup=$backup;snapshots=$snapshots} $userJournal
+    Save-UserJournal @{id=$Transaction;state='prepared';backup=$backup;snapshots=$snapshots} $userJournal
     $compilationStarted=$true
     $changes=@(Invoke-DataMerge $plan $backup)
     if(!(Test-Path -LiteralPath $config)){Copy-Item -LiteralPath "$PSScriptRoot\default-config.txt" -Destination $config}
@@ -44,6 +47,7 @@ try {
         if(![NativeTigerTip]::InstallLayoutOrTip('0804:{D2291A80-84D8-4641-9AB2-BDD1472C846B}{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}',0)){throw 'Cannot enable input profile.'}
     }
     $version|Set-Content -LiteralPath $marker -Encoding UTF8
+    Save-UserJournal @{id=$Transaction;state='initialized';backup=$backup;snapshots=$snapshots} $userJournal
     $copied=@($plan|Where-Object Choice -eq 'Copy').Count;$skipped=$plan.Count-$copied
     if(!$Transaction -and (Test-Path $userJournal)){Remove-Item $userJournal}
     if(!$Quiet -and !$NoDialogs){Add-Type -AssemblyName System.Windows.Forms;[Windows.Forms.MessageBox]::Show("安装完成。复制 $copied 个文件，跳过 $skipped 个文件。`n请重开正在使用的程序。",'虎娘')|Out-Null}
