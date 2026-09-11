@@ -150,7 +150,8 @@ private static bool ParseBool(string text, bool def)
    }
    string white=instance.GetSentenceFullCodeWhitelistText();
    Console.WriteLine(JsonSerializer.Serialize(new {
-    enable=instance.GetBool(KeyAutoEnableSentenceBySchema,true),automatic=instance.GetBool(KeySentenceAutoCommit,false),
+    // Keep upstream parsing semantics with Tigirl's enabled-by-default early commit.
+    enable=instance.GetBool(KeyAutoEnableSentenceBySchema,true),automatic=instance.GetBool(KeySentenceAutoCommit,true),
     duplicates=instance.GetBool(KeySentenceAllowDuplicateSingleCharacters,true),retained=instance.GetSentenceMinRetainedRawLength(),
     common=instance.GetSentenceOptimalCodeHighFreqLimit(),white=Hex(white),characters=ParseCharacterSet(white).OrderBy(s=>s,StringComparer.Ordinal).Select(Hex).ToArray()
    }));

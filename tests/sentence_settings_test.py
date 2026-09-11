@@ -1,4 +1,4 @@
-"""Original config-line/getter semantics against native sentence settings."""
+"""Original config-line/getter semantics with Tigirl defaults against native settings."""
 import hashlib,json,random,subprocess,tempfile
 from pathlib import Path
 from windows_process import run_windows

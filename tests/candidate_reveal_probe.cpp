@@ -15,11 +15,11 @@ int main() {
         t.Start(a,b,0,144,0);check(!t.Active() && t.Sample(0)==b);
         t.Start(a,b,0,60,200);t.Cancel();check(!t.Active());
         t.Start(a,b,0,60,60000);check(t.Sample(60001)==b && !t.Active());
-        check(parseCandidateStyle(u"").animationEnabled && parseCandidateStyle(u"").animationDurationMs==200);
+        check(parseCandidateStyle(u"").animationEnabled && parseCandidateStyle(u"").animationDurationMs==100);
         check(!parseCandidateStyle(u"候选窗动效\t否").animationEnabled);
-        for(auto pair:{std::pair{u"",200},{u"bad",200},{u"0",0},{u"60000",60000},{u"200",200}})
+        for(auto pair:{std::pair{u"",100},{u"bad",100},{u"0",0},{u"60000",60000},{u"200",200}})
             check(parseCandidateStyle(std::u16string(u"候选窗动效时间(毫秒)\t")+pair.first).animationDurationMs==pair.second);
-        check(parseCandidateStyle(u"候选窗显示时间(毫秒)\t25\n候选窗隐藏时间(毫秒)\t400").animationDurationMs==200);
+        check(parseCandidateStyle(u"候选窗显示时间(毫秒)\t25\n候选窗隐藏时间(毫秒)\t400").animationDurationMs==100);
     }
     CandidateStyle style;style.candidateDelayMs=250;style.annotationDelayMs=500;
     Snapshot s;s.mode=Mode::Composing;s.raw=u"ab";s.total=1;s.candidates={{u"交",u"交",u"拆分"}};

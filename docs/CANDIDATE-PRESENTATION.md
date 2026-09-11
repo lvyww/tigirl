@@ -28,7 +28,7 @@ host text layout from turning each append into an unanimated first appearance.
 Settings on the appearance page:
 
 - `候选窗动效`: default `是`.
-- `候选窗动效时间(毫秒)`: default 200; range 0–60000. Zero or disabling
+- `候选窗动效时间(毫秒)`: default 100; range 0–60000. Zero or disabling
   animation publishes final geometry immediately.
 
 The renderer caches unchanged layouts and final pixels, and reuses the GDI

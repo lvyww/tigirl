@@ -155,7 +155,7 @@ CandidateStyle parseCandidateStyle(std::u16string_view text) {
     }
     if(auto found=values.find(u"延时显示候选(毫秒)");found!=values.end()) style.candidateDelayMs=integer(found->second,0,60000,0);
     if(auto found=values.find(u"延时展开注释和拆分(毫秒)");found!=values.end()) style.annotationDelayMs=integer(found->second,0,60000,0);
-    if(auto found=values.find(u"候选窗动效时间(毫秒)");found!=values.end()) style.animationDurationMs=integer(found->second,200,60000,0);
+    if(auto found=values.find(u"候选窗动效时间(毫秒)");found!=values.end()) style.animationDurationMs=integer(found->second,100,60000,0);
     return style;
 }
 Config loadEngineSettings(const std::filesystem::path& path) {

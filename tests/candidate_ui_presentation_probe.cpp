@@ -89,6 +89,7 @@ struct CandidateUIPresentationProbe {
         using namespace candidate_probe;
         now+=1000;frames.clear();timers.clear();committed.clear();
         style.font=u"Segoe UI";style.vertical=vertical;
+        style.animationDurationMs=200; // Fixed timeline for intermediate-frame assertions.
         style.candidateDelayMs=delay;style.annotationDelayMs=annotationDelay;
         state=std::make_shared<Context>(nullptr,std::make_shared<Lexicon>(std::move(dictionary)),Config{});
         state->engine.enableSentenceInput(true,1);press('A');

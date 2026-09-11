@@ -11,7 +11,8 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
  selection=root/'自定义选重键.txt'
  selection.write_text('# 选重备注\n1选 VK_1\n3选 999 VK_F3\n',encoding='utf-8-sig')
  config=root/'config.txt'
- config.write_text('# 用户注释\n未知设置\t保留原值\n默认中文\t是\n最大码长\t4\n每页候选个数\t5\n当前码表\t虎码字词\n主题\t自定义未收录\n',encoding='utf-8-sig')
+ # Explicitly start disabled so the UI exercise still verifies saving an opt-in.
+ config.write_text('整句自动提前上屏\t否\n# 用户注释\n未知设置\t保留原值\n默认中文\t是\n最大码长\t4\n每页候选个数\t5\n当前码表\t虎码字词\n主题\t自定义未收录\n',encoding='utf-8-sig')
  result=run_windows([PS,'-NoProfile','-ExecutionPolicy','Bypass','-File',win(ROOT/'tests/settings_capture_desktop.ps1'),'-Exe',win(EXE),'-UserRoot',win(root),'-Dictionary',win(ROOT/'data/tiger-v2.tcd')],capture_output=True,text=True,timeout=90)
  assert result.returncode==0,(result.stdout,result.stderr)
  font_catalog=(root/'font-catalog.tsv').read_text().splitlines()
