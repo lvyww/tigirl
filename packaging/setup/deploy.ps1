@@ -12,12 +12,13 @@ if($InstallRoot -notin $allowed){throw 'Invalid installation root.'}
 Assert-PlainTree $InstallRoot
 $NativeTigerInstallRoot=$InstallRoot;$NativeTigerRecord=Join-Path $InstallRoot 'install.json'
 $journal=Join-Path $InstallRoot 'setup-transaction.json'
+$backendDirectory=[IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $logDir=Join-Path $env:ProgramData 'Tigirl\Logs'
 New-Item $logDir -ItemType Directory -Force|Out-Null
 $log=Join-Path $logDir 'setup.log'
 $mutex=[Threading.Mutex]::new($false,'Global\Tigirl.Deployment')
 if(!$mutex.WaitOne(0)){throw 'Another deployment is running.'}
-function Write-SetupLog([string]$Message){('['+(Get-Date).ToString('o')+'] '+$Message)|Add-Content -LiteralPath $log -Encoding UTF8}
+function Write-SetupLog([string]$Message){if($log){('['+(Get-Date).ToString('o')+'] '+$Message)|Add-Content -LiteralPath $log -Encoding UTF8}}
 function Save-Json($Value,[string]$Path){
  $tmp=$Path+'.tmp';$Value|ConvertTo-Json -Depth 15|Set-Content $tmp -Encoding UTF8
  if(Test-Path $Path){[IO.File]::Replace($tmp,$Path,[NullString]::Value)}else{[IO.File]::Move($tmp,$Path)}
@@ -87,7 +88,7 @@ function Resolve-OwnedRecord {
  $directory=if($d64){$d64}elseif($d32){$d32}elseif($record){$record.directory}else{$null}
  if(!$directory){return $null}
  if($record -and $record.directory -eq $directory){return $record}
- $fallback=if($record){$record.version}else{'0.0.0.0'}
+ $fallback=if($record -and $record.directory -eq $directory){$record.version}else{'0.0.0.0'}
  $version=Get-DirectoryVersion $directory $fallback
  Write-SetupLog "Adopting managed registration without a usable matching install record: $directory"
  return [pscustomobject]@{directory=$directory;version=$version;generation=(Split-Path $directory -Leaf);previous=$(if($record){$record.previous}else{$null});adopted=$true}
@@ -276,7 +277,7 @@ try {
    # File cleanup is best effort. Registration removal is the uninstall commit point.
    foreach($dir in Get-ChildItem (Join-Path $InstallRoot 'versions') -Directory -ErrorAction SilentlyContinue){
     if($dir.Name -match '^[a-f0-9]{16}$' -and (Test-Path (Join-Path $dir.FullName 'manifest.json'))){
-     try{Remove-Version $dir.FullName -KeepControlFiles:($record -and $dir.FullName -eq $record.directory)}catch{Write-SetupLog ('Program files retained for retry/reboot: '+$dir.FullName+' :: '+$_.Exception.Message)}
+     try{Remove-Version $dir.FullName -KeepControlFiles:($dir.FullName -eq $backendDirectory)}catch{Write-SetupLog ('Program files retained for retry/reboot: '+$dir.FullName+' :: '+$_.Exception.Message)}
     }
    }
    if(Test-Path $NativeTigerRecord){Remove-Item $NativeTigerRecord -Force}
