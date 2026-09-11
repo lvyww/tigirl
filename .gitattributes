@@ -1,0 +1,3 @@
+
+# Keep bundled source dictionaries byte-identical on Windows and Linux.
+resources/DefaultData/** -text

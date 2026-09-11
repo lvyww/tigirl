@@ -1,11 +1,12 @@
 ﻿param(
     [string]$Version='2026.9.10.4',
-    [string]$DataSource="$PSScriptRoot\..\bime_codex_src_20260513\release_arm64",
+    [string]$DataSource="$PSScriptRoot\resources\DefaultData",
+    [string]$SentenceModelPath="$PSScriptRoot\..\bime_codex_src_20260513\release_arm64\Models\sentence-ngram-v2.bin",
     [switch]$SkipBuild
 )
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+\.\d+$'){throw 'Version must contain four numbers.'}
-if(!$SkipBuild){& "$PSScriptRoot\build_x64.ps1" -SentenceModelPath "$DataSource\Models\sentence-ngram-v2.bin";if($LASTEXITCODE){throw 'Release build failed.'}}
+if(!$SkipBuild){& "$PSScriptRoot\build_x64.ps1" -SentenceModelPath $SentenceModelPath;if($LASTEXITCODE){throw 'Release build failed.'}}
 $stage="$PSScriptRoot\build\packages\Tigirl-$Version-x64"
 if(Test-Path -LiteralPath $stage){throw "Package already exists; use a new version or remove the old staging directory: $stage"}
 New-Item -ItemType Directory -Force "$stage\x64","$stage\x86","$stage\DefaultData"|Out-Null

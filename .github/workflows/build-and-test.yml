@@ -35,6 +35,11 @@ jobs:
       - name: Compile DLL, loader probe and all production tools (no model)
         shell: pwsh
         run: ./build_native.ps1 -Platform $env:TIGIRL_PLATFORM -PlatformToolset v145
+      - name: Import bundled schemas and verify real lookup data (no model)
+        shell: pwsh
+        run: |
+          python tests/bundled_schemas_test.py --platform $env:TIGIRL_PLATFORM
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run synthetic core regressions with MSVC
         shell: pwsh
         run: |
@@ -58,6 +63,7 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
+      - run: python tests/bundled_schemas_test.py --verify-only
       - run: python tests/run_core_tests.py --cxx clang++ --sanitize
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1

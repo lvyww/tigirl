@@ -1,0 +1,58 @@
+{
+  "source": "Tigirl-2026.9.10.4-x64/DefaultData release snapshot",
+  "schemes": [
+    "虎整句",
+    "虎码字词"
+  ],
+  "shared_reverse_lookup": "拼音反查码表",
+  "files": {
+    "拼音反查码表/拼音.txt": {
+      "bytes": 1262289,
+      "sha256": "8b8a0ecfcae5b7b85f5a98c78615163c5d9cbdf28561aa2ee88fc44be508ad2b"
+    },
+    "码表/虎整句/快符.txt": {
+      "bytes": 499,
+      "sha256": "5c3b2a8516a7e25d02bdbdd22f2ece30ffe5235315e80606f92695c4d0a1fedd"
+    },
+    "码表/虎整句/虎整句.txt": {
+      "bytes": 145994,
+      "sha256": "5a1de92ccebfe82cbba91de9ddd671f2587f4ca0436f443abf5416e8bb8c5db5"
+    },
+    "码表/虎整句/补充语料.txt": {
+      "bytes": 310,
+      "sha256": "1eca149681df18d426acf75f4136f2ed90adb385f19b62d82f7f31aa54afae29"
+    },
+    "码表/虎码字词/1拼音.注释": {
+      "bytes": 475915,
+      "sha256": "0d44f9289e71cd9d5f32a2df64364298740a289bb4d518b349db02192991b721"
+    },
+    "码表/虎码字词/tigress.dict.yaml": {
+      "bytes": 1500268,
+      "sha256": "e0d87f751c9f26a1862d42e978b5ab00c41d6c2298da9e594e31414f06a2791c"
+    },
+    "码表/虎码字词/tigress_ci.dict.yaml": {
+      "bytes": 2444290,
+      "sha256": "27fe414849e16da1912606562ba0eb37c1f92bc1f16f840856ec6dbb9a7f3bbf"
+    },
+    "码表/虎码字词/tigress_simp_ci.dict.yaml": {
+      "bytes": 58492,
+      "sha256": "fbe4d9aef2fafa7ebd8e6286f894961b0bd4bf09fa01c9ec93c094680a18d2c4"
+    },
+    "码表/虎码字词/unicode.注释": {
+      "bytes": 1170378,
+      "sha256": "1f82bddfbb8a67eb449a882de3cdc74c1b4bcc32064bec743738b166ab83d8d3"
+    },
+    "码表/虎码字词/常用符号.txt": {
+      "bytes": 6611,
+      "sha256": "0c50a9e008c7490c65615211c6ac626c47c9caf1b319571ebc1ce51eb613965a"
+    },
+    "码表/虎码字词/快符.txt": {
+      "bytes": 499,
+      "sha256": "5c3b2a8516a7e25d02bdbdd22f2ece30ffe5235315e80606f92695c4d0a1fedd"
+    },
+    "码表/虎码字词/虎码.拆分": {
+      "bytes": 1838854,
+      "sha256": "849921884c0a2f6cd1337bb75546f938380d06fcef14d8d4715b525b707196e9"
+    }
+  }
+}

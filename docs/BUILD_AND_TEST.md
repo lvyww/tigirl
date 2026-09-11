@@ -58,6 +58,15 @@ user-input logging, automatic merge, or repository-setting changes are included.
 
 ## Release staging remains strict
 
+Real source dictionaries for `虎整句` and `虎码字词`, with shared pinyin reverse
+lookup, are tracked under `resources/DefaultData`. See
+[bundled data and import tests](../resources/README.md). Windows CI imports both
+schemas using each built x64/Win32 importer and checks real lookups and sentence
+sidecars without a model. Linux CI verifies the tracked source hashes.
+
+`package_x64.ps1` now defaults `-DataSource` to this tracked directory; model
+selection is independent through `-SentenceModelPath`.
+
 `build_x64.ps1`, `build_arm64.ps1`, and `build_arm64x.ps1` still require a valid
 sentence model for release staging. Supply `-SentenceModelPath` explicitly on a
 new machine. Missing/corrupt release data remains an error; compile-only CI does
