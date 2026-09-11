@@ -38,7 +38,7 @@ jobs:
           foreach ($script in @('packaging/setup/deploy.ps1','packaging/install.ps1','packaging/initialize.ps1')) {
             $tokens=$null; $errors=$null
             [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
-            if ($errors) { throw (($errors | ForEach-Object { "$script: $_" }) -join "`n") }
+            if ($errors) { throw (($errors | ForEach-Object { "${script}: $_" }) -join "`n") }
           }
           python tests/test_candidate_ui_presentation_cleanup.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
