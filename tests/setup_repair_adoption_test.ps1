@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference='Stop'
 function Check($Value,$Message){if(!$Value){throw $Message}}
+function SamePath([string]$A,[string]$B){return [IO.Path]::GetFullPath($A).TrimEnd('\') -eq [IO.Path]::GetFullPath($B).TrimEnd('\')}
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile("$PSScriptRoot\..\packaging\setup\deploy.ps1",[ref]$tokens,[ref]$errors)
 if($errors){throw $errors}
@@ -19,16 +20,19 @@ foreach($root in @($dir,$other)){
 $script:registry=@{Registry64=(Join-Path $dir 'x64\Tigirl.dll');Registry32=(Join-Path $dir 'x86\Tigirl.dll')}
 function Get-ComPath($View){$script:registry[$View]}
 try{
+ Check (SamePath (Get-ManagedRegistrationDirectory $script:registry.Registry64 'x64') $dir) 'Managed x64 registration path was not recognized'
+ Check (SamePath (Get-ManagedRegistrationDirectory $script:registry.Registry32 'x86') $dir) 'Managed x86 registration path was not recognized'
  $record=Resolve-OwnedRecord
- Check ($record.directory -eq $dir) 'Missing install.json did not adopt the managed registration'
+ Check ($null -ne $record) 'Missing install.json produced no adopted record'
+ Check (SamePath $record.directory $dir) ("Missing install.json adopted the wrong directory: expected=$dir actual=$($record.directory)")
  Check ($record.version -eq '2026.9.12.1') 'Adopted version did not come from the managed manifest'
  [IO.File]::WriteAllText($NativeTigerRecord,'{broken json')
  $record=Resolve-OwnedRecord
- Check ($record.directory -eq $dir) 'Corrupt install.json blocked repair adoption'
+ Check (SamePath $record.directory $dir) 'Corrupt install.json blocked repair adoption'
  Check ((Get-Content $log -Raw) -match 'Ignoring invalid install.json') 'Corrupt record repair was not logged'
  $script:registry.Registry32=Join-Path $other 'x86\Tigirl.dll'
  $record=Resolve-OwnedRecord
- Check ($record.directory -eq $dir) 'Split registration did not prefer the x64 managed generation'
+ Check (SamePath $record.directory $dir) 'Split registration did not prefer the x64 managed generation'
  Check ((Get-Content $log -Raw) -match 'Repairing split x64/x86 registration') 'Split registration repair was not logged'
  $script:registry.Registry32='C:\ForeignIme\Tigirl.dll'
  $blocked=$false;try{Resolve-OwnedRecord}catch{$blocked=$true}
