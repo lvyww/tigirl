@@ -14,8 +14,8 @@ struct KeyboardStateGuard {
     }
     ~KeyboardStateGuard() { SetKeyboardState(saved); }
 };
-void drainLayout() {
-    const auto deadline=GetTickCount64()+50;
+void drainLayout(unsigned milliseconds=50) {
+    const auto deadline=GetTickCount64()+milliseconds;
     do { pump(); MsgWaitForMultipleObjects(0,nullptr,FALSE,1,QS_ALLINPUT); }
     while(GetTickCount64()<deadline);
 }
@@ -78,6 +78,9 @@ int wmain(int argc,wchar_t** argv) {
             ComPtr<ITfUIElement> element; check(elements->GetUIElement(ui->id,&element));
             ComPtr<ITfCandidateListUIElementBehavior> list; check(element.As(&list)); return list;
         };
+        // Settle the initial 250 ms data-reconciliation tick while idle. It is
+        // an independent content refresh, not one of the layout events tested.
+        drainLayout(400);
         typeCode();
         require(doc.store->text==code && compositionCount(doc)==1,"Preedit fixture failed");
         auto list=candidates(); UINT count=0; check(list->GetCount(&count));

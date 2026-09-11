@@ -33,7 +33,7 @@ public:
     STDMETHODIMP GetGlobalCompartment(ITfCompartmentMgr** value) override {return real_->GetGlobalCompartment(value);}
     STDMETHODIMP AdviseKeyEventSink(TfClientId id,ITfKeyEventSink* sink,BOOL) override {
         if(id!=client_ || !sink)return E_INVALIDARG;
-        if(keys_)return CONNECT_E_ADVISELIMIT;
+        if(keys_)return E_UNEXPECTED;
         keys_=sink;return S_OK;
     }
     STDMETHODIMP UnadviseKeyEventSink(TfClientId id) override {
