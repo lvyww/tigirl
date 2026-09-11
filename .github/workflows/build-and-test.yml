@@ -40,7 +40,7 @@ jobs:
         run: |
           python tests/bundled_schemas_test.py --platform $env:TIGIRL_PLATFORM
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run synthetic core regressions with MSVC
+      - name: Run core and CandidateUI regressions with MSVC
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -50,6 +50,8 @@ jobs:
           $arch = if ($env:TIGIRL_PLATFORM -eq 'Win32') { 'x86' } else { 'x64' }
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=$arch -host_arch=x64"
           python tests/run_core_tests.py --cxx cl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_ui_presentation_test.py --negative-control
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   portable:

@@ -34,16 +34,21 @@ public:
     STDMETHODIMP Finalize() override;
     STDMETHODIMP Abort() override;
 private:
+    friend struct CandidateUIPresentationProbe; // Windows publication/lifecycle regressions.
     static LRESULT CALLBACK windowProc(HWND,UINT,WPARAM,LPARAM);
     bool paint(HDC dc,const POINT* destination=nullptr,const SIZE* size=nullptr);
     void schedulePaint();
     void stopAnimation();
+    void hideWindow(bool endPresentation=true);
     void animate();
     bool refreshPending_=false,rendererDirty_=false;
     FrameTransition transition_;
     CandidateSurface surface_;
     std::vector<std::uint32_t> finalPixels_,scratchPixels_;
     bool finalReady_=false;
+    // This display session has published a nonempty, revealed candidate frame.
+    // A visible code placeholder or a prepared bitmap does not count.
+    bool hasPresentedCandidates_=false;
     std::uint64_t visualRevision_=0,layoutDeadline_=0;
     CandidatePresentation cachedPresentation_;
     UINT cachedDpi_=0,cachedSelection_=UINT_MAX;
