@@ -24,8 +24,10 @@ function Save-Json($Value,[string]$Path){
  if(Test-Path $Path){[IO.File]::Replace($tmp,$Path,[NullString]::Value)}else{[IO.File]::Move($tmp,$Path)}
 }
 function Assert-VersionPath([string]$Directory){
- $p=[IO.Path]::GetFullPath($Directory)
- if((Split-Path $p -Parent) -ne (Join-Path $InstallRoot 'versions') -or (Split-Path $p -Leaf) -notmatch '^[a-f0-9]{16}$'){throw 'Invalid managed version directory.'}
+ $p=[IO.Path]::GetFullPath($Directory).TrimEnd('\')
+ $versions=[IO.Path]::GetFullPath((Join-Path $InstallRoot 'versions')).TrimEnd('\')
+ $parent=[IO.Path]::GetFullPath((Split-Path $p -Parent)).TrimEnd('\')
+ if($parent -ne $versions -or (Split-Path $p -Leaf) -notmatch '^[a-f0-9]{16}$'){throw "Invalid managed version directory: $p"}
  Assert-PlainTree $p
 }
 function Read-Record {
