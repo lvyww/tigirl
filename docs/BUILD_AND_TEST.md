@@ -6,7 +6,7 @@ From PowerShell, with Visual Studio C++ tools and a Windows SDK installed:
 
 ```powershell
 ./build_native.ps1 -Platform x64,Win32
-# Explicit compatibility toolset (CI uses VS 2022 on windows-2025):
+# Explicit compatibility toolset for an older local compiler:
 ./build_native.ps1 -Platform x64,Win32 -PlatformToolset v143
 # Cross-compilation only; requires the ARM64 C++ component:
 ./build_native.ps1 -Platform ARM64
@@ -19,8 +19,15 @@ are preserved: DLLs under `build/<platform>/Release`, tools/probes under
 `build/tests/<platform>`. `-ToolPlatform` can select companion-tool architectures
 independently (used by the existing x64 release-staging wrapper).
 
-The default project toolset remains v145; selecting v143 is explicit, not a silent
-fallback. ARM64X retains its existing experimental build path.
+The DLL project copies dictionary/font resources after a normal build. Compile-only
+sets `NativeCompileOnly=true` to skip that staging target, not the compile/link
+steps. The existing x64 release wrapper passes `-StageRuntimeData` to retain
+strict dictionary copying, fonts, and reverse-lookup data. Direct project builds
+and ARM64/ARM64X release wrappers retain their original default behavior.
+
+The default project toolset remains v145; CI also requests v145 on the current
+Windows 2025/Visual Studio 2026 image. Selecting v143 locally is explicit, not a
+silent fallback. ARM64X retains its existing experimental build path.
 
 Production tools and tests now share `msbuild/NativeApp.props` and source groups,
 rather than tools importing test executables. Source item identities are retained

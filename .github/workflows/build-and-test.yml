@@ -34,7 +34,7 @@ jobs:
           python-version: '3.11'
       - name: Compile DLL, loader probe and all production tools (no model)
         shell: pwsh
-        run: ./build_native.ps1 -Platform $env:TIGIRL_PLATFORM -PlatformToolset v143
+        run: ./build_native.ps1 -Platform $env:TIGIRL_PLATFORM -PlatformToolset v145
       - name: Run synthetic core regressions with MSVC
         shell: pwsh
         run: |

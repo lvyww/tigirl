@@ -400,7 +400,7 @@
     <ClCompile Include="..\native\tsf\CandidateUI.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Target Name="CopyDictionary" AfterTargets="Build" Condition="'$(Platform)'=='ARM64' or '$(Platform)'=='ARM64EC' or '$(Platform)'=='Win32' or '$(Platform)'=='x64'">
+  <Target Name="CopyDictionary" AfterTargets="Build" Condition="'$(NativeCompileOnly)'!='true' and ('$(Platform)'=='ARM64' or '$(Platform)'=='ARM64EC' or '$(Platform)'=='Win32' or '$(Platform)'=='x64')">
     <Copy SourceFiles="$(MSBuildProjectDirectory)\..\data\tiger-v2.tcd" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
     <ItemGroup><NativeFontFiles Include="$(MSBuildProjectDirectory)\..\data\fonts\*" /></ItemGroup>
     <Copy SourceFiles="@(NativeFontFiles)" DestinationFolder="$(OutDir)字体" SkipUnchangedFiles="true" />
