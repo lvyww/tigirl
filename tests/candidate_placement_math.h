@@ -41,8 +41,8 @@ template<class Check> void checkCandidatePlacement(Check check) {
             auto p=placeCandidateWindow(c,w,width,height);
             check(p.y+height==w.bottom,"Scaled candidate did not align with this monitor's work-area bottom");
             check(p.x+width==w.right-2,"Scaled candidate lost the right-edge reserve");
-            const auto small=placeCandidateWindow(c,w,width,10);
-            check(small.y==c.bottom+5,"Short candidate retained a stale above-caret placement");
+            const auto shrunk=placeCandidateWindow(c,w,width,10);
+            check(shrunk.y==c.bottom+5,"Short candidate retained a stale above-caret placement");
             c={w.left+20,w.top+20,w.left+21,w.top+40};
             p=placeCandidateWindow(c,w,width,height);
             check(p.x==c.left && p.y==c.bottom+5,"Monitor change retained a stale placement");

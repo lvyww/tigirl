@@ -116,11 +116,14 @@ Horizontal gaps use actual font widths for two spaces; after input code, append
 max(0,7-codeLength) spaces. No horizontal wrapping; the work-area width cap trims
 long text and prevents clipped-away candidates from retaining mouse targets.
 
-Placement now uses the reference's 5 physical-pixel caret gap and 2 physical-pixel
-right/bottom reserve. If below does not fit, choose above when it fits or has more
-space, and retain above placement as content shrinks during the session. Reset on
-monitor change or UI teardown. Continue using the actual TSF caret and existing
-PMv2 conversion rather than the Overlay's IPC anchor cache/Start-menu heuristics.
+Placement retains the 5 physical-pixel gap below the caret and the 2-pixel right
+reserve. When the candidate window does not fit below, move it upwards so its
+bottom meets the current monitor's work-area bottom; do not flip it above the
+caret. There is no above-placement session latch, and shrinking or a monitor/work-
+area change recomputes the same rule. The bottom may overlap the input line when
+space is limited. Continue using the actual TSF caret and PMv2 conversion, not the
+Overlay's IPC anchor cache/Start-menu heuristics. See the current
+[placement rules and regressions](../docs/CANDIDATE-PLACEMENT.md).
 
 Validation includes three architectures, nine themes, DPI roundtrips, mode padding,
 minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work areas
