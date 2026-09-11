@@ -30,7 +30,7 @@ void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFo
 }
 void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
-    owner_=nullptr; shown_=false; updatedFlags_=0; reveal_.reset(); placement_.reset();
+    owner_=nullptr; shown_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset(); placement_.reset();
     if(window_) {
         KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
         const auto window=window_; window_=nullptr;
@@ -56,7 +56,7 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { ++visualRevision_;stopAnimation();reveal_.reset(); placement_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); ShowWindow(window_,SW_HIDE); } }
+    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); placement_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); } }
     else if(window_)schedulePaint();
     return S_OK;
 }
@@ -164,7 +164,8 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
             if(now<layoutDeadline_ && SetTimer(window_,4,static_cast<UINT>(layoutDeadline_-now),nullptr))return;
         }
         layoutDeadline_=0;
-        if(window_){KillTimer(window_,4);ShowWindow(window_,SW_HIDE);}
+        if(window_)KillTimer(window_,4);
+        hideWindow();
         return;
     }
     layoutDeadline_=0;if(window_)KillTimer(window_,4);
@@ -184,6 +185,11 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
 }
 void CandidateUI::stopAnimation() {
     transition_.Cancel();if(window_){KillTimer(window_,2);KillTimer(window_,3);}
+}
+void CandidateUI::hideWindow(bool endPresentation) {
+    stopAnimation();itemRects_.clear();
+    if(endPresentation)hasPresentedCandidates_=false;
+    if(window_)ShowWindow(window_,SW_HIDE);
 }
 void CandidateUI::schedulePaint() {
     if(!window_ || !owner_ || !shown_)return;
@@ -219,13 +225,17 @@ void CandidateUI::refreshReveal() {
     if(remaining)SetTimer(window_,1,remaining,nullptr);
     itemRects_.clear();
     if(!hasCaret_ || (presentation_.code.empty() && presentation_.items.empty())) {
-        stopAnimation();ShowWindow(window_,SW_HIDE);return;
+        // No items during an active composition need not start a new session.
+        // In particular, do not relatch first-presentation state on empty results.
+        hideWindow(!hasCaret_ || snapshot_.raw.empty());return;
     }
     layoutAndPaint();
 }
 void CandidateUI::layoutAndPaint() {
     if(!window_ || !renderer_ || layingOut_ || !shown_ || !hasCaret_ ||
        (presentation_.code.empty() && presentation_.items.empty()))return;
+    const bool firstCandidateFrame=!hasPresentedCandidates_ && !presentation_.items.empty();
+    if(firstCandidateFrame)stopAnimation();
     CandidateDpiScope scope;
     struct Guard {bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}} guard(layingOut_);
     const auto monitorId=MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST);
@@ -252,7 +262,7 @@ void CandidateUI::layoutAndPaint() {
     RECT current{};GetWindowRect(window_,&current);
     const FrameRect from{current.left,current.top,current.right-current.left,current.bottom-current.top};
     const FrameRect target{position.x,position.y,width_,height_};
-    if(IsWindowVisible(window_) && style_.animationEnabled && style_.animationDurationMs && from!=target) {
+    if(!firstCandidateFrame && IsWindowVisible(window_) && style_.animationEnabled && style_.animationDurationMs && from!=target) {
         if(!transition_.Active() || transition_.Target()!=target || transition_.Duration()!=static_cast<unsigned>(style_.animationDurationMs))
             transition_.Start(from,target,GetTickCount64(),60,static_cast<unsigned>(style_.animationDurationMs));
         const auto frame=transition_.Sample(GetTickCount64());
@@ -263,6 +273,9 @@ void CandidateUI::layoutAndPaint() {
         stopAnimation();if(!paint(nullptr,&position))throw std::runtime_error("Candidate publication failed");
     }
     if(!window_ || !owner_ || revision!=visualRevision_)return;
+    // paint() has published pixels and final geometry and, when necessary,
+    // successfully shown the window. Only this current frame can latch state.
+    if(!presentation_.items.empty() && !drawing->items().empty())hasPresentedCandidates_=true;
     placement_=nextPlacement;placementMonitor_=monitorId;
     itemRects_.clear();const float scale=dpi_/96.f;
     for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
@@ -287,9 +300,15 @@ bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSiz
         if(!surface_.prepare(size,rendered))throw std::runtime_error("Candidate backing surface unavailable");
         RECT rect{};GetWindowRect(window_,&rect);
         const POINT position=destination?*destination:POINT{rect.left,rect.top};
-        published=surface_.publish(window_,position);
-        if(published && shown_ && hasCaret_ && !IsWindowVisible(window_))
-            SetWindowPos(window_,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
+        const auto window=window_;
+        published=surface_.publish(window,position);
+        if(!published || window_!=window || !owner_ || !shown_ || !hasCaret_ || revision!=visualRevision_)return false;
+        if(!IsWindowVisible(window) &&
+           !SetWindowPos(window,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW))return false;
+        // Showing/publishing can reenter the host; a hidden or superseded frame
+        // must not mark the new session as having presented candidates.
+        published=window_==window && owner_ && shown_ && hasCaret_ &&
+            revision==visualRevision_ && IsWindowVisible(window);
     } catch(...) { OutputDebugStringW(L"NativeTiger: candidate rendering failed\n"); }
     return published;
 }
@@ -311,7 +330,7 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
             if(self->layoutDeadline_ && !self->hasCaret_) {
                 const auto now=GetTickCount64();
                 if(now<self->layoutDeadline_){SetTimer(window,4,static_cast<UINT>(self->layoutDeadline_-now),nullptr);return 0;}
-                self->layoutDeadline_=0;self->stopAnimation();self->itemRects_.clear();ShowWindow(window,SW_HIDE);
+                self->layoutDeadline_=0;self->hideWindow();
             }
             KillTimer(window,4);return 0;
         }
@@ -345,7 +364,14 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
             }
             return 0;
         }
-        if(message==WM_NCDESTROY) { SetWindowLongPtrW(window,GWLP_USERDATA,0); return DefWindowProcW(window,message,w,l); }
+        if(message==WM_NCDESTROY) {
+            if(self->window_==window) {
+                ++self->visualRevision_;self->stopAnimation();self->window_=nullptr;
+                self->hasPresentedCandidates_=false;self->refreshPending_=false;self->layoutDeadline_=0;
+                self->itemRects_.clear();
+            }
+            SetWindowLongPtrW(window,GWLP_USERDATA,0);return DefWindowProcW(window,message,w,l);
+        }
     } catch(...) { return 0; }
     return DefWindowProcW(window,message,w,l);
 }
