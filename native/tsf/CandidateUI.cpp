@@ -30,7 +30,7 @@ void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFo
 }
 void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
-    owner_=nullptr; shown_=false; reveal_.reset(); placement_.reset();
+    owner_=nullptr; shown_=false; updatedFlags_=0; reveal_.reset(); placement_.reset();
     if(window_) {
         KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
         const auto window=window_; window_=nullptr;
@@ -63,7 +63,7 @@ HRESULT CandidateUI::Show(BOOL value) {
 HRESULT CandidateUI::IsShown(BOOL* value) { if(!value) return E_POINTER; *value=shown_?TRUE:FALSE; return S_OK; }
 HRESULT CandidateUI::GetUpdatedFlags(DWORD* value) {
     if(!value) return E_POINTER;
-    *value=TF_CLUIE_DOCUMENTMGR|TF_CLUIE_COUNT|TF_CLUIE_SELECTION|TF_CLUIE_STRING|TF_CLUIE_PAGEINDEX|TF_CLUIE_CURRENTPAGE;
+    *value=updatedFlags_;
     return S_OK;
 }
 HRESULT CandidateUI::GetDocumentMgr(ITfDocumentMgr** value) {
@@ -116,12 +116,41 @@ HRESULT CandidateUI::Abort() {
     ComPtr<ITfTextInputProcessorEx> keepAlive=owner_;
     return owner_->choose(state_,0,true);
 }
-void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending) {
+void CandidateUI::updateContent() {
+    // Prepare the entire model before replacing any host-visible state. Layout
+    // updates never enter here, even when Context::revision advanced on key-up.
+    auto next=state_->engine;
+    auto snapshot=next.snapshot();
+    const UINT selected=snapshot.selectedCandidate>=0?static_cast<UINT>(snapshot.selectedCandidate):
+        static_cast<UINT>(snapshot.page*next.pageSize());
+    std::vector<UINT> pages;
+    for(UINT i=0;i<snapshot.total;i+=static_cast<UINT>(next.pageSize()))pages.push_back(i);
+    UINT previousPage=0;GetCurrentPage(&previousPage);
+    DWORD flags=TF_CLUIE_STRING; // Includes candidates beyond the native first page.
+    if(snapshot.total!=snapshot_.total)flags|=TF_CLUIE_COUNT;
+    if(selected!=selected_)flags|=TF_CLUIE_SELECTION;
+    if(pages!=pages_)flags|=TF_CLUIE_PAGEINDEX;
+    engine_=std::move(next);snapshot_=std::move(snapshot);
+    selected_=selected;pages_=std::move(pages);
+    UINT page=0;GetCurrentPage(&page);
+    if(page!=previousPage)flags|=TF_CLUIE_CURRENTPAGE;
+    updatedFlags_|=flags;++modelRevision_;
+}
+HRESULT CandidateUI::notifyUpdated(ITfUIElementMgr* manager,DWORD elementId) {
+    if(!owner_ || !manager || elementId==TF_INVALID_UIELEMENTID || !updatedFlags_ || notifying_)return S_FALSE;
+    ComPtr<CandidateUI> alive=this;
+    ComPtr<ITfUIElementMgr> managerAlive=manager;
+    struct Guard { bool& flag; Guard(bool& f):flag(f){flag=true;} ~Guard(){flag=false;} } guard(notifying_);
+    const auto revision=modelRevision_;
+    const auto hr=managerAlive->UpdateUIElement(elementId);
+    // Failure is retried on the next update (including a layout recovery). A
+    // reentrant content change must not be acknowledged by this older callback.
+    if(SUCCEEDED(hr) && owner_ && revision==modelRevision_)updatedFlags_=0;
+    return hr;
+}
+void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,CandidateUpdate update) {
     if(!owner_ || !state_) return;
-    engine_=state_->engine; snapshot_=engine_.snapshot();
-    selected_=snapshot_.selectedCandidate>=0?static_cast<UINT>(snapshot_.selectedCandidate):static_cast<UINT>(snapshot_.page*engine_.pageSize());
-    pages_.clear();
-    for(UINT i=0;i<snapshot_.total;i+=static_cast<UINT>(engine_.pageSize())) pages_.push_back(i);
+    if(update==CandidateUpdate::Content)updateContent();
     if(shown_)reveal_.update(snapshot_,style_,GetTickCount64());
     // The candidate model must advance even while the application has no layout.
     // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into

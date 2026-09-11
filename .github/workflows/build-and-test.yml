@@ -40,7 +40,7 @@ jobs:
         run: |
           python tests/bundled_schemas_test.py --platform $env:TIGIRL_PLATFORM
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run synthetic core regressions with MSVC
+      - name: Run core and candidate layout/model regressions with MSVC
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -51,7 +51,9 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=$arch -host_arch=x64"
           python tests/run_core_tests.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Real TSF candidate layout regression (no registration or model)
+          python tests/candidate_ui_layout_test.py --negative-control
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: TSF edit-session candidate layout regression (no registration or model)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'

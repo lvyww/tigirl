@@ -13,7 +13,9 @@ public:
     ~CandidateUI();
     void detach();
     void setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts);
-    void update(const RECT* caret,HWND ownerWindow,bool layoutPending=false);
+    void update(const RECT* caret,HWND ownerWindow,bool layoutPending=false,
+        CandidateUpdate update=CandidateUpdate::Content);
+    HRESULT notifyUpdated(ITfUIElementMgr* manager,DWORD elementId);
     const std::shared_ptr<Context>& context() const { return state_; }
     STDMETHODIMP QueryInterface(REFIID iid,void** object) override;
     STDMETHODIMP_(ULONG) AddRef() override;
@@ -34,6 +36,12 @@ public:
     STDMETHODIMP Finalize() override;
     STDMETHODIMP Abort() override;
 private:
+    void updateContent();
+    // Flags remain pending until the corresponding notification succeeds.
+    DWORD updatedFlags_=TF_CLUIE_DOCUMENTMGR|TF_CLUIE_COUNT|TF_CLUIE_SELECTION|
+        TF_CLUIE_STRING|TF_CLUIE_PAGEINDEX|TF_CLUIE_CURRENTPAGE;
+    std::uint64_t modelRevision_=0;
+    bool notifying_=false;
     static LRESULT CALLBACK windowProc(HWND,UINT,WPARAM,LPARAM);
     bool paint(HDC dc,const POINT* destination=nullptr,const SIZE* size=nullptr);
     void schedulePaint();

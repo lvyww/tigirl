@@ -1,9 +1,8 @@
-// Reuse the existing real TSF manager/text-store test support, not a mock engine.
-// Rename its legacy entry point; this probe never calls profile registration,
-// switches the foreground window or injects global keyboard input.
+// Reuse real TSF manager/text-store support; never call the legacy entry point.
 #define wmain legacyTsfHostMain
 #include "tsf_host.cpp"
 #undef wmain
+#include "candidate_layout_thread_manager.h"
 
 namespace {
 struct KeyboardStateGuard {
@@ -41,9 +40,7 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ITfThreadMgrEx> manager;
         check(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&manager)));
         TfClientId appClient; check(manager->ActivateEx(&appClient,TF_TMAE_NOACTIVATETIP|TF_TMAE_NOACTIVATEKEYBOARDLAYOUT));
-        // A GetClientId(CLSID) value alone is not an activated key-event client.
-        // This in-process probe uses the client returned by ActivateEx instead.
-        const TfClientId serviceClient=appClient;
+        ComPtr<LayoutThreadManager> adapter;adapter.Attach(new LayoutThreadManager(manager.Get(),appClient));
         ComPtr<ITfSource> source; check(manager.As(&source));
         ComPtr<UISink> ui; ui.Attach(new UISink); DWORD uiCookie=TF_INVALID_COOKIE;
         check(source->AdviseSink(IID_ITfUIElementSink,ui.Get(),&uiCookie));
@@ -52,7 +49,7 @@ int wmain(int argc,wchar_t** argv) {
         require(window!=nullptr,"Cannot create hidden text-store owner");
         auto doc=document(manager.Get(),appClient,window);
         check(manager->SetFocus(doc.manager.Get()));
-        check(service->ActivateEx(manager.Get(),serviceClient,TF_TMAE_UIELEMENTENABLEDONLY));
+        check(service->ActivateEx(adapter.Get(),appClient,TF_TMAE_UIELEMENTENABLEDONLY));
         ComPtr<ITfThreadMgrEventSink> focus; check(service.As(&focus));
         check(focus->OnSetFocus(doc.manager.Get(),nullptr));
         ComPtr<ITfKeyEventSink> keys; check(service.As(&keys));
@@ -63,7 +60,7 @@ int wmain(int argc,wchar_t** argv) {
             check(keys->OnTestKeyDown(doc.context.Get(),vk,1,&eaten));
             const bool handled=eaten!=FALSE;
             if(eaten) check(keys->OnKeyDown(doc.context.Get(),vk,1,&eaten));
-            // Include the key-up state revision, which is not a candidate change.
+            // Key-up can advance Context::revision without changing candidates.
             check(keys->OnTestKeyUp(doc.context.Get(),vk,0xc0000001,&eaten));
             if(eaten) check(keys->OnKeyUp(doc.context.Get(),vk,0xc0000001,&eaten));
             pump(); return handled;
@@ -103,23 +100,31 @@ int wmain(int argc,wchar_t** argv) {
                 "Layout notification reset the host's selection or page table");
             require(ui->updates==updates,"Layout-only notification republished the candidate model");
             require(doc.store->text==code,"Layout notification changed document text");
+            DWORD flags=0;check(list->GetUpdatedFlags(&flags));
+            require(flags==0,"Layout left spurious model change flags");
         }
         doc.store->layoutReady=true;
         check(list->Finalize()); drainLayout();
         require(doc.store->text==expected && compositionCount(doc)==0,"Finalization committed the wrong candidate");
         require(ui->id==TF_INVALID_UIELEMENTID,"Finalization retained a candidate element");
         require(list->Finalize()==TF_E_DISCONNECTED,"Detached candidate accepted a late finalization");
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
+        require(ui->id==TF_INVALID_UIELEMENTID,"Late layout resurrected a finalized UI");
         typeCode(); list=candidates();
         check(list->SetPageIndex(customPages,3)); check(list->SetSelection(5));
+        const auto beforeContent=ui->updates;
         require(tap(VK_OEM_PLUS),"Page-down key was not handled");
         list=candidates();
         UINT selected=0,page=0,pageCount=0;
         check(list->GetSelection(&selected)); check(list->GetCurrentPage(&page));
         check(list->GetPageIndex(nullptr,0,&pageCount));
         require(selected==5 && page==1 && pageCount==(count+4)/5,"Content update did not restore engine paging");
+        require(ui->updates>beforeContent,"Content update did not notify the host");
         check(list->Abort()); drainLayout();
         require(doc.store->text==expected && compositionCount(doc)==0,"Abort changed committed text");
         require(!tap(VK_RETURN) && doc.store->text==expected,"Idle Enter did not remain pass-through");
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
+        require(ui->id==TF_INVALID_UIELEMENTID,"Late layout resurrected an aborted UI");
         verifyModule(module);
         check(service->Deactivate());
         check(doc.manager->Pop(TF_POPF_ALL));
@@ -128,8 +133,9 @@ int wmain(int argc,wchar_t** argv) {
         std::cout<<"{\"status\":\"passed\",\"layout_changes\":12,\"real_tsf_edit_sessions\":true,"
             "\"custom_paging_preserved\":true,\"sixth_candidate_committed\":true,"
             "\"content_update\":true,\"abort\":true,\"late_finalize\":true,"
-            "\"physical_input_tested\":false,\"profile_registered\":false,\"model_required\":false}\n";
-        // COM objects are released at process teardown; do not force-unload the DLL.
+            "\"keystroke_subscription_mocked\":true,\"physical_input_tested\":false,"
+            "\"profile_registered\":false,\"model_required\":false}\n";
+        // Do not force-unload a DLL while COM objects are still in scope.
         return 0;
     } catch(const std::exception& error) { std::cerr<<error.what()<<'\n'; return 1; }
 }

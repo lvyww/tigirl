@@ -1,9 +1,9 @@
-"""Run real TSF UI-less layout regressions on both bundled dictionaries (Windows).
+"""Real TSF UI-less layout regressions on both bundled dictionaries (Windows).
 
-Build the DLL/importer and CandidateLayoutHost.vcxproj for the same architecture
-first. The test loads a private DLL copy through its class factory, with a real
-Windows TSF manager/text store. It never registers a profile, injects global
-input, uses the user's data, or needs a sentence language model.
+Build matching DLL/importer and CandidateLayoutHost.vcxproj first. The DLL,
+TSF contexts, document edits and UI manager are real; only key-event subscription
+is supplied by a test decorator because no TIP/profile is registered. Keys are
+explicit callbacks, not global input. No user data or sentence model is required.
 """
 import argparse
 import json
@@ -12,9 +12,9 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import tempfile
 
 from bundled_schemas_test import DATA, ROOT, sections, verify_sources
+from candidate_ui_layout_test import temporary_work_directory
 
 
 def main() -> None:
@@ -32,8 +32,7 @@ def main() -> None:
         if not path.is_file():
             parser.error(f'Build the matching native binary first: {path}')
     for scheme in manifest['schemes']:
-        with tempfile.TemporaryDirectory(prefix='tigirl-layout-') as temp:
-            root = Path(temp)
+        with temporary_work_directory(prefix='tigirl-layout-') as root:
             package = root / 'package'
             package.mkdir()
             output = package / 'tiger-v2.tcd'
