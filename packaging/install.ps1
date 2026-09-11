@@ -4,13 +4,10 @@ $ErrorActionPreference='Stop'
 function Initialize-InstalledUser([string]$Directory) {
     $process=Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -Wait -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$Directory+'\initialize.ps1"'))
     if($process.ExitCode) {
-        Write-Warning 'User initialization did not complete; restoring the previous machine registration.'
-        $installed=Get-Content -LiteralPath $NativeTigerRecord -Raw|ConvertFrom-Json
-        $recovery=if($installed.previous){'rollback.ps1'}else{'uninstall.ps1'}
-        $restore=Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -Wait -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$Directory+'\'+$recovery+'"'))
-        if($restore.ExitCode){throw 'Initialization and automatic recovery failed. Run rollback.ps1 or uninstall.ps1 from the installation directory.'}
-        throw 'User initialization was cancelled or failed; the machine registration was restored.'
+        Write-Warning 'User initialization did not complete. The new machine registration remains active; the user-data transaction restores its own changes.'
+        return $false
     }
+    return $true
 }
 try {
     Assert-X64System
@@ -32,8 +29,9 @@ try {
         if($Elevated){throw 'Administrator privileges were not granted.'}
         $child=Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Elevated')
         if($child.ExitCode){throw 'Machine installation did not complete.'}
-        # This process retains the original user's identity across UAC.
-        Initialize-InstalledUser $destination
+        # This process retains the original user's identity across UAC. A user-data
+        # failure must not roll back a machine registration that already committed.
+        [void](Initialize-InstalledUser $destination)
         exit 0
     }
     . "$PSScriptRoot\data.ps1"
@@ -72,6 +70,6 @@ try {
     }
     # -Elevated is the machine-only child. An explicitly elevated launch
     # initializes that account; ordinary double-click preserves the user above.
-    if(!$Elevated){Initialize-InstalledUser $destination;exit 0}
+    if(!$Elevated){[void](Initialize-InstalledUser $destination);exit 0}
     Write-Output "Installed machine files: $destination"
 }catch{Write-Error $_;exit 1}
