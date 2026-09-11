@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup><NativeProbeName>Tigirl.Reminder</NativeProbeName></PropertyGroup>
-  <Import Project="..\tests\EngineProbe.vcxproj" />
-  <ItemGroup><ClCompile Remove="engine_probe.cpp" /><ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" /><ClCompile Include="timer_reminder.cpp" /></ItemGroup>
+  <Import Project="..\msbuild\NativeApp.props" />
+  <Import Project="..\msbuild\EngineSources.props" />
+  <ItemGroup><ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" /><ClCompile Include="timer_reminder.cpp" /></ItemGroup>
   <ItemDefinitionGroup><Link><AdditionalDependencies>ole32.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ResourceCompile Include="Reminder.rc" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

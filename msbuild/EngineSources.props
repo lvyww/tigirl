@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="DictionarySources.props" />
+  <ItemGroup>
+    <ClCompile Include="..\native\SentenceSession.cpp" />
+    <ClCompile Include="..\native\SentenceAutoCommit.cpp" />
+    <ClCompile Include="..\native\Engine.cpp" />
+    <ClCompile Include="..\native\DynamicText.cpp" />
+    <ClCompile Include="..\native\UppercaseText.cpp" />
+    <ClCompile Include="..\native\Lexicon.cpp" />
+    <ClCompile Include="..\native\Text.cpp" />
+    <ClCompile Include="..\native\SelectionKeys.cpp" />
+    <ClCompile Include="..\native\Settings.cpp" />
+  </ItemGroup>
+</Project>
