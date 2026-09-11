@@ -71,7 +71,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_layout_test.py --negative-control
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/candidate_ui_presentation_test.py --negative-control
+          python tests/candidate_ui_presentation_test.py --negative-control --placement-negative-control
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: TSF edit-session candidate layout regression (no registration or model)
         shell: pwsh

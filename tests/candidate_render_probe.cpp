@@ -109,13 +109,13 @@ int wmain(int argc,wchar_t** argv) {
         }
         for(UINT dpi:{96u,120u,144u,192u}) {
             const int scale=static_cast<int>(dpi);
-            CandidatePlacement placement;RECT work{-1920,0,0,1080},caret{-100,1020,-99,1040};
+            RECT work{-1920,0,0,1080},caret{-100,1020,-99,1040};
             const int w=MulDiv(180,scale,96),h=MulDiv(100,scale,96);
-            auto pos=placement.place(caret,work,w,h);
-            require(pos.x+w<=work.right-2 && pos.y+h<=caret.top-5,"Bottom/right avoidance failed");
-            const auto smaller=placement.place(caret,work,w,10);
-            require(smaller.y+10==caret.top-5,"Above placement not retained after shrink");
-            placement.reset();caret={-1800,20,-1799,40};pos=placement.place(caret,work,w,h);
+            auto pos=placeCandidateWindow(caret,work,w,h);
+            require(pos.x+w<=work.right-2 && pos.y+h==work.bottom,"Work-area bottom/right constraint failed");
+            const auto smaller=placeCandidateWindow(caret,work,w,10);
+            require(smaller.y==caret.bottom+5,"Shrink should return below the caret without an above latch");
+            caret={-1800,20,-1799,40};pos=placeCandidateWindow(caret,work,w,h);
             require(pos.x==caret.left && pos.y==45,"Caret gap or negative-monitor position differs");
         }
         for(bool vertical:{false,true})for(double size:{3.,17.,31.5,200.}) {

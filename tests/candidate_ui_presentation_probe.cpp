@@ -150,6 +150,7 @@ struct CandidateUIPresentationProbe {
         pump();require(frames.size()==before+1,"First candidates published intermediate frames");finalFrame();
     }
     void change() { press('B');decode({u"a much wider next candidate",u"second",u"third",u"fourth"});update();pump(); }
+    static void runPlacement(std::shared_ptr<const Dictionary> dictionary);
     static void run(std::shared_ptr<const Dictionary> dictionary) {
         using namespace candidate_probe;
         for(bool vertical:{true,false}) {
@@ -298,6 +299,8 @@ struct CandidateUIPresentationProbe {
     }
 };
 }
+#include "candidate_ui_placement_cases.h"
+
 int wmain(int argc,wchar_t** argv) {
     using namespace candidate_probe;
     try {
@@ -305,11 +308,12 @@ int wmain(int argc,wchar_t** argv) {
         require(SUCCEEDED(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED)),"COM initialization failed");
         tiger::tsf::CandidateDpiScope scope;
         const std::filesystem::path path=argv[1];require(!std::filesystem::exists(path),"Fixture exists");
-        tiger::ImportedLexicon lexicon;lexicon.main={{u"a",{u"first",u"second"}}};lexicon.indexedMain={{u"a",8,0}};
+        tiger::ImportedLexicon lexicon;lexicon.main={{u"a",{u"first",u"second"}},{u"b",{u"one",u"two",u"three",u"four",u"five"}},{u"c",{u"only"}}};lexicon.indexedMain={{u"a",8,0},{u"b",8,1},{u"c",8,2}};
         lexicon.comments[u"first"]=u"wide annotation for delayed expansion";
         const auto bytes=tiger::serializeImportedLexicon(lexicon);
         {std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));file.close();require(static_cast<bool>(file),"Fixture write failed");}
         tiger::tsf::CandidateUIPresentationProbe::run(tiger::Dictionary::Open(path));
+        tiger::tsf::CandidateUIPresentationProbe::runPlacement(tiger::Dictionary::Open(path));
         require(dllRefs==0,"CandidateUI lifetime leaked module references");
         CoUninitialize();
         std::cout<<"{\"status\":\"passed\",\"cases\":"<<cases<<",\"checks\":"<<checks

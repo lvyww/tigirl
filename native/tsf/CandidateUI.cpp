@@ -3,6 +3,7 @@
 #include "../../SampleIME/Globals.h"
 #include "CandidateUI.h"
 #include "CandidateDpi.h"
+#include "CandidatePlacement.h"
 #include "CandidateFrame.h"
 #include <algorithm>
 #include <cmath>
@@ -30,7 +31,7 @@ void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFo
 }
 void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
-    owner_=nullptr; shown_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset(); placement_.reset();
+    owner_=nullptr; shown_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset();
     if(window_) {
         KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
         const auto window=window_; window_=nullptr;
@@ -56,7 +57,7 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); placement_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); } }
+    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); } }
     else if(window_)schedulePaint();
     return S_OK;
 }
@@ -249,9 +250,7 @@ void CandidateUI::layoutAndPaint() {
         presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
     if(changed)drawing->layout(presentation_,maxWidth);
     width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
-    auto nextPlacement=placement_;
-    if(placementMonitor_!=monitorId)nextPlacement.reset();
-    const auto position=nextPlacement.place(caret_,monitor.rcWork,width_,height_);
+    const auto position=placeCandidateWindow(caret_,monitor.rcWork,width_,height_);
     const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
     const auto selection=selected_>=first?selected_-first:UINT_MAX;
     if(changed || cachedSelection_!=selection){
@@ -276,7 +275,6 @@ void CandidateUI::layoutAndPaint() {
     // paint() has published pixels and final geometry and, when necessary,
     // successfully shown the window. Only this current frame can latch state.
     if(!presentation_.items.empty() && !drawing->items().empty())hasPresentedCandidates_=true;
-    placement_=nextPlacement;placementMonitor_=monitorId;
     itemRects_.clear();const float scale=dpi_/96.f;
     for(const auto& r:renderer_->items())itemRects_.push_back(RECT{
         static_cast<LONG>(std::floor(r.left*scale)),static_cast<LONG>(std::floor(r.top*scale)),

@@ -70,6 +70,8 @@ def main() -> None:
     parser.add_argument("--cxx", default="cl")
     parser.add_argument("--negative-control", action="store_true",
                         help="Also verify that restoring the old visibility-only animation condition fails")
+    parser.add_argument("--placement-negative-control", action="store_true",
+                        help="Also verify that restoring above-caret overflow placement fails")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This test requires real Windows layered windows and the MSVC environment")
@@ -121,6 +123,33 @@ def main() -> None:
             if control.returncode == 0 or expected not in control.stderr:
                 raise RuntimeError(f"Negative control did not detect original geometry bug: {control}")
             print('{"negative_control":"passed","legacy_visibility_only_gate":"rejected"}', flush=True)
+        if args.placement_negative_control:
+            production = (ROOT / "native/tsf/CandidateUI.cpp").read_text(encoding="utf-8")
+            anchor = "const auto position=placeCandidateWindow(caret_,monitor.rcWork,width_,height_);"
+            if production.count(anchor) != 1:
+                raise RuntimeError("Placement call changed; update the negative-control mutation")
+            # Restore the old overflow target only. This keeps first-publication
+            # and layout/model separation fixes enabled in the negative control.
+            old_target = """const auto position=[&] {
+                auto oldCaret=caret_;
+                if(caret_.bottom+5+height_>monitor.rcWork.bottom)
+                    oldCaret.bottom=caret_.top-height_-10;
+                return placeCandidateWindow(oldCaret,monitor.rcWork,width_,height_);
+            }();"""
+            (work / "flip-candidate-ui.cpp").write_text(
+                production.replace(anchor, old_target), encoding="utf-8")
+            probe = (ROOT / "tests/candidate_ui_presentation_probe.cpp").read_text(encoding="utf-8")
+            include = '#include "../native/tsf/CandidateUI.cpp"'
+            if probe.count(include) != 1:
+                raise RuntimeError("Probe include changed; update placement negative control")
+            source = work / "flip-probe.cpp"
+            source.write_text(probe.replace(include, '#include "flip-candidate-ui.cpp"'), encoding="utf-8")
+            control = build_and_run(source, "flip")
+            expected = "Overflow must clamp to the work-area bottom, not above the caret"
+            if control.returncode == 0 or expected not in control.stderr:
+                raise RuntimeError(f"Negative control did not detect above-caret placement: {control}")
+            print('{"placement_negative_control":"passed","above_caret_overflow":"rejected"}', flush=True)
+
 
 
 if __name__ == "__main__":
