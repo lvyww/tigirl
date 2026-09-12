@@ -6,6 +6,7 @@ namespace tiger {
 // One clock per visible composition session, matching TigerClaw Overlay.
 class CandidateReveal {
 public:
+    bool annotationsExpanded() const { return candidates_ && annotations_; }
     void reset() { active_=candidates_=annotations_=false; start_=0; }
     void update(const Snapshot& snapshot,const CandidateStyle& style,std::uint64_t now) {
         const auto full=presentCandidates(snapshot,style);

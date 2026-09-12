@@ -38,6 +38,7 @@ void CandidateUI::detach() {
         DestroyWindow(window);
     }
     surface_.clear();renderer_.reset();
+    frameTrace_.flush();
     fonts_.reset();
     state_.reset();
 }
@@ -193,6 +194,7 @@ void CandidateUI::hideWindow(bool endPresentation) {
     stopAnimation();itemRects_.clear();
     if(endPresentation)hasPresentedCandidates_=false;
     if(window_)ShowWindow(window_,SW_HIDE);
+    frameTrace_.flush();
 }
 void CandidateUI::schedulePaint() {
     if(!window_ || !owner_ || !shown_)return;
@@ -205,7 +207,10 @@ void CandidateUI::animate() {
     if(!transition_.Active()){KillTimer(window_,2);return;}
     const auto rect=transition_.Sample(GetTickCount64());
     const POINT position{rect.x,rect.y};const SIZE size{std::max(1,rect.width),std::max(1,rect.height)};
-    if(!paint(nullptr,&position,transition_.Active()?&size:nullptr)) {
+    tracingTimerFrame_=true;
+    const bool painted=paint(nullptr,&position,transition_.Active()?&size:nullptr);
+    tracingTimerFrame_=false;
+    if(!painted) {
         stopAnimation();itemRects_.clear();if(retryCount_++<3)SetTimer(window_,3,100,nullptr);
     } else if(!transition_.Active())KillTimer(window_,2);
 }
@@ -319,6 +324,7 @@ bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSiz
         RECT rect{};GetWindowRect(window_,&rect);
         const POINT position=destination?*destination:POINT{rect.left,rect.top};
         const auto window=window_;
+        const bool appearing=!IsWindowVisible(window);
         published=surface_.publish(window,position);
         if(!published || window_!=window || !owner_ || !shown_ || !hasCaret_ || revision!=visualRevision_)return false;
         if(!IsWindowVisible(window) &&
@@ -327,6 +333,21 @@ bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSiz
         // must not mark the new session as having presented candidates.
         published=window_==window && owner_ && shown_ && hasCaret_ &&
             revision==visualRevision_ && IsWindowVisible(window);
+        if(published && frameTrace_.enabled()) {
+            CandidateFrameTrace::Record r;
+            r.geometry=geometryTrace_;
+            r.tick=GetTickCount64();r.model=modelRevision_;r.visual=revision;
+            r.content=14695981039346656037ull;
+            auto hash=[&](std::u16string_view text){for(auto c:text){r.content^=c;r.content*=1099511628211ull;}r.content^=0xffff;r.content*=1099511628211ull;};
+            hash(presentation_.code);for(const auto& item:presentation_.items)hash(item);
+            r.candidates=static_cast<unsigned>(snapshot_.candidates.size());r.items=static_cast<unsigned>(presentation_.items.size());
+            r.rawLength=static_cast<unsigned>(snapshot_.raw.size());r.dpi=dpi_;
+            r.x=position.x;r.y=position.y;r.width=frameWidth;r.height=frameHeight;r.targetWidth=width_;r.targetHeight=height_;
+            r.appearing=appearing;r.firstCandidates=!hasPresentedCandidates_ && !presentation_.items.empty();
+            r.animation=transition_.Active();r.annotations=reveal_.annotationsExpanded();r.codeOnly=presentation_.codeOnly;
+            r.source=tracingTimerFrame_?"timer":(frameSize?"layout-transition":"layout-final");
+            frameTrace_.capture(r,rendered);
+        }
     } catch(...) { OutputDebugStringW(L"NativeTiger: candidate rendering failed\n"); }
     return published;
 }

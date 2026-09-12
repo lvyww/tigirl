@@ -77,6 +77,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_orientation_test.py --cxx cl --ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_host_dpi_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: TSF edit-session candidate layout regression (no registration or model)
         shell: pwsh
         run: |

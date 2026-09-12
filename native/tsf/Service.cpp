@@ -6,6 +6,7 @@
 #include "Service.h"
 #include "ManagementLaunch.h"
 #include "CandidateUI.h"
+#include "CandidateDpi.h"
 #include "AddWordUI.h"
 #include "ManualTimer.h"
 #include "../SelectionKeys.h"
@@ -518,15 +519,55 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
     }
     ComPtr<ITfContextView> view; ComPtr<ITfRange> range;
     RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false,layoutPending=false;
+    CandidateFrameTrace::Geometry geometry;
+    const bool tracing=ui->tracingGeometry();
+    if(tracing){
+        geometry.tick=GetTickCount64();
+        geometry.reason=update==CandidateUpdate::Layout?"layout":(keyDepth_?"key-edit":"async-edit");
+        geometry.callerAwareness=GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
+    }
     if(SUCCEEDED(context->context->GetActiveView(&view))) {
         view->GetWnd(&owner);
+    }
+    // Keep GetTextExt and CandidateUI's logical-to-physical conversion in the
+    // same host DPI context, independent of how this edit session was dispatched.
+    CandidateHostDpiScope hostDpi(owner);
+    if(tracing){
+        geometry.owner=reinterpret_cast<std::uintptr_t>(owner);
+        geometry.queryAwareness=GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
+        if(owner){
+            geometry.ownerAwareness=GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(owner));
+            geometry.ownerDpi=GetDpiForWindow(owner);GetWindowRect(owner,&geometry.ownerLogical);
+            {CandidateDpiScope physical;GetWindowRect(owner,&geometry.ownerPhysical);}
+        }
+    }
+    if(view) {
         if(context->composition && SUCCEEDED(context->composition->GetRange(&range))) {
             if(SUCCEEDED(range->Collapse(cookie,TF_ANCHOR_END))) {
                 const auto layout=view->GetTextExt(cookie,range.Get(),&caret,&clipped);
+                if(tracing)geometry.textResult=layout;
                 hasCaret=SUCCEEDED(layout) && caret.bottom>caret.top;
                 layoutPending=layout==TS_E_NOLAYOUT;
             }
         }
+    }
+    if(tracing){
+        geometry.reported=caret;geometry.clipped=clipped!=FALSE;
+        if(hasCaret)geometry.converted=candidatePhysicalCaret(caret,owner);
+        GUITHREADINFO info{};info.cbSize=sizeof(info);
+        const auto thread=owner?GetWindowThreadProcessId(owner,nullptr):GetCurrentThreadId();
+        if(GetGUIThreadInfo(thread,&info) && info.hwndCaret){
+            geometry.caretWindow=reinterpret_cast<std::uintptr_t>(info.hwndCaret);
+            geometry.caretAwareness=GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(info.hwndCaret));
+            geometry.caretDpi=GetDpiForWindow(info.hwndCaret);geometry.guiClient=info.rcCaret;
+            CandidateHostDpiScope caretDpi(info.hwndCaret);
+            POINT first{info.rcCaret.left,info.rcCaret.top},last{info.rcCaret.right,info.rcCaret.bottom};
+            if(ClientToScreen(info.hwndCaret,&first) && ClientToScreen(info.hwndCaret,&last)){
+                geometry.guiValid=true;geometry.guiScreen={first.x,first.y,last.x,last.y};
+                geometry.guiPhysical=candidatePhysicalCaret(geometry.guiScreen,info.hwndCaret);
+            }
+        }
+        ui->setGeometryTrace(geometry);
     }
     if(!active_ || ui_.Get()!=ui.Get() || ui->context()!=context)return;
     ui->update(hasCaret?&caret:nullptr,owner,layoutPending,update);

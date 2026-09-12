@@ -4,11 +4,16 @@
 #include "CandidatePlacement.h"
 #include "FrameTransition.h"
 #include "CandidateFrame.h"
+#include "CandidateFrameTrace.h"
 #include "../CandidateReveal.h"
 
 namespace tiger::tsf {
 class CandidateUI final : public ITfCandidateListUIElementBehavior {
 public:
+    bool tracingGeometry() const { return frameTrace_.enabled(); }
+    void setGeometryTrace(CandidateFrameTrace::Geometry value) {
+        value.sequence=geometryTrace_.sequence+1;geometryTrace_=value;frameTrace_.geometry(value);
+    }
     CandidateUI(Service* owner,std::shared_ptr<Context> state,CandidateStyle style,std::shared_ptr<PrivateFonts> fonts);
     ~CandidateUI();
     void detach();
@@ -36,6 +41,9 @@ public:
     STDMETHODIMP Finalize() override;
     STDMETHODIMP Abort() override;
 private:
+    CandidateFrameTrace frameTrace_;
+    CandidateFrameTrace::Geometry geometryTrace_;
+    bool tracingTimerFrame_=false;
     friend struct CandidateUIPresentationProbe; // Windows publication/lifecycle regressions.
     void updateContent();
     // Flags remain pending until the corresponding notification succeeds.
