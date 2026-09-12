@@ -221,11 +221,15 @@ void CandidateUI::refreshReveal() {
     KillTimer(window_,1);
     if(!owner_ || !state_ || !shown_)return;
     if(!hasCaret_ && layoutDeadline_)return;
-    // Match TigerClaw Core::ShouldShowCandidate: no placeholder while the
-    // first sentence result is still pending. A completed empty result may
-    // display its code normally; ready candidates never wait on a UI timer.
+    // Suppress a first-result placeholder, but preserve an existing frame
+    // when auto-commit consumes all old candidates and leaves a pending suffix.
+    // No timer or new pixels: completion drives the next update. Old hit targets
+    // and animation must stop, since their candidates have already committed.
     if(snapshot_.candidates.empty() && engine_.sentenceDecodePending()) {
-        hideWindow(false);return;
+        if(hasPresentedCandidates_ && hasCaret_ && IsWindowVisible(window_)) {
+            stopAnimation();itemRects_.clear();
+        } else hideWindow(false);
+        return;
     }
     if(rendererDirty_ || !renderer_) {
         const auto revision=visualRevision_;

@@ -154,6 +154,28 @@ struct CandidateUIPresentationProbe {
         using namespace candidate_probe;
         for(bool vertical:{true,false}) {
             {
+                // Auto-commit consumes the entire old candidate, while the
+                // remaining code awaits its own result (Firefox: vu + j).
+                CandidateUIPresentationProbe p(dictionary,vertical);
+                p.state->engine.cancel();p.state->engine.enableSentenceInput(true,1,true,0);
+                p.press('V');p.press('U');p.decode({u"这"});p.update();p.pump();p.finalFrame();
+                const auto before=p.rect();const auto published=frames.size();
+                SentencePathQueries queries;
+                queries.complete=[](std::u16string_view,std::u16string_view,std::optional<std::u16string_view>,bool,const SentenceLockedPrefix*){return false;};
+                queries.properPrefix=[](std::u16string_view){return false;};
+                KeyEvent key;key.vk='J';const auto result=p.state->engine.process(key,queries);
+                require(result.commit==u"这" && p.state->engine.snapshot().raw==u"j","Auto-commit fixture did not retain j");
+                require(p.state->engine.snapshot().candidates.empty() && p.state->engine.sentenceDecodePending(),"Fixture did not reach empty pending suffix");
+                p.update();p.pump();
+                require(p.visible() && p.rect()==before && frames.size()==published,"Pending suffix hid or shrank a published candidate window");
+                require(p.ui->itemRects_.empty() && !p.ui->transition_.Active(),"Stale frame remained clickable or animated");
+                p.layout();p.pump();
+                require(p.visible() && p.rect()==before,"Layout refresh exposed the host background");
+                p.decode({u"这人",u"这字"});p.update();p.pump();
+                require(p.visible() && p.ui->hasPresentedCandidates_,"Suffix result restarted presentation");
+                p.timer(2,201);p.finalFrame();++cases;
+            }
+            {
                 CandidateUIPresentationProbe p(dictionary,vertical);const auto before=frames.size();p.pump();
                 now+=1000;p.layout();p.pump();
                 require(!p.visible() && frames.size()==before,"Pending decode became visible after elapsed time/layout");
