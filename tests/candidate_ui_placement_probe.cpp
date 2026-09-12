@@ -184,12 +184,19 @@ int wmain(int argc,wchar_t** argv) {
         tiger::ImportedLexicon lexicon;
         lexicon.main={{u"a",{u"first",u"second",u"third",u"fourth",u"fifth",u"sixth",u"seventh"}},
                       {u"ab",{u"a substantially wider word candidate",u"second"}}, {u"abc",{u"short"}}};
-        lexicon.indexedMain={{u"a",8,0},{u"ab",8,0},{u"abc",8,0}};
+        for(std::size_t i=0;i<lexicon.main.size();++i)
+            lexicon.indexedMain.push_back({lexicon.main[i].code,8,i});
         lexicon.comments[u"first"]=u"wide annotation for delayed expansion";
         const auto bytes=tiger::serializeImportedLexicon(lexicon);
         {std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));
          file.close();require(static_cast<bool>(file),"Fixture write failed");}
-        windows(tiger::Dictionary::Open(path));
+        const auto dictionary=tiger::Dictionary::Open(path);
+        for(const auto& entry:lexicon.main) {
+            const auto found=dictionary->find(tiger::Section::Main,entry.code);
+            require(found.count==entry.candidates.size() && dictionary->value(found,0)==entry.candidates.front(),
+                    "Placement fixture lookup does not match its source candidates");
+        }
+        windows(dictionary);
         require(dllRefs==0,"Placement test leaked module references");CoUninitialize();
         std::cout<<"{\"status\":\"passed\",\"placement_cases\":"<<placementCases<<",\"checks\":"<<checks
                  <<",\"geometry_checks\":"<<geometryChecks<<",\"real_layered_windows\":true,\"controlled_clock\":true,\"physical_chat_host_tested\":false}\n";
