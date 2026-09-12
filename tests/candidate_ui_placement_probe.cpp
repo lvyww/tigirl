@@ -45,9 +45,9 @@ void geometry() {
             require(top.x==work.left && top.y==work.top,"Negative/outside caret was not clamped");
             // Same interpolation used in production; allow only integer-rounding
             // error at the 2 px inset, never a taskbar crossing or an above jump.
-            const auto small=candidatePosition(edge,work,width,30);
+            const auto compactPosition=candidatePosition(edge,work,width,30);
             FrameTransition animation;
-            animation.Start({small.x,small.y,width,30},{at.x,at.y,width,height},1000,60,100);
+            animation.Start({compactPosition.x,compactPosition.y,width,30},{at.x,at.y,width,height},1000,60,100);
             for(unsigned tick=0;tick<=100;++tick) {
                 const auto frame=animation.Sample(1000+tick);
                 require(std::abs(frame.y+frame.height-(work.bottom-2))<=1,"Animation changed bottom anchor");
@@ -109,10 +109,10 @@ void windows(std::shared_ptr<const tiger::Dictionary> dictionary) {
             p.change();checkIntermediateBottom(p,work);settle(p,work);
             const int tall=p.rect().height;
             p.press('C');p.decode({u"first"});p.update();p.pump();settle(p,work);
-            const int small=p.rect().height;
+            const int compactHeight=p.rect().height;
             if(vertical) {
-                require(tall>small,"Vertical fixture did not change candidate row count");
-                p.caret.bottom=work.bottom-(tall+small)/2-7;p.caret.top=p.caret.bottom-20;
+                require(tall>compactHeight,"Vertical fixture did not change candidate row count");
+                p.caret.bottom=work.bottom-(tall+compactHeight)/2-7;p.caret.top=p.caret.bottom-20;
                 p.layout();p.pump();settle(p,work);
                 require(p.rect().y==p.caret.bottom+5,"Fitting small candidate did not return below caret");
                 p.change();settle(p,work);
