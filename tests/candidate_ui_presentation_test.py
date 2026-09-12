@@ -69,7 +69,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cxx", default="cl")
     parser.add_argument("--negative-control", action="store_true",
-                        help="Also verify that restoring the old visibility-only animation condition fails")
+                        help="Also reject the old visibility-only animation and above-caret placement decisions")
+    parser.add_argument("--placement", action="store_true",
+                        help="Also exercise bottom-edge placement and its independent negative control")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This test requires real Windows layered windows and the MSVC environment")
@@ -101,6 +103,11 @@ def main() -> None:
         print(result.stdout, end="", flush=True)
         if result.returncode:
             raise RuntimeError(f"CandidateUI regressions failed ({result.returncode}): {result.stderr}")
+        if args.placement:
+            placement = build_and_run(ROOT / "tests/candidate_ui_placement_probe.cpp", "placement")
+            print(placement.stdout, end="", flush=True)
+            if placement.returncode:
+                raise RuntimeError(f"CandidateUI placement regressions failed ({placement.returncode}): {placement.stderr}")
         if args.negative_control:
             # Change only the animation decision in a temporary copy; never edit
             # the working tree and never accept compilation errors as a control.
@@ -121,6 +128,32 @@ def main() -> None:
             if control.returncode == 0 or expected not in control.stderr:
                 raise RuntimeError(f"Negative control did not detect original geometry bug: {control}")
             print('{"negative_control":"passed","legacy_visibility_only_gate":"rejected"}', flush=True)
+
+            if args.placement:
+                # Separately restore the old overflow flip (above has ample room in
+                # this bottom-edge fixture). The rendering/first-frame fix stays on.
+                position = "const auto position=candidatePosition(caret_,monitor.rcWork,width_,height_);"
+                if production.count(position) != 1:
+                    raise RuntimeError("Placement call changed; update the negative-control mutation")
+                legacy_position = """auto position=candidatePosition(caret_,monitor.rcWork,width_,height_);
+        if(caret_.bottom+5+height_>monitor.rcWork.bottom)
+            position.y=std::clamp(caret_.top-5-height_,monitor.rcWork.top,
+                std::max(monitor.rcWork.top,monitor.rcWork.bottom-height_-2));"""
+                (work / "legacy-placement-ui.cpp").write_text(
+                    production.replace(position, legacy_position), encoding="utf-8")
+                (work / "legacy-placement-base.cpp").write_text(
+                    probe.replace(include, '#include "legacy-placement-ui.cpp"'), encoding="utf-8")
+                placement_probe = (ROOT / "tests/candidate_ui_placement_probe.cpp").read_text(encoding="utf-8")
+                fixture = '#include "candidate_ui_presentation_probe.cpp"'
+                if placement_probe.count(fixture) != 1:
+                    raise RuntimeError("Shared placement fixture changed; update negative control")
+                source = work / "legacy-placement-probe.cpp"
+                source.write_text(placement_probe.replace(fixture, '#include "legacy-placement-base.cpp"'), encoding="utf-8")
+                control = build_and_run(source, "legacy-placement")
+                expected = "Bottom-edge candidate flipped above caret instead of sliding into work area"
+                if control.returncode == 0 or expected not in control.stderr:
+                    raise RuntimeError(f"Negative control did not detect the old placement flip: {control}")
+                print('{"negative_control":"passed","legacy_above_caret_flip":"rejected"}', flush=True)
 
 
 if __name__ == "__main__":

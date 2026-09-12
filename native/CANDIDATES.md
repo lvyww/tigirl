@@ -116,13 +116,33 @@ Horizontal gaps use actual font widths for two spaces; after input code, append
 max(0,7-codeLength) spaces. No horizontal wrapping; the work-area width cap trims
 long text and prevents clipped-away candidates from retaining mouse targets.
 
-Placement now uses the reference's 5 physical-pixel caret gap and 2 physical-pixel
-right/bottom reserve. If below does not fit, choose above when it fits or has more
-space, and retain above placement as content shrinks during the session. Reset on
-monitor change or UI teardown. Continue using the actual TSF caret and existing
-PMv2 conversion rather than the Overlay's IPC anchor cache/Start-menu heuristics.
+Placement uses a 5 physical-pixel caret gap and 2 physical-pixel right/bottom
+inset. Prefer below the caret; if the popup would extend beyond the current
+monitor's work area, slide it up so its bottom meets `rcWork.bottom - 2`, rather
+than flipping above the caret. Height changes and new compositions use the same
+stateless rule; a short list returns below the caret as soon as it fits. Near a
+chat input this can overlap part of the input field, intentionally trading caret
+avoidance for the absence of a large above/below jump. Oversized popups retain
+the top/left work-area guard; this does not make content taller than the monitor
+fully visible. Taskbar/work-area updates and monitor changes use the current
+`rcWork`, including negative coordinates. The actual TSF caret and existing PMv2
+conversion are unchanged. No cross-session position, timeout or extra animation
+is introduced.
 
 Validation includes three architectures, nine themes, DPI roundtrips, mode padding,
 minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work areas
 at 96/120/144/192 DPI. These simulated placement checks do not establish physical
 multi-monitor dragging behavior in Word or WeChat; that remains user acceptance.
+
+## Work-area placement regression
+
+`python tests/candidate_ui_presentation_test.py --negative-control --placement` also runs
+`candidate_ui_placement_probe.cpp` with the production CandidateUI and renderer.
+It covers first publication/retry, resize animation, page-size changes, repeated
+word commits/cancellation, sentence decoding, layout grace and delayed reveal
+near the work-area bottom. Synthetic rectangle checks cover the threshold,
+negative-coordinate monitors, different work-area/taskbar edges, pixel sizes at
+96/120/144/192 DPI and oversized windows. A separate negative control restores
+the old above-caret overflow decision and must fail its placement assertion,
+not compilation. Existing presentation and UI-less regressions remain enabled.
+These tests do not claim physical QQ/WeChat or mixed-DPI multi-monitor acceptance.

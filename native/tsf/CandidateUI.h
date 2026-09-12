@@ -1,7 +1,6 @@
 #pragma once
 #include "Service.h"
 #include "CandidateRenderer.h"
-#include "CandidatePlacement.h"
 #include "FrameTransition.h"
 #include "CandidateFrame.h"
 #include "../CandidateReveal.h"
@@ -82,8 +81,6 @@ private:
     std::shared_ptr<CandidateRenderer> renderer_;
     bool layingOut_=false;
     RECT caret_{};
-    CandidatePlacement placement_;
-    HMONITOR placementMonitor_=nullptr;
     int width_=300,height_=32;
 };
 }
