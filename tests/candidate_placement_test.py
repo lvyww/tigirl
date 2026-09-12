@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
+
+from work_directory import temporary_work_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 # Previous flip-and-latch policy, adapted to the new stateless call signature.
@@ -41,8 +42,7 @@ def run_test(cxx: str, sanitize: bool = False, negative_control: bool = True) ->
         '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror']
     if sanitize:
         flags += ['-O1', '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
-    with tempfile.TemporaryDirectory(prefix='tigirl-placement-') as tmp:
-        work = Path(tmp)
+    with temporary_work_directory(prefix='tigirl-placement-') as work:
         includes = []
         if os.name != 'nt':
             (work / 'windows.h').write_text(

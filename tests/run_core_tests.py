@@ -9,11 +9,11 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
 import time
 
 from candidate_selection_test import SOURCES as SELECTION_SOURCES
 from candidate_placement_test import run_test as run_placement_test
+from work_directory import temporary_work_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_SOURCES = SELECTION_SOURCES[1:] + [
@@ -45,8 +45,7 @@ def main() -> None:
         flags = ['-std=c++17', '-O2', '-I', str(ROOT / 'native')]
         if args.sanitize:
             flags += ['-O1', '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
-    with tempfile.TemporaryDirectory(prefix='tigirl-core-') as tmp:
-        work = Path(tmp)
+    with temporary_work_directory(prefix='tigirl-core-') as work:
         def run(command: list[str]) -> None:
             subprocess.run(command, cwd=work, check=True, timeout=300)
         run([compiler, *flags, '/c' if msvc else '-c',
