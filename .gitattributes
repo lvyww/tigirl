@@ -1,3 +1,6 @@
 
 # Keep bundled source dictionaries byte-identical on Windows and Linux.
 resources/DefaultData/** -text
+
+# Standalone Windows cleanup launcher must retain CMD line endings.
+/Tigirl-Cleanup.bat text eol=crlf
