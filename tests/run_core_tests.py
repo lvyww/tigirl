@@ -13,6 +13,7 @@ import tempfile
 import time
 
 from candidate_selection_test import SOURCES as SELECTION_SOURCES
+from candidate_placement_test import run_test as run_placement_test
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_SOURCES = SELECTION_SOURCES[1:] + [
@@ -37,6 +38,7 @@ def main() -> None:
     msvc = Path(compiler).name.lower() in {'cl', 'cl.exe'}
     if msvc and args.sanitize:
         parser.error('--sanitize requires GCC/Clang ASan and UBSan')
+    run_placement_test(compiler, args.sanitize)
     if msvc:
         flags = ['/nologo', '/std:c++17', '/EHsc', '/utf-8', '/O2', f'/I{ROOT / "native"}']
     else:

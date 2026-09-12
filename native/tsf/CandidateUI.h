@@ -82,8 +82,6 @@ private:
     std::shared_ptr<CandidateRenderer> renderer_;
     bool layingOut_=false;
     RECT caret_{};
-    CandidatePlacement placement_;
-    HMONITOR placementMonitor_=nullptr;
     int width_=300,height_=32;
 };
 }
