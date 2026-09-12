@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 import candidate_ui_presentation_test as runner
+import work_directory as cleanup
 
 HERE = Path(__file__).resolve().parent
 EXPECTED = "First candidates did not publish final geometry atomically"
@@ -26,8 +27,8 @@ class CleanupTests(unittest.TestCase):
         self.directory.name = "unused-work-directory"
         self.stderr = io.StringIO()
         self.enterContext(redirect_stderr(self.stderr))
-        self.enterContext(patch.object(runner.tempfile, "TemporaryDirectory", return_value=self.directory))
-        self.sleep = self.enterContext(patch.object(runner.time, "sleep"))
+        self.enterContext(patch.object(cleanup.tempfile, "TemporaryDirectory", return_value=self.directory))
+        self.sleep = self.enterContext(patch.object(cleanup.time, "sleep"))
 
     def warning(self):
         lines = self.stderr.getvalue().splitlines()
@@ -41,37 +42,37 @@ class CleanupTests(unittest.TestCase):
         return report
 
     def test_success_has_no_delay_or_warning(self):
-        with runner._temporary_work_directory() as work:
+        with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-") as work:
             self.assertEqual(work, Path(self.directory.name))
         self.directory.cleanup.assert_called_once_with()
         self.sleep.assert_not_called()
         self.assertEqual(self.stderr.getvalue(), "")
 
     def test_each_transient_failure_count_recovers_with_bounded_waits(self):
-        self.assertEqual(runner.CLEANUP_RETRY_DELAYS, (0.1, 0.2, 0.4, 0.8, 1.6))
+        self.assertEqual(cleanup.CLEANUP_RETRY_DELAYS, (0.1, 0.2, 0.4, 0.8, 1.6))
         for failures in range(1, 6):
             with self.subTest(failures=failures):
                 self.directory.cleanup.reset_mock()
                 self.sleep.reset_mock()
                 self.directory.cleanup.side_effect = [PermissionError("legacy.exe locked")] * failures + [None]
-                with runner._temporary_work_directory():
+                with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                     pass
                 self.assertEqual(self.directory.cleanup.call_count, failures + 1)
                 self.assertEqual(self.sleep.call_args_list,
-                                 [call(d) for d in runner.CLEANUP_RETRY_DELAYS[:failures]])
+                                 [call(d) for d in cleanup.CLEANUP_RETRY_DELAYS[:failures]])
                 self.assertEqual(self.stderr.getvalue(), "")
 
     def test_exhaustion_reports_last_error_and_does_not_fail_success(self):
         self.directory.cleanup.side_effect = [PermissionError(f"lock-{i}") for i in range(6)]
-        with runner._temporary_work_directory():
+        with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
             pass
         self.assertEqual(self.directory.cleanup.call_count, 6)
-        self.assertEqual(self.sleep.call_args_list, [call(d) for d in runner.CLEANUP_RETRY_DELAYS])
+        self.assertEqual(self.sleep.call_args_list, [call(d) for d in cleanup.CLEANUP_RETRY_DELAYS])
         self.assertIn("lock-5", self.warning()["error"])
 
     def test_oserror_cleanup_also_reports_without_masking_result(self):
         self.directory.cleanup.side_effect = OSError("cleanup I/O error")
-        with runner._temporary_work_directory():
+        with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
             pass
         self.assertEqual(self.directory.cleanup.call_count, 6)
         self.assertIn("OSError", self.warning()["error"])
@@ -84,7 +85,7 @@ class CleanupTests(unittest.TestCase):
             raise failure
 
         try:
-            with runner._temporary_work_directory():
+            with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                 fail_body()
         except RuntimeError as error:
             self.assertIs(error, failure)
@@ -96,7 +97,7 @@ class CleanupTests(unittest.TestCase):
     def test_body_oserror_is_not_mistaken_for_cleanup_failure(self):
         failure = PermissionError("cannot write test fixture")
         with self.assertRaises(PermissionError) as caught:
-            with runner._temporary_work_directory():
+            with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                 raise failure
         self.assertIs(caught.exception, failure)
         self.directory.cleanup.assert_called_once_with()
@@ -110,7 +111,7 @@ class CleanupTests(unittest.TestCase):
             with self.subTest(error=type(failure).__name__):
                 self.directory.cleanup.side_effect = PermissionError("legacy.exe locked")
                 with self.assertRaises(type(failure)) as caught:
-                    with runner._temporary_work_directory():
+                    with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                         raise failure
                 self.assertIs(caught.exception, failure)
 
@@ -118,7 +119,7 @@ class CleanupTests(unittest.TestCase):
         failure = RuntimeError("functional error")
         self.directory.cleanup.side_effect = [PermissionError("locked"), None]
         with self.assertRaises(RuntimeError) as caught:
-            with runner._temporary_work_directory():
+            with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                 raise failure
         self.assertIs(caught.exception, failure)
         self.assertEqual(self.directory.cleanup.call_count, 2)
@@ -127,7 +128,7 @@ class CleanupTests(unittest.TestCase):
     def test_unexpected_cleanup_programming_error_is_not_silenced(self):
         self.directory.cleanup.side_effect = RuntimeError("cleanup implementation bug")
         with self.assertRaisesRegex(RuntimeError, "cleanup implementation bug"):
-            with runner._temporary_work_directory():
+            with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-"):
                 pass
         self.sleep.assert_not_called()
 
@@ -169,8 +170,8 @@ def run_script_fixture(scenario):
         with (patch.object(runner, "ROOT", root), patch.object(runner, "COMMON", []),
               patch.object(runner, "os", SimpleNamespace(name="nt")),
               patch.object(runner.shutil, "which", return_value="cl"),
-              patch.object(runner.tempfile, "TemporaryDirectory", return_value=directory),
-              patch.object(runner.time, "sleep"), patch.object(runner.subprocess, "run", side_effect=execute),
+              patch.object(cleanup.tempfile, "TemporaryDirectory", return_value=directory),
+              patch.object(cleanup.time, "sleep"), patch.object(runner.subprocess, "run", side_effect=execute),
               patch.object(sys, "argv", ["runner", "--negative-control"])):
             runner.main()
 
@@ -203,7 +204,7 @@ class RunnerExitTests(unittest.TestCase):
 
 class RealDirectoryTests(unittest.TestCase):
     def test_readonly_and_nested_files_are_removed(self):
-        with runner._temporary_work_directory() as work:
+        with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-") as work:
             nested = work / "nested"
             nested.mkdir()
             file = nested / "legacy.exe"
@@ -212,7 +213,7 @@ class RealDirectoryTests(unittest.TestCase):
         self.assertFalse(work.exists())
 
     def test_already_removed_directory_is_successful(self):
-        with runner._temporary_work_directory() as work:
+        with cleanup.temporary_work_directory(prefix="tigirl-ui-presentation-") as work:
             work.rmdir()
         self.assertFalse(work.exists())
 
@@ -253,9 +254,9 @@ class WindowsLockTests(unittest.TestCase):
         (work / "legacy.exe").write_bytes(b"lock fixture")
         try:
             with locked_file(work / "legacy.exe") as release:
-                with (patch.object(runner.time, "sleep", side_effect=lambda _: release()) as sleep,
+                with (patch.object(cleanup.time, "sleep", side_effect=lambda _: release()) as sleep,
                       redirect_stderr(io.StringIO()) as stderr):
-                    runner._cleanup_work_directory(directory)
+                    cleanup.cleanup_work_directory(directory)
                 sleep.assert_called_once_with(0.1)
                 self.assertEqual(stderr.getvalue(), "")
                 self.assertFalse(work.exists())
@@ -268,9 +269,9 @@ class WindowsLockTests(unittest.TestCase):
         (work / "legacy.exe").write_bytes(b"lock fixture")
         try:
             with locked_file(work / "legacy.exe"):
-                with patch.object(runner.time, "sleep") as sleep, redirect_stderr(io.StringIO()) as stderr:
-                    runner._cleanup_work_directory(directory)
-                self.assertEqual(sleep.call_args_list, [call(d) for d in runner.CLEANUP_RETRY_DELAYS])
+                with patch.object(cleanup.time, "sleep") as sleep, redirect_stderr(io.StringIO()) as stderr:
+                    cleanup.cleanup_work_directory(directory)
+                self.assertEqual(sleep.call_args_list, [call(d) for d in cleanup.CLEANUP_RETRY_DELAYS])
                 report = json.loads(stderr.getvalue())
                 self.assertEqual(report["directory"], str(work))
                 self.assertEqual(report["attempts"], 6)

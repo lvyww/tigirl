@@ -116,13 +116,46 @@ Horizontal gaps use actual font widths for two spaces; after input code, append
 max(0,7-codeLength) spaces. No horizontal wrapping; the work-area width cap trims
 long text and prevents clipped-away candidates from retaining mouse targets.
 
-Placement now uses the reference's 5 physical-pixel caret gap and 2 physical-pixel
-right/bottom reserve. If below does not fit, choose above when it fits or has more
-space, and retain above placement as content shrinks during the session. Reset on
-monitor change or UI teardown. Continue using the actual TSF caret and existing
-PMv2 conversion rather than the Overlay's IPC anchor cache/Start-menu heuristics.
+Placement uses the actual TSF caret and existing PMv2 conversion rather than the
+Overlay's IPC anchor cache/Start-menu heuristics. The former above-caret latch is
+superseded by the work-area sliding policy below.
 
 Validation includes three architectures, nine themes, DPI roundtrips, mode padding,
 minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work areas
 at 96/120/144/192 DPI. These simulated placement checks do not establish physical
 multi-monitor dragging behavior in Word or WeChat; that remains user acceptance.
+
+## Work-area sliding placement (2026-09-12)
+
+The preferred origin remains `caret.left, caret.bottom + 5` in physical pixels.
+If the measured popup does not fit below the caret, `placeCandidateWindow` moves
+it up only to `work.bottom - height`, clamped at `work.top`. The popup's bottom
+therefore touches the work-area bottom (the taskbar's top when docked below), not
+the caret's top. The bottom reserve is now zero; the existing 2-pixel right
+reserve and left/top clamping are unchanged. An oversized popup starts at the
+work-area top/left; positioning alone cannot make oversized content fit.
+
+This is deliberately stateless: growing/shrinking candidates, delayed reveals,
+font changes and new word/sentence sessions all use the current measured size.
+There is no above-caret flag, monitor latch or reset path. Once a shorter popup
+fits below the caret again it returns there, without a flip threshold. This
+removes the abrupt above/below switch, not the movement inherent in resizing.
+Overlapping the caret/input box near the bottom is intentional under this policy.
+The work area still comes from the caret's nearest monitor, including negative
+virtual-screen coordinates; it is not the primary screen or the previous popup's
+monitor. Existing first-frame publication, resize animations and TSF selection,
+commit and reveal semantics are unchanged.
+
+This follows bime's `WinCandidate.xaml.cs` bottom-overflow policy, except that
+bime retains a 2-pixel bottom reserve and this policy aligns exactly to the edge.
+
+`python tests/candidate_placement_test.py --cxx g++` runs the production positioning
+header against exact-fit/one-pixel-overflow cases, repeated sessions, smooth
+height sweeps, work-area changes, oversized popups, eight monitor/work-area
+configurations and sizes at 96/120/144/192 DPI. Linux provides only fixed-width
+Win32 geometry types; Windows uses the SDK. A negative control compiles the same
+probe against the former flip-and-latch algorithm and must reject it. The test is
+also included in `tests/run_core_tests.py` for Windows x64/Win32 and Linux
+ASan/UBSan CI. The renderer probe's former above-caret assertions now check
+bottom alignment and return below the caret after shrinking. These geometry
+checks are not physical multi-monitor or chat-application acceptance tests.
