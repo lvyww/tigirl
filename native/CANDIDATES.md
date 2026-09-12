@@ -117,45 +117,79 @@ max(0,7-codeLength) spaces. No horizontal wrapping; the work-area width cap trim
 long text and prevents clipped-away candidates from retaining mouse targets.
 
 Placement uses the actual TSF caret and existing PMv2 conversion rather than the
-Overlay's IPC anchor cache/Start-menu heuristics. The former above-caret latch is
-superseded by the work-area sliding policy below.
+Overlay's IPC anchor cache/Start-menu heuristics. The current cross-composition
+direction policy is specified below.
 
 Validation includes three architectures, nine themes, DPI roundtrips, mode padding,
 minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work areas
 at 96/120/144/192 DPI. These simulated placement checks do not establish physical
 multi-monitor dragging behavior in Word or WeChat; that remains user acceptance.
 
-## Work-area sliding placement (2026-09-12)
+## Cross-composition direction memory (2026-09-12)
 
-The preferred origin remains `caret.left, caret.bottom + 5` in physical pixels.
-If the measured popup does not fit below the caret, `placeCandidateWindow` moves
-it up only to `work.bottom - height`, clamped at `work.top`. The popup's bottom
-therefore touches the work-area bottom (the taskbar's top when docked below), not
-the caret's top. The bottom reserve is now zero; the existing 2-pixel right
-reserve and left/top clamping are unchanged. An oversized popup starts at the
-work-area top/left; positioning alone cannot make oversized content fit.
+This supersedes PR #8's stateless work-area-bottom sliding policy. Restore
+above/below placement: normally prefer `caret.bottom + 5`, and flip to
+`caret.top - 5 - height` when below does not fit. Keep the existing 5 physical-pixel
+caret gap, 2-pixel right reserve and zero bottom reserve. If neither side fits,
+choose the side with more space and clamp to the work area. Oversized content
+still cannot be made fully visible by positioning alone.
 
-This is deliberately stateless: growing/shrinking candidates, delayed reveals,
-font changes and new word/sentence sessions all use the current measured size.
-There is no above-caret flag, monitor latch or reset path. Once a shorter popup
-fits below the caret again it returns there, without a flip threshold. This
-removes the abrupt above/below switch, not the movement inherent in resizing.
-Overlapping the caret/input box near the bottom is intentional under this policy.
-The work area still comes from the caret's nearest monitor, including negative
-virtual-screen coordinates; it is not the primary screen or the previous popup's
-monitor. Existing first-frame publication, resize animations and TSF selection,
-commit and reveal semantics are unchanged.
+After a successful above placement, retain that direction while the physical
+caret bottom is within the stable reference's jitter tolerance or moves down.
+Tolerance is round(3 DIP in monitor pixels), capped at one quarter of the host
+caret height; very short carets can have zero tolerance. Jitter samples do not
+replace the stable reference. An accumulated upward move beyond tolerance
+re-evaluates normally, rather than forcing below even when it cannot fit.
+Downward movement beyond tolerance advances the reference while retaining the
+above preference. The actual popup still follows current caret coordinates;
+this is direction hysteresis, not frozen coordinates or a fixed popup top.
+The above preference is ignored when above cannot fit and below can.
 
-This follows bime's `WinCandidate.xaml.cs` bottom-overflow policy, except that
-bime retains a 2-pixel bottom reserve and this policy aligns exactly to the edge.
+`Context::placement` owns this memory, not CandidateUI. Normal word/sentence
+commit, cancellation and popup teardown preserve it across compositions.
+New popup objects use the retained direction on their first published frame.
+Reveal clocks, candidate contents, selection, first-presentation state and
+animation instances retain their existing per-popup/per-composition lifetimes.
 
-`python tests/candidate_placement_test.py --cxx g++` runs the production positioning
-header against exact-fit/one-pixel-overflow cases, repeated sessions, smooth
-height sweeps, work-area changes, oversized popups, eight monitor/work-area
-configurations and sizes at 96/120/144/192 DPI. Linux provides only fixed-width
-Win32 geometry types; Windows uses the SDK. A negative control compiles the same
-probe against the former flip-and-latch algorithm and must reject it. The test is
-also included in `tests/run_core_tests.py` for Windows x64/Win32 and Linux
-ASan/UBSan CI. The renderer probe's former above-caret assertions now check
-bottom alignment and return below the caret after shrinking. These geometry
-checks are not physical multi-monitor or chat-application acceptance tests.
+Genuine focus/context changes, foreground/thread focus loss, view destruction,
+context removal, English-mode transition and service deactivation invalidate
+memory. Repeated focus notification for the same context does not. Active view
+COM identity is tracked separately so changing views within one context resets
+it as well. Monitor, physical work area, DPI, owner HWND and physical owner
+rectangle changes cause a fresh placement decision; environment transitions do
+not animate through the previous environment's coordinates. Ordinary layout
+notifications do not reset direction. Invalid or temporarily unavailable caret
+geometry does not mutate memory or allow a timer to resurrect a stale popup.
+
+Layout calculates on a copy. A successfully published current frame accepts its
+direction/reference only if the context placement revision has not changed in
+a reentrant callback. Failed backing allocation, publication or first show does
+not record a new direction. This preserves the previous first-frame and layout
+notification fixes rather than treating UI destruction as an environment reset.
+
+Validation entry points:
+
+- `python tests/candidate_placement_test.py --cxx g++` (or `cl` on Windows):
+  production geometry header, 81,609 checks, eight work areas, four DPIs, stable
+  jitter reference, gradual upward movement, downward inheritance, repeated
+  simulated word-size sequences, resets, visibility fallback and LONG extremes.
+  The negative control disables above inheritance and must be rejected. This
+  runner is included in the existing Windows/Linux core CI and retains the
+  shared bounded scratch-directory cleanup introduced for PR #8.
+- `python tests/candidate_ui_placement_test.py --negative-control`: real Windows
+  layered windows and renderer, controlled clock and TSF owner double. Checks
+  new-popup first-frame inheritance, commit/cancel teardown, shrinking, jitter,
+  upward movement, delayed reveal, no-layout/invalid geometry, publication
+  failures/reentrancy and owner movement. A reset-on-detach mutation must fail.
+- Build `tests/CandidatePlacementHost.vcxproj`, then
+  `python tests/candidate_layout_test.py --platform x64 --placement` (or Win32):
+  staged production DLL with real TSF contexts, edit sessions and both bundled
+  dictionaries. Seeds geometry memory to isolate commit/cancel, duplicate focus,
+  same-HWND context changes, thread focus, view destruction, pop and deactivation
+  lifetimes. It is UI-less; real rendering is covered by the preceding probe.
+
+Windows x64/Win32 CI runs the new window/lifetime tests alongside the existing
+layout/presentation and cleanup/failure-propagation suites. These tests do not
+establish QQ/WeChat physical-input behavior, taskbar auto-hide or physical
+multi-monitor dragging; those remain installation acceptance checks. No profile
+registration, user-data changes or global input injection is required.

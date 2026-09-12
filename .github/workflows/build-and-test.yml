@@ -75,6 +75,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_presentation_test.py --negative-control
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_ui_placement_test.py --negative-control
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: TSF edit-session candidate layout regression (no registration or model)
         shell: pwsh
         run: |
@@ -84,6 +86,10 @@ jobs:
           & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/CandidateLayoutHost.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_layout_test.py --platform $env:TIGIRL_PLATFORM
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/CandidatePlacementHost.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/candidate_layout_test.py --platform $env:TIGIRL_PLATFORM --placement
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   portable:

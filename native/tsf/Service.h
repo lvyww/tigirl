@@ -9,6 +9,7 @@
 #include <map>
 #include "../Engine.h"
 #include "../CandidatePresentation.h"
+#include "CandidatePlacement.h"
 #include "PrivateFonts.h"
 #include "ModeCompartments.h"
 #include "LanguageBar.h"
@@ -28,6 +29,10 @@ struct Context {
     Context(ITfContext* value,std::shared_ptr<const Lexicon> lexicon,Config config) : context(value),engine(std::move(lexicon),std::move(config)) {}
     ComPtr<ITfContext> context;
     ComPtr<ITfComposition> composition;
+    // Survives normal commit/cancel and CandidateUI teardown, not focus/view loss.
+    CandidatePlacement placement;
+    ComPtr<IUnknown> placementView;
+    void resetPlacement() { placement.reset();placementView.Reset(); }
     Engine engine;
     std::shared_ptr<SentenceDecoder> sentenceDecoder;
     std::uint64_t sentenceResourceRevision=0,sentenceQueuedGeneration=0,sentenceQueuedIdentity=0;
@@ -77,6 +82,7 @@ public:
     HRESULT candidateCycle();
     HRESULT choose(const std::shared_ptr<Context>& state,UINT index,bool abort);
 private:
+    friend struct ServicePlacementProbe; // Staged-DLL TSF lifetime regression.
     HRESULT key(ITfContext*,WPARAM,LPARAM,BOOL*,bool down,bool test);
     std::shared_ptr<Context> state(ITfContext*,bool create);
     HRESULT edit(const std::shared_ptr<Context>&,DWORD flags,std::function<HRESULT(TfEditCookie)> fn);
@@ -84,6 +90,7 @@ private:
     HRESULT end(const std::shared_ptr<Context>&,TfEditCookie cookie);
     void updateUI(const std::shared_ptr<Context>&,TfEditCookie cookie,CandidateUpdate update=CandidateUpdate::Content);
     void hideUI();
+    void resetCandidatePlacements();
     void forget(const std::shared_ptr<Context>&);
     void refreshFocus(ITfContext*);
     void modeChanged(bool chinese);

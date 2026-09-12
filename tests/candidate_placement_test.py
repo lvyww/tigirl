@@ -1,7 +1,7 @@
-"""Test the production candidate-placement header with synthetic screen geometry.
+"""Test production direction memory with synthetic physical screen geometry.
 
-Windows uses the real SDK RECT/POINT. On Linux only these POD declarations are
-supplied by a temporary windows.h; no window, DPI API or rendering is emulated.
+Windows uses SDK geometry types. Linux provides only POD declarations, not a
+window/DPI API emulator. A negative control disables above-direction inheritance.
 """
 import argparse
 import json
@@ -13,22 +13,7 @@ import subprocess
 from work_directory import temporary_work_directory
 
 ROOT = Path(__file__).resolve().parents[1]
-# Previous flip-and-latch policy, adapted to the new stateless call signature.
-# The same probe must reject this policy, not merely accept the new one.
-LEGACY = r'''#pragma once
-#include <algorithm>
-#include <windows.h>
-namespace tiger::tsf {
-inline POINT placeCandidateWindow(const RECT& caret,const RECT& work,int width,int height) {
-    static bool above=false;
-    constexpr int gap=5;
-    if(!above && caret.bottom+gap+height>work.bottom)
-        above=caret.top-gap-height>=work.top || caret.top-work.top>work.bottom-caret.bottom;
-    return {std::clamp(caret.left,work.left,(std::max)(work.left,work.right-width-2)),
-        std::clamp(above?caret.top-gap-height:caret.bottom+gap,work.top,(std::max)(work.top,work.bottom-height-2))};
-}
-}
-'''
+CONTROL_FAILURE = 'Cross-composition above preference was lost'
 
 
 def run_test(cxx: str, sanitize: bool = False, negative_control: bool = True) -> None:
@@ -47,6 +32,7 @@ def run_test(cxx: str, sanitize: bool = False, negative_control: bool = True) ->
         if os.name != 'nt':
             (work / 'windows.h').write_text(
                 '#pragma once\n#include <cstdint>\nusing LONG=std::int32_t;\n'
+                'using UINT=unsigned; using HWND=void*; using HMONITOR=void*;\n'
                 'struct RECT { LONG left,top,right,bottom; };\n'
                 'struct POINT { LONG x,y; };\n', encoding='utf-8')
             includes = ['-I', str(work)]
@@ -65,12 +51,16 @@ def run_test(cxx: str, sanitize: bool = False, negative_control: bool = True) ->
         if negative_control:
             legacy = work / 'legacy'
             legacy.mkdir()
-            (legacy / 'CandidatePlacement.h').write_text(LEGACY, encoding='utf-8')
+            production = (ROOT / 'native/tsf/CandidatePlacement.h').read_text(encoding='utf-8')
+            gate = 'const bool keepAbove=same && above_ && delta>=-static_cast<Wide>(epsilon);'
+            if production.count(gate) != 1:
+                raise RuntimeError('Direction gate changed; update negative control')
+            (legacy / 'CandidatePlacement.h').write_text(
+                production.replace(gate, 'const bool keepAbove=false;'), encoding='utf-8')
             exe = build(legacy, 'candidate_placement_legacy')
             result = subprocess.run([str(exe)], cwd=work, capture_output=True,
                                     text=True, timeout=30)
-            expected = 'Overflow must slide to the work-area bottom, not flip above the caret'
-            if result.returncode != 1 or expected not in result.stderr:
+            if result.returncode != 1 or CONTROL_FAILURE not in result.stderr:
                 raise RuntimeError(f'Legacy policy was not rejected for the expected reason: {result}')
             print(json.dumps({'probe': 'candidate_placement_negative_control',
                               'status': 'passed', 'legacy_policy_rejected': True}), flush=True)

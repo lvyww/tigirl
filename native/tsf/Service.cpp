@@ -224,6 +224,7 @@ HRESULT Service::Deactivate() {
     if(languageBar_) { languageBar_->close(); languageBar_.Reset(); }
     modes_.close(); ++modeRevision_; chinese_=true;
     if(addWordUI_) { addWordUI_->close(); addWordUI_.reset(); }
+    resetCandidatePlacements();
     active_=false; hideUI();
     std::vector<std::shared_ptr<Context>> contexts;
     for(auto& item:contexts_) contexts.push_back(item.second);
@@ -266,6 +267,7 @@ std::shared_ptr<Context> Service::state(ITfContext* context,bool create) {
     return result;
 }
 void Service::forget(const std::shared_ptr<Context>& context) {
+    context->resetPlacement();
     if(sentenceWorker_ && context->sentenceQueuedIdentity)sentenceWorker_->cancel(context->sentenceQueuedIdentity);
     context->sentenceDecoder.reset();
     ComPtr<ITfSource> source;
@@ -494,6 +496,13 @@ void Service::hideUI() {
     if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->EndUIElement(uiId_);
     uiId_=TF_INVALID_UIELEMENTID; ui_.Reset();
 }
+void Service::resetCandidatePlacements() {
+    // Normal popup teardown is deliberately NOT a reset boundary. Snapshot the
+    // contexts before releasing view references, which may reenter the service.
+    std::vector<std::shared_ptr<Context>> contexts;
+    for(const auto& item:contexts_)contexts.push_back(item.second);
+    for(const auto& context:contexts)context->resetPlacement();
+}
 void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cookie,CandidateUpdate update) {
     if(!active_ || !foreground_ || !context->engine.composing() || (focused_ && focused_.Get()!=context->context.Get())) {
         hideUI(); return;
@@ -519,6 +528,10 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
     ComPtr<ITfContextView> view; ComPtr<ITfRange> range;
     RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false,layoutPending=false;
     if(SUCCEEDED(context->context->GetActiveView(&view))) {
+        ComPtr<IUnknown> identity;
+        if(SUCCEEDED(view.As(&identity)) && identity.Get()!=context->placementView.Get()) {
+            context->resetPlacement();context->placementView=identity;
+        }
         view->GetWnd(&owner);
         if(context->composition && SUCCEEDED(context->composition->GetRange(&range))) {
             if(SUCCEEDED(range->Collapse(cookie,TF_ANCHOR_END))) {
@@ -689,7 +702,7 @@ void Service::pollDataChanges() {
 void Service::publishMode(const std::shared_ptr<Context>& context) {
     if(!active_ || focused_.Get()!=context->context.Get()) return;
     const bool next=context->engine.chinese();
-    if(chinese_!=next) { chinese_=next; ++modeRevision_; }
+    if(chinese_!=next) { chinese_=next; ++modeRevision_; if(!next)resetCandidatePlacements(); }
     if(FAILED(modes_.publish(next))) report("Cannot publish TSF input mode");
     if(languageBar_) {
         TF_STATUS status{};
@@ -733,7 +746,7 @@ void Service::modeChanged(bool chinese) {
 }
 void Service::refreshFocus(ITfContext* context) {
     const bool changed=focused_.Get()!=context;
-    if(changed)++modeRevision_;
+    if(changed) { ++modeRevision_;resetCandidatePlacements(); }
     focused_=context;
     if(!context && languageBar_)languageBar_->update(chinese_,false);
     hideUI();
@@ -777,6 +790,7 @@ HRESULT Service::OnSetFocus(ITfDocumentMgr* doc,ITfDocumentMgr*) {
 HRESULT Service::OnSetFocus(BOOL foreground) {
     foreground_=foreground!=FALSE;
     if(!foreground_) {
+        resetCandidatePlacements();
         ++modeRevision_; hideUI(); if(languageBar_)languageBar_->update(chinese_,false);
         for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->controlSpaceConsumed=false;item.second->observed=false;}
     }
@@ -790,6 +804,7 @@ HRESULT Service::OnSetThreadFocus() {
 }
 HRESULT Service::OnKillThreadFocus() {
     ++modeRevision_;
+    resetCandidatePlacements();
     foreground_=false; hideUI();
     if(languageBar_)languageBar_->update(chinese_,false);
     for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->controlSpaceConsumed=false; item.second->observed=false; }
@@ -864,8 +879,9 @@ HRESULT Service::OnEndEdit(ITfContext* context,TfEditCookie cookie,ITfEditRecord
 HRESULT Service::OnLayoutChange(ITfContext* context,TfLayoutCode code,ITfContextView*) {
     try {
         auto current=state(context,false);
-        if(!current || current->editing) return S_OK;
-        if(code==TF_LC_DESTROY) { if(ui_ && ui_->context()==current) hideUI(); return S_OK; }
+        if(!current) return S_OK;
+        if(code==TF_LC_DESTROY) { current->resetPlacement();if(ui_ && ui_->context()==current) hideUI(); return S_OK; }
+        if(current->editing) return S_OK;
         if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current](TfEditCookie cookie) {
             // Queued layout work must not recreate an ended UI or hide a new
             // focused context's candidates after focus/pop/deactivation.

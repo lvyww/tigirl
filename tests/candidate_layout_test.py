@@ -1,9 +1,10 @@
-"""Real TSF UI-less layout regressions on both bundled dictionaries (Windows).
+"""Real TSF UI-less layout/placement-lifetime regressions on bundled dictionaries.
 
-Build matching DLL/importer and CandidateLayoutHost.vcxproj first. The DLL,
-TSF contexts, document edits and UI manager are real; only key-event subscription
-is supplied by a test decorator because no TIP/profile is registered. Keys are
-explicit callbacks, not global input. No user data or sentence model is required.
+Build matching DLL/importer and CandidateLayoutHost.vcxproj first (or
+CandidatePlacementHost.vcxproj for --placement). The DLL, TSF contexts, document
+edits and UI manager are real; only key-event subscription is supplied by a test
+decorator because no TIP/profile is registered. Keys are explicit callbacks, not
+global input. No user data or sentence model is required.
 """
 import argparse
 import json
@@ -20,13 +21,14 @@ from candidate_ui_layout_test import temporary_work_directory
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--platform', choices=['x64', 'Win32'], default='x64')
+    parser.add_argument('--placement', action='store_true', help='Run cross-composition direction-memory lifecycle checks')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('This integration test requires Windows; run it in Windows CI.')
     manifest = verify_sources()
     binaries = ROOT / 'build/tests' / args.platform
     importer = binaries / 'Tigirl.Import.exe'
-    host = binaries / 'candidate_layout_host.exe'
+    host = binaries / ('candidate_placement_host.exe' if args.placement else 'candidate_layout_host.exe')
     dll = ROOT / 'build' / args.platform / 'Release/Tigirl.dll'
     for path in (importer, host, dll):
         if not path.is_file():

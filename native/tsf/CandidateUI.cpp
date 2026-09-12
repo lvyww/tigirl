@@ -155,8 +155,10 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
     // The candidate model must advance even while the application has no layout.
     // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into
     // a fresh appearance. Freeze the published frame, with a bounded deadline.
-    hasCaret_=caret!=nullptr;
-    if(!caret) {
+    RECT physical{};
+    if(caret)physical=candidatePhysicalCaret(*caret,ownerWindow);
+    hasCaret_=caret && CandidatePlacement::usableCaret(physical);
+    if(!hasCaret_) {
         ++visualRevision_;stopAnimation();itemRects_.clear();
         if(layoutPending && shown_ && window_ && IsWindowVisible(window_)) {
             const auto now=GetTickCount64();
@@ -169,7 +171,7 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
         return;
     }
     layoutDeadline_=0;if(window_)KillTimer(window_,4);
-    caret_=candidatePhysicalCaret(*caret,ownerWindow);
+    caret_=physical;ownerWindow_=ownerWindow;
     CandidateDpiScope dpiScope;
     if(!shown_) return;
     if(!window_) {
@@ -243,13 +245,22 @@ void CandidateUI::layoutAndPaint() {
     if(!GetMonitorInfoW(monitorId,&monitor))return;
     dpi_=candidateMonitorDpi(monitorId);
     const auto revision=visualRevision_;
+    auto state=state_;
+    CandidatePlacementEnvironment environment;
+    environment.work=monitor.rcWork;environment.monitor=monitorId;
+    environment.dpi=dpi_;environment.owner=ownerWindow_;
+    environment.hasOwnerRect=ownerWindow_ && GetWindowRect(ownerWindow_,&environment.ownerRect);
+    const auto placementRevision=state->placement.revision();
+    const bool environmentChanged=state->placement.valid() && !state->placement.sameEnvironment(environment);
     auto drawing=renderer_;
     const float maxWidth=std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_);
     const bool changed=!finalReady_ || dpi_!=cachedDpi_ || maxWidth!=cachedMaxWidth_ ||
         presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
     if(changed)drawing->layout(presentation_,maxWidth);
     width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
-    const auto position=placeCandidateWindow(caret_,monitor.rcWork,width_,height_);
+    auto nextPlacement=state->placement;
+    POINT position{};
+    if(!nextPlacement.place(caret_,environment,width_,height_,position)) { hideWindow();return; }
     const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
     const auto selection=selected_>=first?selected_-first:UINT_MAX;
     if(changed || cachedSelection_!=selection){
@@ -260,7 +271,7 @@ void CandidateUI::layoutAndPaint() {
     RECT current{};GetWindowRect(window_,&current);
     const FrameRect from{current.left,current.top,current.right-current.left,current.bottom-current.top};
     const FrameRect target{position.x,position.y,width_,height_};
-    if(!firstCandidateFrame && IsWindowVisible(window_) && style_.animationEnabled && style_.animationDurationMs && from!=target) {
+    if(!firstCandidateFrame && IsWindowVisible(window_) && !environmentChanged && style_.animationEnabled && style_.animationDurationMs && from!=target) {
         if(!transition_.Active() || transition_.Target()!=target || transition_.Duration()!=static_cast<unsigned>(style_.animationDurationMs))
             transition_.Start(from,target,GetTickCount64(),60,static_cast<unsigned>(style_.animationDurationMs));
         const auto frame=transition_.Sample(GetTickCount64());
@@ -270,7 +281,11 @@ void CandidateUI::layoutAndPaint() {
     } else {
         stopAnimation();if(!paint(nullptr,&position))throw std::runtime_error("Candidate publication failed");
     }
-    if(!window_ || !owner_ || revision!=visualRevision_)return;
+    if(!window_ || !owner_ || revision!=visualRevision_ || state_!=state ||
+       state->placement.revision()!=placementRevision)return;
+    // Accept direction/anchor only with a successfully published current frame.
+    // A reset during reentrant publication must not be undone by this old copy.
+    state->placement=nextPlacement;
     // paint() has published pixels and final geometry and, when necessary,
     // successfully shown the window. Only this current frame can latch state.
     if(!presentation_.items.empty() && !drawing->items().empty())hasPresentedCandidates_=true;

@@ -37,6 +37,7 @@ public:
     STDMETHODIMP Abort() override;
 private:
     friend struct CandidateUIPresentationProbe; // Windows publication/lifecycle regressions.
+    friend struct CandidateUIPlacementProbe;
     void updateContent();
     // Flags remain pending until the corresponding notification succeeds.
     DWORD updatedFlags_=TF_CLUIE_DOCUMENTMGR|TF_CLUIE_COUNT|TF_CLUIE_SELECTION|
@@ -79,6 +80,7 @@ private:
     std::vector<UINT> pages_;
     bool shown_=false,hasCaret_=false;
     HWND window_=nullptr;
+    HWND ownerWindow_=nullptr;
     std::shared_ptr<CandidateRenderer> renderer_;
     bool layingOut_=false;
     RECT caret_{};

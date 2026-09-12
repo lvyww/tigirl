@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>candidate_placement_host</NativeProbeName></PropertyGroup>
+  <Import Project="DictionaryProbe.vcxproj" />
+  <ItemGroup>
+    <ClCompile Remove="dictionary_probe.cpp" />
+    <ClCompile Remove="..\native\Dictionary.cpp" />
+    <ClCompile Include="candidate_placement_host.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <Link><AdditionalDependencies>ole32.lib;oleaut32.lib;uuid.lib;user32.lib;gdi32.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+</Project>

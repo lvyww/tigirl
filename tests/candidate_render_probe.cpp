@@ -110,12 +110,17 @@ int wmain(int argc,wchar_t** argv) {
         for(UINT dpi:{96u,120u,144u,192u}) {
             const int scale=static_cast<int>(dpi);
             RECT work{-1920,0,0,1080},caret{-100,1020,-99,1040};
+            CandidatePlacement placement;CandidatePlacementEnvironment environment;
+            environment.work=work;environment.dpi=dpi;
             const int w=MulDiv(180,scale,96),h=MulDiv(100,scale,96);
-            auto pos=placeCandidateWindow(caret,work,w,h);
-            require(pos.x+w<=work.right-2 && pos.y+h==work.bottom,"Bottom alignment/right avoidance failed");
-            const auto smaller=placeCandidateWindow(caret,work,w,10);
-            require(smaller.y==caret.bottom+5,"Shrink retained stale above placement");
-            caret={-1800,20,-1799,40};pos=placeCandidateWindow(caret,work,w,h);
+            POINT pos{};
+            require(placement.place(caret,environment,w,h,pos),"Valid placement rejected");
+            require(pos.x+w<=work.right-2 && pos.y+h==caret.top-5,"Above/right avoidance failed");
+            POINT smaller{};
+            require(placement.place(caret,environment,w,10,smaller),"Shrink placement rejected");
+            require(smaller.y+10==caret.top-5,"Shrink lost above preference");
+            placement.reset();caret={-1800,20,-1799,40};
+            require(placement.place(caret,environment,w,h,pos),"Reset placement rejected");
             require(pos.x==caret.left && pos.y==45,"Caret gap or negative-monitor position differs");
         }
         for(bool vertical:{false,true})for(double size:{3.,17.,31.5,200.}) {
