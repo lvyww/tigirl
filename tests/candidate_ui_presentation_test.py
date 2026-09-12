@@ -61,6 +61,10 @@ def main() -> None:
         print(result.stdout, end="", flush=True)
         if result.returncode:
             raise RuntimeError(f"CandidateUI regressions failed ({result.returncode}): {result.stderr}")
+        direction = build_and_run(ROOT / "tests/candidate_direction_ui_probe.cpp", "direction")
+        print(direction.stdout, end="", flush=True)
+        if direction.returncode:
+            raise RuntimeError(f"Candidate direction regressions failed ({direction.returncode}): {direction.stderr}")
         if args.negative_control:
             # Change only the animation decision in a temporary copy; never edit
             # the working tree and never accept compilation errors as a control.

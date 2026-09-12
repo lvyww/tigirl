@@ -3,6 +3,7 @@
 #include "tsf_host.cpp"
 #undef wmain
 #include "candidate_layout_thread_manager.h"
+#include "../native/tsf/Service.h"
 
 namespace {
 struct KeyboardStateGuard {
@@ -81,6 +82,10 @@ int wmain(int argc,wchar_t** argv) {
         // Settle the initial 250 ms data-reconciliation tick while idle. It is
         // an independent content refresh, not one of the layout events tested.
         drainLayout(400);
+        // The staged DLL and host use the same implementation header/architecture.
+        // Read the real Service epoch; do not emulate focus with a test counter.
+        auto native=static_cast<tiger::tsf::Service*>(service.Get());
+        const auto initialEpoch=native->candidatePlacementEpoch();
         typeCode();
         require(doc.store->text==code && compositionCount(doc)==1,"Preedit fixture failed");
         auto list=candidates(); UINT count=0; check(list->GetCount(&count));
@@ -110,6 +115,7 @@ int wmain(int argc,wchar_t** argv) {
         check(list->Finalize()); drainLayout();
         require(doc.store->text==expected && compositionCount(doc)==0,"Finalization committed the wrong candidate");
         require(ui->id==TF_INVALID_UIELEMENTID,"Finalization retained a candidate element");
+        require(native->candidatePlacementEpoch()==initialEpoch,"Commit/layout reset the placement epoch");
         require(list->Finalize()==TF_E_DISCONNECTED,"Detached candidate accepted a late finalization");
         check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
         require(ui->id==TF_INVALID_UIELEMENTID,"Late layout resurrected a finalized UI");
@@ -128,14 +134,30 @@ int wmain(int argc,wchar_t** argv) {
         require(!tap(VK_RETURN) && doc.store->text==expected,"Idle Enter did not remain pass-through");
         check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
         require(ui->id==TF_INVALID_UIELEMENTID,"Late layout resurrected an aborted UI");
+        require(native->candidatePlacementEpoch()==initialEpoch,"Abort/retype reset the placement epoch");
+        check(focus->OnSetFocus(doc.manager.Get(),doc.manager.Get()));
+        require(native->candidatePlacementEpoch()==initialEpoch,"Same-context focus notification reset placement");
+        auto other=document(manager.Get(),appClient,window);
+        check(manager->SetFocus(other.manager.Get()));check(focus->OnSetFocus(other.manager.Get(),doc.manager.Get()));
+        const auto otherEpoch=native->candidatePlacementEpoch();
+        require(otherEpoch!=initialEpoch,"Different context did not invalidate placement");
+        check(manager->SetFocus(doc.manager.Get()));check(focus->OnSetFocus(doc.manager.Get(),other.manager.Get()));
+        require(native->candidatePlacementEpoch()!=otherEpoch,"Returning context retained stale placement epoch");
+        ComPtr<ITfThreadFocusSink> threadFocus;check(service.As(&threadFocus));
+        const auto beforeLoss=native->candidatePlacementEpoch();
+        check(threadFocus->OnKillThreadFocus());
+        require(native->candidatePlacementEpoch()!=beforeLoss,"Thread focus loss did not invalidate placement");
+        check(threadFocus->OnSetThreadFocus());check(other.manager->Pop(TF_POPF_ALL));
+        const auto beforeDeactivate=native->candidatePlacementEpoch();
         verifyModule(module);
         check(service->Deactivate());
+        require(native->candidatePlacementEpoch()!=beforeDeactivate,"Deactivation retained placement epoch");
         check(doc.manager->Pop(TF_POPF_ALL));
         check(source->UnadviseSink(uiCookie)); check(manager->Deactivate());
         DestroyWindow(window);
         std::cout<<"{\"status\":\"passed\",\"layout_changes\":12,\"real_tsf_edit_sessions\":true,"
             "\"custom_paging_preserved\":true,\"sixth_candidate_committed\":true,"
-            "\"content_update\":true,\"abort\":true,\"late_finalize\":true,"
+            "\"content_update\":true,\"abort\":true,\"late_finalize\":true,\"placement_epoch_lifecycle\":true,"
             "\"keystroke_subscription_mocked\":true,\"physical_input_tested\":false,"
             "\"profile_registered\":false,\"model_required\":false}\n";
         // Do not force-unload a DLL while COM objects are still in scope.

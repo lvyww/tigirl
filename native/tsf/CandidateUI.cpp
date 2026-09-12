@@ -155,8 +155,8 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
     // The candidate model must advance even while the application has no layout.
     // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into
     // a fresh appearance. Freeze the published frame, with a bounded deadline.
-    hasCaret_=caret!=nullptr;
-    if(!caret) {
+    hasCaret_=caret && CandidatePlacement::validCaret(*caret);
+    if(!hasCaret_) {
         ++visualRevision_;stopAnimation();itemRects_.clear();
         if(layoutPending && shown_ && window_ && IsWindowVisible(window_)) {
             const auto now=GetTickCount64();
@@ -170,6 +170,8 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
     }
     layoutDeadline_=0;if(window_)KillTimer(window_,4);
     caret_=candidatePhysicalCaret(*caret,ownerWindow);
+    ownerWindow_=ownerWindow;
+    if(!CandidatePlacement::validCaret(caret_)) {hasCaret_=false;hideWindow();return;}
     CandidateDpiScope dpiScope;
     if(!shown_) return;
     if(!window_) {
@@ -249,7 +251,16 @@ void CandidateUI::layoutAndPaint() {
         presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
     if(changed)drawing->layout(presentation_,maxWidth);
     width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
-    const auto position=placeCandidateWindow(caret_,monitor.rcWork,width_,height_);
+    if(!window_ || !owner_ || !state_ || revision!=visualRevision_)return;
+    CandidatePlacementEnvironment environment;
+    environment.monitor=reinterpret_cast<std::uintptr_t>(monitorId);
+    environment.owner=reinterpret_cast<std::uintptr_t>(ownerWindow_);
+    environment.epoch=owner_->candidatePlacementEpoch();environment.dpi=dpi_;
+    environment.hasOwnerRect=ownerWindow_ && GetWindowRect(ownerWindow_,&environment.ownerRect);
+    auto context=state_;
+    const auto placementRevision=context->candidatePlacement.revision();
+    auto nextPlacement=context->candidatePlacement;
+    const auto position=nextPlacement.place(caret_,monitor.rcWork,width_,height_,environment);
     const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
     const auto selection=selected_>=first?selected_-first:UINT_MAX;
     if(changed || cachedSelection_!=selection){
@@ -273,6 +284,11 @@ void CandidateUI::layoutAndPaint() {
     if(!window_ || !owner_ || revision!=visualRevision_)return;
     // paint() has published pixels and final geometry and, when necessary,
     // successfully shown the window. Only this current frame can latch state.
+    // A failed or superseded frame must not change the cross-composition memory.
+    // Store the accepted final target, never an animation sample's caret/Y.
+    if(context->candidatePlacement.revision()==placementRevision &&
+       owner_->candidatePlacementEpoch()==environment.epoch)
+        context->candidatePlacement=nextPlacement;
     if(!presentation_.items.empty() && !drawing->items().empty())hasPresentedCandidates_=true;
     itemRects_.clear();const float scale=dpi_/96.f;
     for(const auto& r:renderer_->items())itemRects_.push_back(RECT{

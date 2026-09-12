@@ -1,5 +1,8 @@
 # Candidate presentation
 
+Current placement policy: [cross-composition direction memory](tsf/CANDIDATE_PLACEMENT.md).
+It supersedes the historical work-area sliding section below.
+
 The pending native build connects six additional original config keys:
 
 | Key | Default |
@@ -125,7 +128,10 @@ minimum widths, sizes 3/17/31.5/200, and simulated negative-coordinate work area
 at 96/120/144/192 DPI. These simulated placement checks do not establish physical
 multi-monitor dragging behavior in Word or WeChat; that remains user acceptance.
 
-## Work-area sliding placement (2026-09-12)
+## Work-area sliding placement (2026-09-12, superseded)
+
+Historical PR #8 behavior only. The current direction-memory policy and its
+regressions are documented in [CANDIDATE_PLACEMENT.md](tsf/CANDIDATE_PLACEMENT.md).
 
 The preferred origin remains `caret.left, caret.bottom + 5` in physical pixels.
 If the measured popup does not fit below the caret, `placeCandidateWindow` moves

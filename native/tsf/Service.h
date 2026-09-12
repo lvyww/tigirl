@@ -10,6 +10,7 @@
 #include "../Engine.h"
 #include "../CandidatePresentation.h"
 #include "PrivateFonts.h"
+#include "CandidatePlacement.h"
 #include "ModeCompartments.h"
 #include "LanguageBar.h"
 #include "DirectoryChanges.h"
@@ -29,6 +30,7 @@ struct Context {
     ComPtr<ITfContext> context;
     ComPtr<ITfComposition> composition;
     Engine engine;
+    CandidatePlacement candidatePlacement; // Outlives each candidate HWND/composition.
     std::shared_ptr<SentenceDecoder> sentenceDecoder;
     std::uint64_t sentenceResourceRevision=0,sentenceQueuedGeneration=0,sentenceQueuedIdentity=0;
     DWORD editCookie=TF_INVALID_COOKIE,layoutCookie=TF_INVALID_COOKIE;
@@ -72,6 +74,9 @@ public:
     STDMETHODIMP OnLayoutChange(ITfContext* context,TfLayoutCode code,ITfContextView*) override;
     STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** values) override;
     STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid,ITfDisplayAttributeInfo** value) override;
+    // Existing revision advances on real focus changes/loss, mode changes and
+    // deactivation, but not normal commit/cancel or same-context layout updates.
+    std::uint64_t candidatePlacementEpoch() const { return modeRevision_; }
     HRESULT candidateMenu(POINT point,HWND window);
     HRESULT candidateWheel(int delta);
     HRESULT candidateCycle();

@@ -22,7 +22,7 @@ import work_directory as cleanup
 from test_candidate_ui_presentation_cleanup import locked_file
 
 HERE = Path(__file__).resolve().parent
-EXPECTED = 'Overflow must slide to the work-area bottom, not flip above the caret'
+EXPECTED = 'Cross-composition above placement was not retained'
 
 
 def execute_probe(command, scenario, **kwargs):
