@@ -141,7 +141,7 @@ struct CandidateUIPresentationProbe {
     }
     void first() {
         using namespace candidate_probe;
-        pump();require(visible() && !ui->hasPresentedCandidates_,"Code placeholder counted as candidates");
+        pump();require(!visible() && !ui->hasPresentedCandidates_,"Pending sentence exposed a placeholder");
         SendMessageW(ui->window_,WM_PAINT,0,0);
         require(!ui->hasPresentedCandidates_,"WM_PAINT counted as candidate presentation");
         const auto before=frames.size();decode({u"first",u"second"});update();
@@ -154,6 +154,18 @@ struct CandidateUIPresentationProbe {
         using namespace candidate_probe;
         for(bool vertical:{true,false}) {
             {
+                CandidateUIPresentationProbe p(dictionary,vertical);const auto before=frames.size();p.pump();
+                now+=1000;p.layout();p.pump();
+                require(!p.visible() && frames.size()==before,"Pending decode became visible after elapsed time/layout");
+                p.decode({u"first",u"second"});p.update();p.pump();p.finalFrame();
+                require(frames.size()==before+1,"Ready result emitted an intermediate placeholder");++cases;
+            }
+            {
+                CandidateUIPresentationProbe p(dictionary,vertical);p.pump();p.decode({});p.update();p.pump();
+                require(p.visible() && !p.ui->hasPresentedCandidates_,"Completed empty result failed to show code");++cases;
+            }
+
+            {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.first();
                 const auto before=p.rect();p.change();
                 require(p.ui->transition_.Active() && p.rect()==before,"Subsequent update lost normal animation");
@@ -161,11 +173,11 @@ struct CandidateUIPresentationProbe {
                 p.timer(2,101);p.finalFrame();++cases;
             }
             {
-                CandidateUIPresentationProbe p(dictionary,vertical);p.pump();
+                CandidateUIPresentationProbe p(dictionary,vertical);p.decode({});p.update();p.pump();
                 // Even an already-running code-only motion must be cancelled.
                 p.caret.left+=80;p.caret.right+=80;p.layout();p.pump();
                 require(p.ui->transition_.Active(),"Placeholder-motion precondition failed");
-                p.decode({u"first",u"second"});p.update();p.pump();p.finalFrame();++cases;
+                p.press('B');p.decode({u"first",u"second"});p.update();p.pump();p.finalFrame();++cases;
             }
             for(bool prepareFailure:{true,false}) {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.pump();const auto before=p.rect();
@@ -247,7 +259,7 @@ struct CandidateUIPresentationProbe {
                 // first publication is atomic, layout preserves host state, and
                 // later geometry/content updates still animate normally.
                 CandidateUIPresentationProbe p(dictionary,vertical);p.pump();
-                require(p.visible() && !p.ui->hasPresentedCandidates_,"Joint fixture lacks a code placeholder");
+                require(!p.visible() && !p.ui->hasPresentedCandidates_,"Joint pending result exposed a placeholder");
                 const auto firstFrame=frames.size();
                 p.decode({u"first",u"second",u"third",u"fourth",u"fifth",u"sixth",u"seventh"});
                 p.update();p.pump();p.finalFrame();

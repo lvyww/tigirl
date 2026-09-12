@@ -191,10 +191,11 @@ void CandidateUI::stopAnimation() {
     transition_.Cancel();if(window_){KillTimer(window_,2);KillTimer(window_,3);}
 }
 void CandidateUI::hideWindow(bool endPresentation) {
+    const bool wasVisible=window_ && IsWindowVisible(window_);
     stopAnimation();itemRects_.clear();
     if(endPresentation)hasPresentedCandidates_=false;
     if(window_)ShowWindow(window_,SW_HIDE);
-    frameTrace_.flush();
+    if(endPresentation || wasVisible)frameTrace_.flush();
 }
 void CandidateUI::schedulePaint() {
     if(!window_ || !owner_ || !shown_)return;
@@ -220,6 +221,12 @@ void CandidateUI::refreshReveal() {
     KillTimer(window_,1);
     if(!owner_ || !state_ || !shown_)return;
     if(!hasCaret_ && layoutDeadline_)return;
+    // Match TigerClaw Core::ShouldShowCandidate: no placeholder while the
+    // first sentence result is still pending. A completed empty result may
+    // display its code normally; ready candidates never wait on a UI timer.
+    if(snapshot_.candidates.empty() && engine_.sentenceDecodePending()) {
+        hideWindow(false);return;
+    }
     if(rendererDirty_ || !renderer_) {
         const auto revision=visualRevision_;
         auto next=std::make_shared<CandidateRenderer>(style_,fonts_?fonts_->paths():std::vector<std::filesystem::path>{});

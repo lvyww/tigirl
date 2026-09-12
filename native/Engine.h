@@ -92,6 +92,7 @@ public:
     void enableSentenceInput(bool enabled,std::uint64_t resourceRevision,bool automatic=false,int retainedRaw=0);
     KeyResult autoCommitSentence();
     std::optional<SentenceDecodeTicket> sentenceRequest() const;
+    bool sentenceDecodePending() const { return mode_==Mode::Sentence && !sentence_.current(); }
     bool applySentenceResult(const SentenceDecodeTicket& ticket,SentenceDecodeResult result);
     Snapshot snapshot();
     Candidate candidateAt(std::uint32_t index) const;
