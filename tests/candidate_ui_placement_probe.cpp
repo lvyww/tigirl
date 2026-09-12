@@ -15,9 +15,9 @@ struct CandidateUIPlacementProbe : CandidateUIPresentationProbe {
         MONITORINFO info{};info.cbSize=sizeof(info);
         candidate_probe::require(GetMonitorInfoW(monitor,&info)!=FALSE,"Missing test monitor");
         const auto dpi=candidateMonitorDpi(monitor);
-        CandidateRenderer small(style,{});
-        small.layout({u"",{u"1 first"}},1000);
-        const auto height=static_cast<LONG>(small.pixelHeight(dpi));
+        CandidateRenderer smallRenderer(style,{});
+        smallRenderer.layout({u"",{u"1 first"}},1000);
+        const auto height=static_cast<LONG>(smallRenderer.pixelHeight(dpi));
         caret={info.rcWork.left+100,info.rcWork.bottom-height-35,
                info.rcWork.left+101,info.rcWork.bottom-height-15};
         ui->setStyle(style,nullptr);
