@@ -78,23 +78,23 @@ int main() {
             {-2560,-1440,0,-40},{1920,120,4480,1520},{0,48,1920,1080},{48,0,1920,1080},{0,0,1872,1080}};
         for(const auto& work:areas)for(unsigned dpi:{96u,120u,144u,192u}) {
             auto env=e;env.work=work;env.dpi=dpi;
-            const int line=static_cast<int>(24*dpi/96),small=static_cast<int>(16*dpi/96);
+            const int line=static_cast<int>(24*dpi/96),shortHeight=static_cast<int>(16*dpi/96);
             const int large=static_cast<int>(150*dpi/96),width=static_cast<int>(240*dpi/96);
             const RECT caret{work.right-10,work.bottom-80-line,work.right-9,work.bottom-80};
             CandidateOrientation m;unsigned flips=0;bool old=false;
-            for(int session=0;session<100;++session)for(int height:{small,large,small,large+10}) {
+            for(int session=0;session<100;++session)for(int height:{shortHeight,large,shortHeight,large+10}) {
                 place(m,caret,env,width,height);if(m.above()!=old)++flips;old=m.above();
             }
             require(flips==1,"Repeated word sessions did not reduce direction changes to one");
             const int threshold=static_cast<int>((dpi*3+48)/96);
             auto jitter=caret;jitter.top-=threshold;jitter.bottom-=threshold;
-            place(m,jitter,env,width,small);require(m.above(),"DPI-scaled boundary was not inclusive");
-            --jitter.top;--jitter.bottom;place(m,jitter,env,width,small);
+            place(m,jitter,env,width,shortHeight);require(m.above(),"DPI-scaled boundary was not inclusive");
+            --jitter.top;--jitter.bottom;place(m,jitter,env,width,shortHeight);
             require(!m.above(),"DPI-scaled upward move not detected");
             // Small caret heights cap the jitter band, independently of candidate font size.
             auto tiny=caret;tiny.top=tiny.bottom-8;CandidateOrientation cap;
             place(cap,tiny,env,width,large);tiny.top-=3;tiny.bottom-=3;
-            place(cap,tiny,env,width,small);require(!cap.above(),"Tolerance exceeded a quarter of caret height");
+            place(cap,tiny,env,width,shortHeight);require(!cap.above(),"Tolerance exceeded a quarter of caret height");
             for(int h=1;h<=1600;h+=7)place(m,caret,env,width,h);
             place(m,caret,env,work.right-work.left+100,50);
         }
