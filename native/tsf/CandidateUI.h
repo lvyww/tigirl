@@ -79,6 +79,7 @@ private:
     std::vector<UINT> pages_;
     bool shown_=false,hasCaret_=false;
     HWND window_=nullptr;
+    HWND ownerWindow_=nullptr; // latest TSF view owner, never the candidate HWND
     std::shared_ptr<CandidateRenderer> renderer_;
     bool layingOut_=false;
     RECT caret_{};

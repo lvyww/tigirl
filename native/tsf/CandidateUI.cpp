@@ -155,8 +155,8 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
     // The candidate model must advance even while the application has no layout.
     // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into
     // a fresh appearance. Freeze the published frame, with a bounded deadline.
-    hasCaret_=caret!=nullptr;
-    if(!caret) {
+    hasCaret_=caret && CandidateOrientation::usableCaret(*caret);
+    if(!hasCaret_) {
         ++visualRevision_;stopAnimation();itemRects_.clear();
         if(layoutPending && shown_ && window_ && IsWindowVisible(window_)) {
             const auto now=GetTickCount64();
@@ -170,6 +170,9 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,C
     }
     layoutDeadline_=0;if(window_)KillTimer(window_,4);
     caret_=candidatePhysicalCaret(*caret,ownerWindow);
+    hasCaret_=CandidateOrientation::usableCaret(caret_);
+    if(!hasCaret_){hideWindow();return;}
+    ownerWindow_=ownerWindow;
     CandidateDpiScope dpiScope;
     if(!shown_) return;
     if(!window_) {
@@ -249,7 +252,21 @@ void CandidateUI::layoutAndPaint() {
         presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
     if(changed)drawing->layout(presentation_,maxWidth);
     width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
-    const auto position=placeCandidateWindow(caret_,monitor.rcWork,width_,height_);
+    CandidatePlacementEnvironment environment;
+    environment.epoch=owner_->candidatePlacementEpoch();environment.dpi=dpi_;
+    environment.monitor=reinterpret_cast<std::uintptr_t>(monitorId);environment.work=monitor.rcWork;
+    environment.owner=reinterpret_cast<std::uintptr_t>(ownerWindow_);
+    if(ownerWindow_) {
+        const auto root=GetAncestor(ownerWindow_,GA_ROOT);
+        environment.root=reinterpret_cast<std::uintptr_t>(root);
+        if(!root || !GetWindowRect(ownerWindow_,&environment.ownerBounds) ||
+           !GetWindowRect(root,&environment.rootBounds)){hideWindow();return;}
+    }
+    auto placementState=state_;
+    auto nextOrientation=placementState->candidateOrientation;
+    const auto placed=nextOrientation.place(caret_,environment,width_,height_);
+    if(!placed){hideWindow();return;}
+    const auto position=*placed;
     const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
     const auto selection=selected_>=first?selected_-first:UINT_MAX;
     if(changed || cachedSelection_!=selection){
@@ -271,6 +288,10 @@ void CandidateUI::layoutAndPaint() {
         stopAnimation();if(!paint(nullptr,&position))throw std::runtime_error("Candidate publication failed");
     }
     if(!window_ || !owner_ || revision!=visualRevision_)return;
+    // Store the accepted target direction, never an animation's intermediate Y.
+    // Focus/reentrant hide/failure must not contaminate the next composition.
+    if(state_!=placementState || owner_->candidatePlacementEpoch()!=environment.epoch)return;
+    placementState->candidateOrientation=nextOrientation;
     // paint() has published pixels and final geometry and, when necessary,
     // successfully shown the window. Only this current frame can latch state.
     if(!presentation_.items.empty() && !drawing->items().empty())hasPresentedCandidates_=true;

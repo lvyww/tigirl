@@ -1,16 +1,22 @@
 #pragma once
 #include <algorithm>
+#include <cstdint>
 #include <windows.h>
 
 namespace tiger::tsf {
-// All inputs are physical screen pixels. Prefer the 5 px gap below the caret;
-// when that would overflow, slide up only far enough to touch the work-area
-// bottom. Do not flip above the caret or retain placement state across frames.
-// Keep the existing 2 px right reserve. An oversized window starts at the
-// work-area top/left; positioning alone cannot make oversized content fit.
+// Low-level physical-pixel work-area clamp shared by both placement directions.
+// Preserve the 2 px right reserve and zero bottom reserve. Oversized content
+// starts at the work-area top/left; positioning alone cannot make it fit.
+inline POINT clampCandidateOrigin(LONG x,std::int64_t y,const RECT& work,int width,int height) {
+    using Wide=std::int64_t;
+    return {static_cast<LONG>(std::clamp<Wide>(x,work.left,
+                (std::max<Wide>)(work.left,Wide(work.right)-width-2))),
+        static_cast<LONG>(std::clamp<Wide>(y,work.top,
+                (std::max<Wide>)(work.top,Wide(work.bottom)-height)))};
+}
+// Stateless below-caret fallback. CandidateOrientation owns direction selection
+// and cross-composition memory; this primitive deliberately retains no state.
 inline POINT placeCandidateWindow(const RECT& caret,const RECT& work,int width,int height) {
-    constexpr LONG gap=5, rightReserve=2;
-    return {std::clamp(caret.left,work.left,(std::max)(work.left,work.right-width-rightReserve)),
-        std::clamp(caret.bottom+gap,work.top,(std::max)(work.top,work.bottom-height))};
+    return clampCandidateOrigin(caret.left,std::int64_t(caret.bottom)+5,work,width,height);
 }
 }

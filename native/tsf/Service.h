@@ -16,6 +16,7 @@
 #include "SentenceWorker.h"
 #include "../SentenceSettings.h"
 #include "../UserStore.h"
+#include "CandidateOrientation.h"
 
 namespace tiger::tsf {
 template<class T> using ComPtr=Microsoft::WRL::ComPtr<T>;
@@ -29,6 +30,8 @@ struct Context {
     ComPtr<ITfContext> context;
     ComPtr<ITfComposition> composition;
     Engine engine;
+    // Survives commit/cancel and CandidateUI destruction, not Context destruction.
+    CandidateOrientation candidateOrientation;
     std::shared_ptr<SentenceDecoder> sentenceDecoder;
     std::uint64_t sentenceResourceRevision=0,sentenceQueuedGeneration=0,sentenceQueuedIdentity=0;
     DWORD editCookie=TF_INVALID_COOKIE,layoutCookie=TF_INVALID_COOKIE;
@@ -76,6 +79,9 @@ public:
     HRESULT candidateWheel(int delta);
     HRESULT candidateCycle();
     HRESULT choose(const std::shared_ptr<Context>& state,UINT index,bool abort);
+    // The existing generation advances on actual context focus changes, thread/
+    // foreground loss, mode changes and deactivation, but not ordinary commits.
+    std::uint64_t candidatePlacementEpoch() const { return modeRevision_; }
 private:
     HRESULT key(ITfContext*,WPARAM,LPARAM,BOOL*,bool down,bool test);
     std::shared_ptr<Context> state(ITfContext*,bool create);
