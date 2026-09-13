@@ -4,10 +4,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <random>
-#include <set>
+#include <tuple>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -107,27 +108,68 @@ inline std::vector<SentenceLearningEvent> sentenceLearningDiff(
     return result;
 }
 class SentenceLearningSnapshot {
-    struct Choice {std::u16string mode,code,text,context;double weight=0;int count=0;std::int64_t time=0;};
-    std::map<std::u16string,std::vector<Choice>> byCode_;
+    using ContextScores=std::map<std::u16string,double,std::less<>>;
+    struct Scores {
+        ContextScores exact;
+        double general=0;
+        double forContext(std::u16string_view context) const {
+            const auto it=exact.find(context);
+            return it==exact.end()?general:std::max(general,it->second);
+        }
+    };
+    using TextScores=std::map<std::u16string,Scores,std::less<>>;
+    using ModeScores=std::map<std::u16string,TextScores,std::less<>>;
+    // Immutable query index: each text occurs once per (code, mode), regardless
+    // of the number of contexts/events. Transparent lookups allocate no keys.
+    std::map<std::u16string,ModeScores,std::less<>> byCode_;
 public:
     bool empty()const{return byCode_.empty();}
     static std::shared_ptr<const SentenceLearningSnapshot> build(const std::vector<SentenceLearningEvent>& events,std::int64_t now=learningNow()) {
-        auto snapshot=std::make_shared<SentenceLearningSnapshot>();
+        struct Choice {double weight=0;int count=0;std::int64_t time=0;};
+        // Replay competitors only within the same (code, mode, context).
+        // Different contexts must not make snapshot construction quadratic.
+        using Key=std::tuple<std::u16string,std::u16string,std::u16string>;
+        std::map<Key,std::map<std::u16string,Choice>> groups;
         for(const auto& event:events) {
             if(event.mode.empty() || event.mode.size()>512 || event.code.empty() || event.code.size()>128 || !learningStaticText(event.text) ||
                (!event.context.empty() && (!learningCharacters(event.context) || learningCharacters(event.context)>2)))continue;
-            auto& choices=snapshot->byCode_[event.code];Choice* target=nullptr;
-            auto time=std::min(now,event.time);
-            for(auto& c:choices) {
-                if(c.mode!=event.mode || c.context!=event.context)continue;
+            auto& choices=groups[{event.code,event.mode,event.context}];
+            const auto time=std::min(now,event.time);
+            for(auto& entry:choices) {
+                auto& c=entry.second;
                 c.weight*=std::exp2(-static_cast<double>(std::max<std::int64_t>(0,time-c.time))/(30.0*86400));c.time=std::max(c.time,time);
-                if(c.text==event.text)target=&c;else c.weight*=0.25;
+                if(entry.first!=event.text)c.weight*=0.25;
             }
-            if(!target) {choices.push_back(Choice{event.mode,event.code,event.text,event.context,0,0,time});target=&choices.back();}
-            target->weight=std::min(3.0,target->weight+1);target->count=std::min(3,target->count+1);
+            auto& target=choices.try_emplace(event.text,Choice{0,0,time}).first->second;
+            target.weight=std::min(3.0,target.weight+1);target.count=std::min(3,target.count+1);
         }
-        for(auto& row:snapshot->byCode_)for(auto& c:row.second)
-            c.weight*=std::exp2(-static_cast<double>(std::max<std::int64_t>(0,now-c.time))/(30.0*86400));
+        struct Summary {ContextScores exact;double weight=0;int count=0;unsigned contexts=0;};
+        std::map<Key,Summary> summaries;
+        for(const auto& group:groups) {
+            const auto& code=std::get<0>(group.first);
+            const auto& mode=std::get<1>(group.first);
+            const auto& context=std::get<2>(group.first);
+            for(const auto& entry:group.second) {
+                const auto& c=entry.second;
+                const double weight=c.weight*std::exp2(-static_cast<double>(std::max<std::int64_t>(0,now-c.time))/(30.0*86400));
+                auto& summary=summaries[{code,mode,entry.first}];
+                summary.exact[context]=std::min(10.0,6*std::min(1.0,weight)+2*std::max(0.0,weight-1));
+                summary.weight+=weight;summary.count=std::min(3,summary.count+c.count);
+                // Each context appears only once here. Empty means unknown,
+                // not a proven sentence start; weak contexts do not qualify.
+                if(!context.empty() && weight>=0.1)++summary.contexts;
+            }
+        }
+        auto snapshot=std::make_shared<SentenceLearningSnapshot>();
+        for(auto& entry:summaries) {
+            const auto& code=std::get<0>(entry.first);
+            const auto& mode=std::get<1>(entry.first);
+            const auto& text=std::get<2>(entry.first);
+            auto& summary=entry.second;
+            auto& scores=snapshot->byCode_[code][mode][text];
+            scores.general=learningCharacters(text)>1 && summary.count>=3 && summary.contexts>=2?2*std::min(1.0,summary.weight/3):0;
+            scores.exact=std::move(summary.exact);
+        }
         return snapshot;
     }
     // Bounded lookup for an unfinished, previously learnt fragment. This is
@@ -135,28 +177,24 @@ public:
     double prefixScore(std::u16string_view mode,std::u16string_view code,std::u16string_view text,std::u16string_view context) const {
         if(code.empty() || text.empty())return 0;
         double result=0;unsigned checked=0;
-        for(auto it=byCode_.lower_bound(std::u16string(code));it!=byCode_.end() && checked<64;++it,++checked) {
+        for(auto it=byCode_.lower_bound(code);it!=byCode_.end() && checked<64;++it,++checked) {
             if(std::u16string_view(it->first).substr(0,code.size())!=code)break;
             if(it->first.size()<=code.size())continue;
-            for(const auto& c:it->second) {
-                if(c.mode!=mode || c.text.size()<=text.size() || std::u16string_view(c.text).substr(0,text.size())!=text)continue;
-                result=std::max(result,score(mode,it->first,c.text,context));
+            const auto modes=it->second.find(mode);if(modes==it->second.end())continue;
+            const auto& texts=modes->second;
+            for(auto choice=texts.lower_bound(text);choice!=texts.end();++choice) {
+                if(std::u16string_view(choice->first).substr(0,text.size())!=text)break;
+                if(choice->first.size()<=text.size())continue;
+                result=std::max(result,choice->second.forContext(context));
             }
         }
         return result;
     }
     double score(std::u16string_view mode,std::u16string_view code,std::u16string_view text,std::u16string_view context) const {
-        auto found=byCode_.find(std::u16string(code));if(found==byCode_.end())return 0;
-        double exact=0,aggregate=0;int count=0;std::set<std::u16string> contexts;
-        for(const auto& c:found->second) {
-            if(c.mode!=mode || c.text!=text)continue;
-            if(c.context==context)exact=std::min(10.0,6*std::min(1.0,c.weight)+2*std::max(0.0,c.weight-1));
-            aggregate+=c.weight;count+=c.count;
-            // Empty context means unknown, not a proven beginning of sentence.
-            if(!c.context.empty() && c.weight>=0.1)contexts.insert(c.context);
-        }
-        double general=learningCharacters(text)>1 && count>=3 && contexts.size()>=2?2*std::min(1.0,aggregate/3):0;
-        return std::max(exact,general);
+        const auto codes=byCode_.find(code);if(codes==byCode_.end())return 0;
+        const auto modes=codes->second.find(mode);if(modes==codes->second.end())return 0;
+        const auto texts=modes->second.find(text);if(texts==modes->second.end())return 0;
+        return texts->second.forContext(context);
     }
 };
 }
