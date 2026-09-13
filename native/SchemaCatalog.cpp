@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "SchemaCatalog.h"
+#include "LearningFileExclusion.h"
 #include "Settings.h"
 #include "OrdinalCase.h"
 #include "ConfigStore.h"
@@ -69,7 +70,7 @@ std::vector<std::u16string> schemaNames(const std::filesystem::path& userRoot) {
             const auto filename=ordinalCaseKey(file.path().filename().u16string());
             auto ends=[&](std::u16string_view suffix){return filename.size()>=suffix.size() &&
                 std::u16string_view(filename).substr(filename.size()-suffix.size())==suffix;};
-            if(file.is_regular_file() && filename!=u"构词.TXT" && filename!=u"用户调整.TXT" && filename!=u"补充语料.TXT" &&
+            if(file.is_regular_file() && !isLearningFile(filename) && filename!=u"构词.TXT" && filename!=u"用户调整.TXT" && filename!=u"补充语料.TXT" &&
                 (ends(u".TXT") || ends(u".DICT.YAML"))) {names.push_back(name);break;}
         }
     }

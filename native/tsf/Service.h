@@ -138,6 +138,8 @@ private:
     std::unique_ptr<SentenceWorker> sentenceWorker_;
     std::shared_ptr<ManualTimer> sentenceTimer_;
     std::shared_ptr<const SentenceResources> sentenceResources_;
+    std::shared_ptr<SentenceLearningStore> sentenceLearningStore_;
+    std::u16string sentenceLearningMode_;
     std::shared_ptr<const Lexicon> sentenceRequestedSource_,sentenceLoadedSource_;
     std::u16string sentenceSignature_;
     SentenceSettings sentenceSettings_;

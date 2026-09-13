@@ -40,6 +40,7 @@ SentenceSettings parseSentenceSettings(std::u16string_view text) {
     for(const auto& item:values) {
         const auto& key=item.first;const auto& value=item.second;
         if(key==u"自动启用整句模式")result.autoEnableBySchema=boolean(value,true);
+        else if(key==u"整句Tab自学习")result.selfLearning=boolean(value,true);
         else if(key==u"整句自动提前上屏")result.autoCommit=boolean(value,true);
         else if(key==u"允许单字重码组句")result.allowDuplicateSingleCharacters=boolean(value,true);
         else if(key==u"保留最少编码数量")result.minimumRetainedRaw=std::min(32,nonnegativeInteger(value));

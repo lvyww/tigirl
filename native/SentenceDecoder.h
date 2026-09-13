@@ -1,5 +1,6 @@
 #pragma once
 #include "SentenceLexicon.h"
+#include "SentenceLearning.h"
 #include "SentenceNgram.h"
 #include "MappedSentenceSupplement.h"
 #include <memory>
@@ -10,6 +11,7 @@ namespace tiger {
 struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
     int textLength=0,rawLength=0;
+    double learningScore=0; // Optimal non-overlapping learning reward up to this boundary.
 };
 struct SentenceLockedPrefix {
     std::u16string rawCode,text;
@@ -22,6 +24,7 @@ struct SentenceCandidate {
     std::shared_ptr<const SentencePathBoundary> boundary;
     // Eligibility from the producing decoder's settings, retained with its snapshot.
     bool eligibleDuplicateSinglePath=false;
+    double learningScore=0;
 };
 struct SentencePrefixEvidence {
     std::u16string text;
@@ -40,6 +43,8 @@ struct SentenceDecodeResult {
     std::u16string rawCode;
     std::vector<SentenceCandidate> candidates;
     int expandedStates=0;
+    bool learningAffected=false;
+    std::u16string learningMode;
     SentenceEarlyCommitEvidence earlyCommitEvidence;
 };
 struct SentenceDecoderOptions {
@@ -66,6 +71,7 @@ public:
         bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={},
         std::shared_ptr<const SentenceLockedPrefix> lockedPrefix={});
     void resetDecodeCache();
+    void setLearning(std::shared_ptr<const SentenceLearningSnapshot> snapshot,std::u16string mode);
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
         std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
     bool isProperCodePrefix(std::u16string_view raw) const;
@@ -78,8 +84,10 @@ private:
     int expand(std::u16string_view raw,Lattice& lattice,int from,int minimumEnd=-1) const;
     SentenceDecodeResult emit(std::u16string_view raw,Lattice& lattice,int limit,int expanded,
         bool evidence,std::u16string_view required) const;
+    std::shared_ptr<const SentenceLearningSnapshot> learning_;
+    std::u16string learningMode_;
     std::unique_ptr<Cache> cache_;
-    std::mutex decodeMutex_;
+    mutable std::mutex decodeMutex_;
     double transition(Lattice& lattice,std::u16string_view previous2,std::u16string_view previous1,std::u16string_view target) const;
     double isolation(std::u16string_view text) const;
     std::shared_ptr<const SentenceLexicon> lexicon_;

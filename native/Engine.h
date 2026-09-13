@@ -53,6 +53,7 @@ struct KeyResult {
     bool switchRecentSchema = false;
     // Adapter retains and replays this key after the current sentence result.
     bool awaitSentenceDecode = false;
+    std::vector<SentenceLearningEvent> learning;
 };
 struct Candidate {
     std::u16string display, commit, annotation;
