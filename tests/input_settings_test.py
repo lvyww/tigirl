@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
   with Image.open(root/f'font-settings-{dpi}.bmp') as capture:
    capture.convert('RGB').save(ROOT/f'build/font-settings-{dpi}.png')
   with Image.open(root/f'sentence-settings-{dpi}.bmp') as capture:
-   for x,y,w,h in [(430,170,155,28),(430,216,155,28),(18,332,567,30)]:
+   for x,y,w,h in [(430,170,155,28),(430,208,155,28),(18,312,567,30)]:
     box=tuple(round(n*dpi/96) for n in [x+2,y+3,x+w-3,y+h-3])
     assert sum(value<160 for value in capture.convert('L').crop(box).tobytes())>10,(dpi,box,'Input field was not rendered')
    capture.convert('RGB').save(ROOT/f'build/sentence-settings-{dpi}.png')
