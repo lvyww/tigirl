@@ -4,6 +4,7 @@
 #include "SentenceDecoder.h"
 #include "LexiconSerialize.h"
 #include "Engine.h"
+#include "sentence_learning_performance.h"
 #ifdef _WIN32
 #include "LexiconOrder.h"
 #endif
@@ -162,6 +163,7 @@ int main(int argc,char** argv) {
         fileEnumerationTests(path);
 #endif
         pureTests();sessionTests();storageTests(path);decoderTests(path);engineTests(path);
+        checks+=learning_test::runPerformanceTests(path/"performance");
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"physical_tsf_tested\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<"check "<<checks<<": "<<e.what()<<'\n';return 1;}
 }
