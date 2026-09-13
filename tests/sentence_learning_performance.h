@@ -104,7 +104,7 @@ inline void indexedScoreTests(PerformanceChecks& test) {
     auto inside=bounded[63];inside.mode=u"perf";bounded.push_back(inside);
     auto outside=bounded[64];outside.mode=u"only-outside";bounded.push_back(outside);
     auto reference=ReferenceLearningSnapshot::build(bounded,1700000000);auto indexed=SentenceLearningSnapshot::build(bounded,1700000000);
-    test.require(indexed->prefixScore(u"perf",u"a",u"虎",u"")==6,"64-row prefix bound lost inside choice");
+    test.require(indexed->prefixScore(u"perf",u"a",u"虎",u"")==9,"64-row prefix bound lost inside choice");
     test.require(indexed->prefixScore(u"only-outside",u"a",u"虎",u"")==0,"mode index bypassed global 64-code-row bound");
     for(const auto& e:bounded){test.equal(indexed->prefixScore(e.mode,u"a",u"虎",e.context),reference->prefixScore(e.mode,u"a",u"虎",e.context));}
     test.require(indexed->prefixScore(u"perf",inside.code,u"虎",u"")==0,"exact code used as unfinished prefix");

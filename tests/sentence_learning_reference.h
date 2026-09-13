@@ -1,5 +1,6 @@
 #pragma once
-// Frozen pre-index implementation from PR #12 (6401724), for differential tests.
+// Pre-index algorithm from PR #12 (6401724), for differential tests.
+// Scoring constants/formula updated to the 2026-09-14 correction-weight policy.
 // Keep independent of the optimized implementation; never used by production.
 #include "SentenceLearning.h"
 #include <set>
@@ -22,7 +23,7 @@ public:
                 if(c.text==event.text)target=&c;else c.weight*=0.25;
             }
             if(!target) {choices.push_back(Choice{event.mode,event.code,event.text,event.context,0,0,time});target=&choices.back();}
-            target->weight=std::min(3.0,target->weight+1);target->count=std::min(3,target->count+1);
+            target->weight=std::min(std::exp(3.5),target->weight+1);target->count=std::min(3,target->count+1);
         }
         for(auto& row:snapshot->byCode_)for(auto& c:row.second)
             c.weight*=std::exp2(-static_cast<double>(std::max<std::int64_t>(0,now-c.time))/(30.0*86400));
@@ -48,7 +49,7 @@ public:
         double exact=0,aggregate=0;int count=0;std::set<std::u16string> contexts;
         for(const auto& c:found->second) {
             if(c.mode!=mode || c.text!=text)continue;
-            if(c.context==context)exact=std::min(10.0,6*std::min(1.0,c.weight)+2*std::max(0.0,c.weight-1));
+            if(c.context==context)exact=std::clamp(9+2*std::log(std::max(0.001,c.weight)),0.0,16.0);
             aggregate+=c.weight;count+=c.count;
             // Empty context means unknown, not a proven beginning of sentence.
             if(!c.context.empty() && c.weight>=0.1)contexts.insert(c.context);

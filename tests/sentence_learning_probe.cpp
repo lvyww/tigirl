@@ -41,12 +41,12 @@ static void pureTests() {
     check(sentenceLearningDiff(u"aabb",u"甲乙",u"甲丙",{{4,2}},{{2,1},{4,2}},2).empty(),"do not cross locked floor");
     check(sentenceLearningDiff(u"aa",u"甲",u"乙",{{1,1}},{{2,1}},0).empty(),"incomplete boundary rejected");
     auto e=event(u"aabb",u"虎娘",u"设置");auto s=SentenceLearningSnapshot::build({e},e.time);
-    check(s->score(e.mode,e.code,e.text,e.context)==6,"first correction useful");
+    check(s->score(e.mode,e.code,e.text,e.context)==9,"first correction equals supplement weight 1000");
     check(s->score(e.mode,e.code,e.text,u"其他")==0,"context isolation");
     check(s->score(u"other-mode",e.code,e.text,e.context)==0,"mode isolation");
-    check(s->prefixScore(e.mode,u"aa",u"虎",e.context)==6,"partial path hint");
+    check(s->prefixScore(e.mode,u"aa",u"虎",e.context)==9,"partial path hint");
     check(s->prefixScore(e.mode,u"aa",u"狼",e.context)==0,"wrong prefix no hint");
-    auto decay=SentenceLearningSnapshot::build({e},e.time+30*86400);check(std::abs(decay->score(e.mode,e.code,e.text,e.context)-3)<1e-8,"30-day decay");
+    auto decay=SentenceLearningSnapshot::build({e},e.time+30*86400);check(std::abs(decay->score(e.mode,e.code,e.text,e.context)-(9+2*std::log(0.5)))<1e-8,"30-day weight decay");
     auto second=e;second.id=learningId();auto third=e;third.id=learningId();third.context=u"测试";
     auto general=SentenceLearningSnapshot::build({e,second,third},e.time);
     check(general->score(e.mode,e.code,e.text,u"其他")==2,"three corrections two contexts generalize weakly");
@@ -57,7 +57,17 @@ static void pureTests() {
     auto competition=SentenceLearningSnapshot::build({e,second,alternative},e.time);
     check(competition->score(e.mode,e.code,alternative.text,e.context)>competition->score(e.mode,e.code,e.text,e.context),"new correction beats older habit");
     std::vector<SentenceLearningEvent> repeated(100,e);auto cap=SentenceLearningSnapshot::build(repeated,e.time);
-    check(cap->score(e.mode,e.code,e.text,e.context)<=10,"score cap");
+    check(cap->score(e.mode,e.code,e.text,e.context)==16,"score cap");
+    for(int n=1;n<=40;++n) {
+        auto learned=SentenceLearningSnapshot::build(std::vector<SentenceLearningEvent>(n,e),e.time);
+        const double expected=std::min(16.0,9+2*std::log(static_cast<double>(n)));
+        check(std::abs(learned->score(e.mode,e.code,e.text,e.context)-expected)<1e-8,"repeated correction logarithmic reward");
+    }
+    auto twice=SentenceLearningSnapshot::build({e,second},e.time);
+    check(s->score(e.mode,e.code,e.text,e.context)<10.083 && twice->score(e.mode,e.code,e.text,e.context)>10.083,"two corrections overcome a gap above the old ten-point cap");
+    check(std::abs(competition->score(e.mode,e.code,e.text,e.context)-(9+2*std::log(0.5)))<1e-8,"competing correction quarters accumulated weight");
+    auto expired=SentenceLearningSnapshot::build({e},e.time+365*86400);
+    check(expired->score(e.mode,e.code,e.text,e.context)==0,"long-term decay floors reward at zero");
     for(auto name:{u".tigirl-learning-v1.log",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u".tigirl-learning-v1.log.lock"})
         check(isLearningFile(name),"reserved basename including fake lexicon extensions");
     check(!isLearningFile(u"正常码表.txt") && !isLearningFile(u"tiger.txt"),"normal dictionaries retained");
@@ -129,7 +139,7 @@ static void decoderTests(const std::filesystem::path& folder) {
     auto learned=decoder.decode(u"aabb",20,true);
     check(!learned.candidates.empty() && learned.candidates.front().text==u"乙中","learned multi-edge path survives pruning and ranks first");
     check(learned.learningAffected && learned.earlyCommitEvidence.prefixes.empty() && learned.earlyCommitEvidence.confidenceTruncated,"learned candidate pool not auto confidence");
-    check(std::abs(learned.candidates.front().finalScore-learned.candidates.front().baseScore-6)<1e-5,"learning reward exactly once");
+    check(std::abs(learned.candidates.front().finalScore-learned.candidates.front().baseScore-9)<1e-5,"learning reward exactly once");
     check(std::abs(learned.candidates.front().confidenceScore-learned.candidates.front().baseScore)<1e-5,"confidence excludes reward");
     auto incremental=decoder.decode(u"aabbcc",20,true);check(incremental.candidates.front().text==u"乙中国","local preference survives added suffix");
     auto exact=decoder.decode(u"aa2bb",20,true);check(exact.candidates.front().text==u"乙中","explicit rank semantics unchanged");

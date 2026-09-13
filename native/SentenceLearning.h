@@ -141,7 +141,8 @@ public:
                 if(entry.first!=event.text)c.weight*=0.25;
             }
             auto& target=choices.try_emplace(event.text,Choice{0,0,time}).first->second;
-            target.weight=std::min(3.0,target.weight+1);target.count=std::min(3,target.count+1);
+            // One correction equals supplement weight 1000; cap at the weight for 16 points.
+            target.weight=std::min(std::exp(3.5),target.weight+1);target.count=std::min(3,target.count+1);
         }
         struct Summary {ContextScores exact;double weight=0;int count=0;unsigned contexts=0;};
         std::map<Key,Summary> summaries;
@@ -153,7 +154,7 @@ public:
                 const auto& c=entry.second;
                 const double weight=c.weight*std::exp2(-static_cast<double>(std::max<std::int64_t>(0,now-c.time))/(30.0*86400));
                 auto& summary=summaries[{code,mode,entry.first}];
-                summary.exact[context]=std::min(10.0,6*std::min(1.0,weight)+2*std::max(0.0,weight-1));
+                summary.exact[context]=std::clamp(9+2*std::log(std::max(0.001,weight)),0.0,16.0);
                 summary.weight+=weight;summary.count=std::min(3,summary.count+c.count);
                 // Each context appears only once here. Empty means unknown,
                 // not a proven sentence start; weak contexts do not qualify.
