@@ -30,6 +30,7 @@ private:
     std::uintmax_t size_=static_cast<std::uintmax_t>(-1);
     std::filesystem::file_time_type stamp_{};
     std::int64_t lastRead_=0;
+    bool missing_=false;
     struct FileLock {
 #ifdef _WIN32
         HANDLE file=INVALID_HANDLE_VALUE;OVERLAPPED overlap{};
@@ -131,9 +132,17 @@ private:
         publish(parse(data+std::string(addition)).events);
     }
     void publish(const std::vector<SentenceLearningEvent>& events) {
-        std::atomic_store(&snapshot_,SentenceLearningSnapshot::build(events));
-        size_=std::filesystem::exists(path_)?std::filesystem::file_size(path_):0;
-        if(size_)stamp_=std::filesystem::last_write_time(path_);lastRead_=learningNow();
+        // Pointer identity is the decoder's cache revision. Reuse an unchanged
+        // empty snapshot (missing, empty, cleared or entirely invalid journal).
+        const auto current=snapshot();
+        if(!events.empty() || !current->empty()) {
+            auto next=SentenceLearningSnapshot::build(events);
+            if(!current->empty() || !next->empty())std::atomic_store(&snapshot_,std::move(next));
+        }
+        missing_=!std::filesystem::exists(path_);
+        size_=missing_?0:std::filesystem::file_size(path_);
+        stamp_=missing_?std::filesystem::file_time_type{}:std::filesystem::last_write_time(path_);
+        lastRead_=learningNow();
     }
 public:
     explicit SentenceLearningStore(std::filesystem::path path):path_(std::move(path)){}
@@ -141,9 +150,9 @@ public:
     std::shared_ptr<const SentenceLearningSnapshot> snapshot()const{return std::atomic_load(&snapshot_);}
     void refresh() {
         std::lock_guard<std::mutex> local(mutex_);
-        if(!std::filesystem::exists(path_)){publish({});return;}
+        if(!std::filesystem::exists(path_)){if(!missing_)publish({});return;}
         auto size=std::filesystem::file_size(path_);auto stamp=std::filesystem::last_write_time(path_);
-        if(size==size_ && stamp==stamp_ && learningNow()-lastRead_<60)return;
+        if(!missing_ && size==size_ && stamp==stamp_ && learningNow()-lastRead_<60)return;
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));publish(parse(bytes()).events);
     }
     void confirm(const std::vector<SentenceLearningEvent>& events) {
