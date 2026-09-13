@@ -11,7 +11,7 @@ namespace tiger {
 namespace {
 constexpr std::u16string_view bos=u"\x02",eos=u"\x03";
 struct State {
-    double score=0,mass=0,supplementScore=0;
+    double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0;
     std::u16string text;
     // Context tokens refer to immutable mapped lexicon text (or static BOS).
     // The decoder retains that lexicon for the whole lattice lifetime.
@@ -45,8 +45,11 @@ struct Bucket {
         auto& old=values[it->second];
         double top=std::max(old.mass,item.mass);
         double combined=top+std::log(std::exp(old.mass-top)+std::exp(item.mass-top));
-        // Duplicate representatives always prefer rank, including score-first beams.
-        if(item.rank<old.rank || (item.rank==old.rank && item.score>old.score))old=std::move(item);
+        // Keep a legal learned path rather than another segmentation of the
+        // same text which loses the remembered raw/text boundary alignment.
+        bool learned=item.learningScore>0 || old.learningScore>0 || item.learningPotential>0 || old.learningPotential>0;
+        if((learned && item.score+item.learningPotential>old.score+old.learningPotential) ||
+           (!learned && (item.rank<old.rank || (item.rank==old.rank && item.score>old.score))))old=std::move(item);
         old.mass=combined;
     }
     void limit(int width,bool scoreFirst) {
@@ -56,7 +59,19 @@ struct Bucket {
         if(values.size()>static_cast<std::size_t>(width)) {
             truncated=true;
             std::partial_sort(values.begin(),values.begin()+width,values.end(),order);
-            values.resize(width);
+            // Four extra legal states may finish a learned multi-edge span.
+            // Potential is never added to score/mass and disappears if the
+            // remaining raw code cannot complete that span.
+            auto first=values.begin()+width;
+            auto reserveOrder=[](const State& a,const State& b) {
+                if((a.learningPotential>0)!=(b.learningPotential>0))return a.learningPotential>0;
+                return a.score+a.learningPotential>b.score+b.learningPotential;
+            };
+            auto extra=std::min<std::size_t>(4,values.size()-width);
+            std::partial_sort(first,first+extra,values.end(),reserveOrder);
+            std::size_t retained=width;
+            while(retained<static_cast<std::size_t>(width)+extra && values[retained].learningPotential>0)++retained;
+            values.resize(retained);
         }else std::sort(values.begin(),values.end(),order);
         // Keep processed positions compact for the whole composition.
         decltype(indices)().swap(indices);
@@ -92,6 +107,7 @@ struct SentenceDecoder::Lattice {
     // Direct-mapped, exact-key cache: bounded independently of sentence length.
     // Long graphemes bypass it. Owned by the lattice, never shared or global.
     std::unique_ptr<std::array<ScoreEntry,4096>> scores;
+    bool learningAffected=false;
     std::vector<Bucket> states;
     explicit Lattice(int length):states(length+1){states[0].add(State{});}
 };
@@ -103,6 +119,11 @@ struct SentenceDecoder::Cache {
     SentenceDecodeResult result;
 };
 SentenceDecoder::~SentenceDecoder()=default;
+void SentenceDecoder::setLearning(std::shared_ptr<const SentenceLearningSnapshot> snapshot,std::u16string mode) {
+    std::lock_guard<std::mutex> lock(decodeMutex_);
+    if(learning_!=snapshot || learningMode_!=mode)cache_.reset();
+    learning_=std::move(snapshot);learningMode_=std::move(mode);
+}
 void SentenceDecoder::resetDecodeCache(){std::lock_guard<std::mutex> lock(decodeMutex_);cache_.reset();}
 SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit,bool evidence,std::u16string_view required,
     std::shared_ptr<const SentenceLockedPrefix> lockedPrefix) {
@@ -116,7 +137,11 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
         const auto lockedRaw=normalizeRawCode(lockedPrefix->rawCode);
         if(lockedRaw.empty() || raw.substr(0,lockedRaw.size())!=lockedRaw)return {};
         Lattice lattice(static_cast<int>(raw.size()));lattice.states[0]=Bucket{};
-        State seed;seed.text=lockedPrefix->text;seed.boundary=lockedPrefix->boundary;
+        State seed;seed.text=lockedPrefix->text;
+        std::vector<std::shared_ptr<const SentencePathBoundary>> boundaries;
+        for(auto p=lockedPrefix->boundary;p;p=p->previous)boundaries.push_back(p);
+        for(auto i=boundaries.rbegin();i!=boundaries.rend();++i)
+            seed.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{seed.boundary,(*i)->textLength,(*i)->rawLength,0});
         std::size_t offset=0;
         for(const auto& element:wordTextElements(lockedPrefix->text)) {
             const auto target=std::u16string_view(lockedPrefix->text).substr(offset,element.size());offset+=element.size();
@@ -265,6 +290,7 @@ double SentenceDecoder::isolation(std::u16string_view text) const {
 }
 SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int candidateLimit,
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
+    std::lock_guard<std::mutex> lock(decodeMutex_);
     auto raw=normalizeRawCode(input);
     // char.IsLetter operates on UTF-16 code units, not supplementary scalars.
     if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return unicode::isLetter(c)!=0;}))return {};
@@ -276,7 +302,7 @@ SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int c
 int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,int minimumEnd) const {
     auto& states=lattice.states;int length=static_cast<int>(raw.size()),expanded=0;
     for(int position=from;position<length;++position) {
-        auto& bucket=states[position];bucket.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters);
+        auto& bucket=states[position];bucket.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters || lattice.learningAffected);
         if(bucket.values.empty())continue;
         for(int codeLength:lexicon_->codeLengths()) {
             int end=position+codeLength;if(end>length)continue;
@@ -304,7 +330,29 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 double wholeReward=whole && selected==0 && c.optimalSingleCharacterCode && c.textElements.size()==1?options_.wholeInputSingleCharacterReward:0;
                 next.score+=wholeReward;next.mass=item.mass+(next.score-item.score-supplementAdded-wholeReward);
                 next.text+=c.text;next.supplementScore+=supplementAdded;next.rank=std::max(item.rank,static_cast<int>(c.rank));
-                next.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{item.boundary,static_cast<int>(next.text.size()),consumed});
+                next.learningPotential=0;
+                if(learning_ && !learning_->empty()) {
+                    // Consider only suffixes with real raw/text boundaries. A DP
+                    // maximum prevents overlapping learnt fragments being counted twice.
+                    auto start=item.boundary;
+                    for(;;) {
+                        int rawStart=start?start->rawLength:0,textStart=start?start->textLength:0;
+                        auto fragment=std::u16string_view(next.text).substr(textStart);
+                        if(learningCharacters(fragment)>16)break;
+                        auto reward=learning_->score(learningMode_,raw.substr(rawStart,consumed-rawStart),fragment,
+                            learningContext(std::u16string_view(next.text).substr(0,textStart)));
+                        double potential=learning_->prefixScore(learningMode_,raw.substr(rawStart,consumed-rawStart),fragment,
+                            learningContext(std::u16string_view(next.text).substr(0,textStart)));
+                        if(potential>0){lattice.learningAffected=true;next.learningPotential=std::max(next.learningPotential,potential);}
+                        if(reward>0) {
+                            lattice.learningAffected=true;
+                            next.learningScore=std::max(next.learningScore,(start?start->learningScore:0)+reward);
+                        }
+                        if(!start)break;start=start->previous;
+                    }
+                    next.score+=next.learningScore-item.learningScore;
+                }
+                next.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{item.boundary,static_cast<int>(next.text.size()),consumed,next.learningScore});
                 states[consumed].add(std::move(next));++expanded;
             }
         }
@@ -315,11 +363,12 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
     auto& states=lattice.states;int length=static_cast<int>(raw.size());
     SentenceDecodeResult result;result.rawCode=raw;result.expandedStates=expanded;
-    auto& completed=states[length];completed.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters);
+    auto& completed=states[length];completed.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters || lattice.learningAffected);
     bool scoreFirst=false;
     auto evaluate=[&](const State& state) {
         double adjustment=transition(lattice,state.previous2,state.previous1,eos)-isolation(state.text);
-        SentenceCandidate c;c.text=state.text;c.baseScore=c.finalScore=state.score+adjustment;
+        SentenceCandidate c;c.text=state.text;c.baseScore=state.score-state.learningScore+adjustment;
+        c.finalScore=c.baseScore+state.learningScore;c.learningScore=state.learningScore;
         c.confidenceScore=state.mass+adjustment;c.supplementScore=state.supplementScore;c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
         c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
             ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
@@ -327,7 +376,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     };
     for(const auto& state:completed.values) {
         auto c=evaluate(state);
-        if(options_.allowDuplicateSingleCharacters && c.boundary && c.boundary->previous)scoreFirst=true;
+        if(c.learningScore>0 || (options_.allowDuplicateSingleCharacters && c.boundary && c.boundary->previous))scoreFirst=true;
         result.candidates.push_back(std::move(c));
     }
     auto order=[=](const SentenceCandidate& a,const SentenceCandidate& b) {
@@ -339,7 +388,9 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     std::sort(result.candidates.begin(),result.candidates.end(),order);
     if(result.candidates.size()>static_cast<std::size_t>(std::max(1,candidateLimit)))result.candidates.resize(std::max(1,candidateLimit));
     for(auto& c:result.candidates)c.segmentedCode=segmented(raw,c.boundary);
-    if(includeEarlyCommitEvidence) {
+    result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;
+    if(result.learningAffected)result.earlyCommitEvidence.confidenceTruncated=true;
+    if(includeEarlyCommitEvidence && !result.learningAffected) {
         auto& evidence=result.earlyCommitEvidence;
         evidence.confidenceTruncated=completed.truncated;
         auto required=[&](std::u16string_view text) {

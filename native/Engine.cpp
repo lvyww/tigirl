@@ -172,8 +172,9 @@ std::u16string Engine::resolve(std::u16string_view code) const {
 }
 KeyResult Engine::selectRaw(int index) {
     if(mode_==Mode::Sentence) {
-        auto text=sentence_.commitCandidate(index);
-        return text?finish(std::move(*text)):KeyResult{true,false,{}};
+        auto text=sentence_.commitCandidate(index);auto learning=sentence_.takeLearning();
+        auto result=text?finish(std::move(*text)):KeyResult{true,false,{}};
+        result.learning=std::move(learning);return result;
     }
     refreshPage();
     return finishMixed(selected(index));
@@ -444,7 +445,7 @@ KeyResult Engine::autoCommitSentence() {
     if(mode_!=Mode::Sentence)return {};
     auto commit=sentence_.tryAutoCommit(sentenceAutomatic_,sentenceRetainedRaw_);
     if(!commit)return {};
-    syncSentenceRaw();return {true,false,std::move(*commit)};
+    syncSentenceRaw();KeyResult result{true,false,std::move(*commit)};result.learning=sentence_.takeLearning();return result;
 }
 std::optional<SentenceDecodeTicket> Engine::sentenceRequest() const {
     return mode_==Mode::Sentence?sentence_.request():std::optional<SentenceDecodeTicket>{};
@@ -466,7 +467,8 @@ KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& querie
         }
         char16_t c=letter(vk)?static_cast<char16_t>(vk+32):vk==Semi?u';':vk==Quote?u'\'':static_cast<char16_t>(vk>=96?'0'+vk-96:vk);
         auto commit=sentence_.appendAutomatic(c,sentenceAutomatic_,sentenceRetainedRaw_,queries);
-        syncSentenceRaw();return {true,false,commit?std::move(*commit):std::u16string{}};
+        syncSentenceRaw();KeyResult result{true,false,commit?std::move(*commit):std::u16string{}};
+        result.learning=sentence_.takeLearning();return result;
     }
     auto suffix=vk==Quote?std::u16string{}:symbol(vk,key.shift,config_.englishPunctuation);
     const bool needsCurrent=vk==Tab || vk==Space || vk==38 || vk==40 || vk==Quote || !suffix.empty();
@@ -479,10 +481,13 @@ KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& querie
         sentence_.moveSelection(vk==38 || (vk==Tab && key.shift)?-1:1,config_.pageSize,vk==Tab);return {true,false,{}};
     }
     if(vk==Space) {
-        auto text=sentence_.commitCandidate(sentence_.selectedIndex());return text?finish(std::move(*text)):KeyResult{true,false,{}};
+        return selectRaw(sentence_.selectedIndex());
     }
     if(vk==Quote)suffix=quote(key.shift);
-    if(!suffix.empty())return finish(sentence_.commitWithSuffix(suffix));
+    if(!suffix.empty()) {
+        auto text=sentence_.commitWithSuffix(suffix);auto learning=sentence_.takeLearning();
+        auto result=finish(std::move(text));result.learning=std::move(learning);return result;
+    }
     return {};
 }
 
@@ -680,7 +685,10 @@ void Engine::postprocess(const KeyEvent& key, KeyResult& result) {
     if(result.commit==u"{隐藏候选}") {
         result.commit.clear(); result.toggleHiddenCandidates=true;
     }
-    if(!result.commit.empty()) result.commit=convert(result.commit);
+    if(!result.commit.empty()) {
+        auto original=result.commit;result.commit=convert(result.commit);
+        if(original!=result.commit)result.learning.clear();
+    }else result.learning.clear();
     if (key.down && key.vk == Back && !result.handled && !history_.empty()) {
         const auto last=history_.pop();
         if (last == u"\u201c" || last == u"\u201d") { leftDouble_ = !leftDouble_; deletedDouble_ = true; }

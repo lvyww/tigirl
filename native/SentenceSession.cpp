@@ -15,6 +15,7 @@ std::u16string trimAfter(std::u16string_view segmented,int count) {
 }
 SentenceSession::SentenceSession():identity_(nextIdentity.fetch_add(1,std::memory_order_relaxed)){}
 void SentenceSession::clear() {
+    learningBaseline_.reset();pendingLearning_.clear();readyLearning_.clear();
     resetAutomaticState();lastAutoCommitRaw_=0;tabPending_=false;locks_.clear();
     raw_.clear();committed_.clear();committedRaw_=selected_=0;suspended_=continuation_=hasResult_=false;
     result_=std::make_shared<SentenceDecodeResult>();++generation_;
@@ -27,7 +28,7 @@ void SentenceSession::invalidatePending(bool discardResult){
     if(discardResult){hasResult_=false;result_=std::make_shared<SentenceDecodeResult>();}
     if(active())edited();
 }
-void SentenceSession::edited(){selected_=0;++generation_;}
+void SentenceSession::edited(){learningBaseline_.reset();selected_=0;++generation_;}
 bool SentenceSession::append(char16_t code) {
     if(raw_.size()-committedRaw_>=128)return false;
     raw_+=static_cast<char16_t>(code==0x0130?code:unicode::toLower(code));edited();return true;
@@ -35,14 +36,17 @@ bool SentenceSession::append(char16_t code) {
 void SentenceSession::backspace() {
     resetAutomaticState();
     if(raw_.size()<=static_cast<std::size_t>(committedRaw_+1)){clear();return;}
-    raw_.pop_back();tabPending_=false;
+    raw_.pop_back();tabPending_=false;learningBaseline_.reset();
+    pendingLearning_.erase(std::remove_if(pendingLearning_.begin(),pendingLearning_.end(),[&](const auto& e){
+        return static_cast<int>(raw_.size())<=e.rawEnd;
+    }),pendingLearning_.end());
     while(!locks_.empty() && locks_.back()->rawCode.size()>static_cast<std::size_t>(committedRaw_) && raw_.size()<=locks_.back()->rawCode.size())locks_.pop_back();
     edited();
 }
 void SentenceSession::changeResources(std::uint64_t resources) {
     if(resources_==resources)return;
     resetAutomaticState();
-    tabPending_=false;locks_.clear();
+    tabPending_=false;locks_.clear();learningBaseline_.reset();pendingLearning_.clear();readyLearning_.clear();
     resources_=resources;hasResult_=false;result_=std::make_shared<SentenceDecodeResult>();edited();
 }
 std::optional<SentenceDecodeTicket> SentenceSession::request() const {
@@ -75,6 +79,7 @@ bool SentenceSession::apply(const SentenceDecodeTicket& ticket,SentenceDecodeRes
     result_=std::make_shared<SentenceDecodeResult>(std::move(result));appliedGeneration_=generation_;resultResources_=resources_;hasResult_=true;selected_=0;return true;
 }
 void SentenceSession::moveSelection(int delta,int pageSize,bool tab) {
+    if(tab && !tabPending_ && current() && !result_->candidates.empty())learningBaseline_=result_->candidates.front();
     if(tab)tabPending_=true;
     resetEmptyCodePending();
     suspended_=true;
@@ -90,11 +95,17 @@ std::u16string SentenceSession::candidateText(int index) const {
 std::optional<std::u16string> SentenceSession::commitCandidate(int index) {
     // The adapter must wait for the current generation before selection.
     if(!current() || index<0 || index>=static_cast<int>(result_->candidates.size()))return {};
-    auto text=candidateText(index);clear();return text;
+    captureLearning(index);
+    auto chosen=result_->candidates[index];auto events=learningThrough(chosen.text,static_cast<int>(raw_.size()));
+    auto text=candidateText(index);clear();readyLearning_=std::move(events);return text;
 }
 std::u16string SentenceSession::commitWithSuffix(std::u16string_view suffix) {
     auto text=current() && selected_<static_cast<int>(result_->candidates.size())?candidateText(selected_):liveRaw();
-    text+=suffix;clear();return text;
+    std::vector<SentenceLearningEvent> events;
+    if(current() && selected_<static_cast<int>(result_->candidates.size())) {
+        captureLearning(selected_);events=learningThrough(result_->candidates[selected_].text,static_cast<int>(raw_.size()));
+    }
+    text+=suffix;clear();readyLearning_=std::move(events);return text;
 }
 std::u16string SentenceSession::commitRaw(bool clearOnly) {auto text=clearOnly?std::u16string{}:liveRaw();clear();return text;}
 std::optional<std::u16string> SentenceSession::commitPrefix(std::u16string_view text,int rawLength) {
@@ -107,12 +118,14 @@ std::optional<std::u16string> SentenceSession::commitPrefix(std::u16string_view 
     return applyPrefix(text,rawLength);
 }
 std::u16string SentenceSession::applyPrefix(std::u16string_view text,int rawLength) {
+    auto events=learningThrough(text,rawLength);readyLearning_.insert(readyLearning_.end(),events.begin(),events.end());
     auto commit=std::u16string(text.substr(committed_.size()));committed_=text;committedRaw_=rawLength;
     auto filtered=std::make_shared<SentenceDecodeResult>(*result_);
     auto& list=filtered->candidates;list.erase(std::remove_if(list.begin(),list.end(),[&](const SentenceCandidate& c){return !starts(c.text,committed_);}),list.end());
     result_=std::move(filtered);selected_=0;return commit;
 }
 std::optional<std::u16string> SentenceSession::tryAutoCommit(bool enabled,int minimumRetained) {
+    if(result_->learningAffected){resetAutomaticState();return {};}
     SentenceAutoCommitInput input;
     input.enabled=enabled;input.suspended=suspended_;input.matchingLexicon=hasResult_ && resultResources_==resources_;
     input.raw=raw_;input.committedText=committed_;input.committedRaw=committedRaw_;
@@ -131,7 +144,8 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
     if(raw_.size()-committedRaw_>=128)return {};
     const auto normalized=static_cast<char16_t>(code==0x0130?code:unicode::toLower(code));
     const bool letter=normalized>=u'a' && normalized<=u'z';
-    const bool confirm=tabPending_ && letter;tabPending_=false;
+    const bool confirm=tabPending_ && letter;
+    if(confirm)captureLearning(selected_);tabPending_=false;
     if(confirm && current() && selected_<static_cast<int>(result_->candidates.size())) {
         const auto selected=result_->candidates[selected_];
         if(selected.boundary && selected.boundary->rawLength>committedRaw_ &&
@@ -140,6 +154,8 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
                 raw_.substr(0,selected.boundary->rawLength),selected.text,selected.boundary}));
             std::optional<std::u16string> commit;
             if(enabled) {
+                auto events=learningThrough(selected.text,selected.boundary->rawLength);
+                readyLearning_.insert(readyLearning_.end(),events.begin(),events.end());
                 commit=selected.text.substr(committed_.size());committed_=selected.text;
                 committedRaw_=lastAutoCommitRaw_=selected.boundary->rawLength;
             }
@@ -148,7 +164,7 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
             append(normalized);return commit;
         }
     }
-    if(!enabled){resetAutomaticState();append(normalized);return {};}
+    if(!enabled || result_->learningAffected){resetAutomaticState();append(normalized);return {};}
     std::optional<EmptyCodePending> captured;
     if(letter && !emptyCodePending_ && !suspended_ && current()) {
         const bool explicitSelection=std::any_of(raw_.begin(),raw_.end(),[](char16_t c){
@@ -200,6 +216,34 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
         }
     }
     return tryAutoCommit(enabled,minimumRetained);
+}
+std::vector<SentenceLearningEvent> SentenceSession::takeLearning() {
+    auto result=std::move(readyLearning_);readyLearning_.clear();return result;
+}
+void SentenceSession::captureLearning(int index) {
+    if(!tabPending_ || !learningBaseline_ || !current() || result_->learningMode.empty() ||
+       index<0 || index>=static_cast<int>(result_->candidates.size()))return;
+    const auto chosen=result_->candidates[index];
+    auto boundaries=[](const SentenceCandidate& candidate) {
+        std::vector<SentenceLearningBoundary> result;
+        for(auto b=candidate.boundary;b;b=b->previous)result.push_back({b->rawLength,b->textLength});
+        std::reverse(result.begin(),result.end());return result;
+    };
+    int floor=std::max(committedRaw_,activeLock()?static_cast<int>(activeLock()->rawCode.size()):0);
+    auto events=sentenceLearningDiff(raw_,learningBaseline_->text,chosen.text,boundaries(*learningBaseline_),boundaries(chosen),floor);
+    for(auto& e:events){e.mode=result_->learningMode;pendingLearning_.push_back(std::move(e));}
+    learningBaseline_.reset();
+}
+std::vector<SentenceLearningEvent> SentenceSession::learningThrough(std::u16string_view text,int rawEnd) {
+    std::vector<SentenceLearningEvent> result;
+    auto i=pendingLearning_.begin();
+    while(i!=pendingLearning_.end()) {
+        if(i->rawEnd>rawEnd){++i;continue;}
+        if(i->textEnd<=static_cast<int>(text.size()) && text.substr(i->textStart,i->textEnd-i->textStart)==i->text)
+            result.push_back(*i);
+        i=pendingLearning_.erase(i);
+    }
+    return result;
 }
 std::u16string SentenceSession::displayCode() const {
     auto live=liveRaw();if(!hasResult_ || resultResources_!=resources_ || result_->candidates.empty())return live;

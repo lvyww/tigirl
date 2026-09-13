@@ -1,5 +1,3 @@
-#define NOMINMAX
-#include <windows.h>
 #include "Unicode.h"
 #include "AddWord.h"
 #include <algorithm>

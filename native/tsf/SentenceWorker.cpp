@@ -11,6 +11,8 @@ struct SentenceWorker::State {
     std::mutex mutex;std::condition_variable ready;bool closed=false,running=false;
     std::map<std::uint64_t,Task> tasks;
     std::deque<std::uint64_t> order;
+    std::deque<std::function<void()>> confirmed;
+    std::vector<SentenceCompletion> confirmationResults;
     std::map<std::uint64_t,std::uint64_t> latest;
     std::map<std::uint64_t,SentenceCompletion> completed;
 };
@@ -31,25 +33,42 @@ void SentenceWorker::submit(std::uint64_t key,std::uint64_t revision,std::functi
      state_->latest[key]=revision;state_->completed.erase(key);state_->tasks.insert_or_assign(key,State::Task{revision,std::move(work)});}
     state_->ready.notify_one();
 }
-bool SentenceWorker::busy() const {std::lock_guard<std::mutex> lock(state_->mutex);return state_->running || !state_->tasks.empty() || !state_->completed.empty();}
+bool SentenceWorker::submitConfirmed(std::function<void()> work) {
+    {std::lock_guard<std::mutex> lock(state_->mutex);
+     if(state_->closed || state_->confirmed.size()>=256)return false;
+     state_->confirmed.push_back(std::move(work));}
+    state_->ready.notify_one();return true;
+}
+bool SentenceWorker::busy() const {std::lock_guard<std::mutex> lock(state_->mutex);return state_->running || !state_->tasks.empty() || !state_->completed.empty() || !state_->confirmed.empty() || !state_->confirmationResults.empty();}
 void SentenceWorker::cancel(std::uint64_t key) {
     std::lock_guard<std::mutex> lock(state_->mutex);state_->tasks.erase(key);state_->latest.erase(key);state_->completed.erase(key);
     auto& order=state_->order;order.erase(std::remove(order.begin(),order.end(),key),order.end());
 }
 std::vector<SentenceCompletion> SentenceWorker::take() {
     std::lock_guard<std::mutex> lock(state_->mutex);std::vector<SentenceCompletion> results;
-    for(auto& item:state_->completed)results.push_back(std::move(item.second));state_->completed.clear();return results;
+    for(auto& item:state_->completed)results.push_back(std::move(item.second));state_->completed.clear();
+    for(auto& item:state_->confirmationResults)results.push_back(std::move(item));state_->confirmationResults.clear();return results;
 }
 DWORD WINAPI SentenceWorker::run(void* parameter) {
     auto launch=static_cast<Launch*>(parameter);HMODULE module=launch->module;
     {
         auto state=std::move(launch->state);delete launch;
         for(;;) {
-            std::uint64_t key=0;State::Task task;
-            {std::unique_lock<std::mutex> lock(state->mutex);state->ready.wait(lock,[&]{return state->closed || !state->order.empty();});
-             if(state->closed)break;key=state->order.front();state->order.pop_front();
-             auto found=state->tasks.find(key);if(found==state->tasks.end())continue;task=std::move(found->second);state->tasks.erase(found);state->running=true;}
+            std::uint64_t key=0;State::Task task;std::function<void()> confirmed;
+            {std::unique_lock<std::mutex> lock(state->mutex);state->ready.wait(lock,[&]{return state->closed || !state->order.empty() || !state->confirmed.empty();});
+             if(!state->confirmed.empty()){confirmed=std::move(state->confirmed.front());state->confirmed.pop_front();state->running=true;}
+             else {
+                if(state->closed)break;key=state->order.front();state->order.pop_front();
+                auto found=state->tasks.find(key);if(found==state->tasks.end())continue;task=std::move(found->second);state->tasks.erase(found);state->running=true;
+             }}
             SentenceCompletion result;
+            if(confirmed) {
+                try{confirmed();}catch(const std::exception& e){result.error=e.what();}catch(...){result.error="Learning persistence failed";}
+                result.key=UINT64_MAX;
+                {std::lock_guard<std::mutex> lock(state->mutex);state->running=false;
+                 if(!state->closed && !result.error.empty())state->confirmationResults.push_back(std::move(result));}
+                continue;
+            }
             try{result=task.work();}catch(const std::exception& e){result.error=e.what();}catch(...){result.error="Sentence worker failed";}
             result.key=key;result.revision=task.revision;
             {std::lock_guard<std::mutex> lock(state->mutex);state->running=false;auto found=state->latest.find(key);

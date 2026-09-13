@@ -349,6 +349,17 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
         }
     }
     context->engine=std::move(next); ++context->revision;
+    // All document text operations above succeeded. Preview, failed edit
+    // sessions, cancellation, and merely generating a commit cannot enter here.
+    if(!secure_ && sentenceSettings_.selfLearning && sentenceLearningStore_ && sentenceWorker_ &&
+       !result.commit.empty() && !result.learning.empty()) {
+        auto store=sentenceLearningStore_;auto events=std::move(result.learning);
+        events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& e){return e.mode!=sentenceLearningMode_;}),events.end());
+        for(auto& e:events)e.time=learningNow();
+        if(!events.empty() && !sentenceWorker_->submitConfirmed([store,events=std::move(events)] {store->confirm(events);}))
+            report("Learning write queue full; input was committed without learning");
+        if(sentenceTimer_)sentenceTimer_->schedule(10);
+    }
     queueSentence(context);
     publishMode(context);
     if(result.manualTimerMs>=0 && active_ && !secure_) {

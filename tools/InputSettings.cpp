@@ -38,7 +38,7 @@ constexpr int MaxCode=200,PageSize=201,Save=202,Cancel=203,Notice=204,PageKeys=2
 struct StyleFlag {const char16_t* key;bool tiger::CandidateStyle::*member;};
 const StyleFlag styleFlags[]={{u"竖排候选",&tiger::CandidateStyle::vertical},{u"显示候选序号",&tiger::CandidateStyle::showIndex},{u"候选窗显示编码",&tiger::CandidateStyle::showCode},{u"隐藏候选",&tiger::CandidateStyle::hideCandidates}};
 constexpr int CandidateDelay=218,AnnotationDelay=219,CodeMask=220;
-constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405;
+constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405,SentenceLearning=406;
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
 struct Dialog {
@@ -273,6 +273,8 @@ struct Dialog {
         control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,18,292,567,30);
         SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
         control(0,L"STATIC",L"直接填写汉字，无需分隔；这些字不受上方的最优码限制。",0,18,332,580,28,true);
+        control(SentenceLearning,L"BUTTON",L"Tab 锁重上屏后自学习（仅本方案、本地保存）",BS_AUTOCHECKBOX|WS_TABSTOP,18,372,580,28);
+        SendMessageW(item(SentenceLearning),BM_SETCHECK,initialSentence.selfLearning?BST_CHECKED:BST_UNCHECKED,0);
         buildingPage=4;
         loadDonation();
         control(0,L"STATIC",L"感谢你对虎娘的支持",SS_CENTER,18,8,580,25);
@@ -346,6 +348,7 @@ struct Dialog {
         if(recentValue!=hotkey(initial.recentSchemaShortcut))changes.emplace_back(u"切换最近码表快捷键",shortcut(RecentShortcut));
         for(auto entry:{std::make_pair(SentenceEnabled,std::make_pair(u"自动启用整句模式",initialSentence.autoEnableBySchema)),
                         std::make_pair(SentenceAuto,std::make_pair(u"整句自动提前上屏",initialSentence.autoCommit)),
+                        std::make_pair(SentenceLearning,std::make_pair(u"整句Tab自学习",initialSentence.selfLearning)),
                         std::make_pair(SentenceDuplicate,std::make_pair(u"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters))}) {
             const bool value=SendMessageW(item(entry.first),BM_GETCHECK,0,0)==BST_CHECKED;
             if(value!=entry.second.second)changes.emplace_back(entry.second.first,value?u"是":u"否");

@@ -24,6 +24,7 @@ public:
     std::optional<std::u16string> appendAutomatic(char16_t code,bool enabled,int minimumRetained,
         const SentencePathQueries& queries);
     void resetAutomaticState();
+    std::vector<SentenceLearningEvent> takeLearning();
     void resetEmptyCodePending();
     void backspace();
     void clear();
@@ -54,6 +55,10 @@ public:
     bool autoCommitSuspended() const {return suspended_;}
 private:
     void edited();
+    void captureLearning(int index);
+    std::vector<SentenceLearningEvent> learningThrough(std::u16string_view text,int rawEnd);
+    std::optional<SentenceCandidate> learningBaseline_;
+    std::vector<SentenceLearningEvent> pendingLearning_,readyLearning_;
     std::u16string applyPrefix(std::u16string_view text,int rawLength);
     bool matches(const SentenceDecodeTicket& ticket) const;
     std::uint64_t identity_=0,generation_=0,resources_=0,appliedGeneration_=0,resultResources_=0;

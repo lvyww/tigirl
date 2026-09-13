@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "LexiconOrder.h"
+#include "LearningFileExclusion.h"
 #include "OrdinalCase.h"
 #include <algorithm>
 #include <memory>
@@ -21,7 +22,8 @@ std::vector<std::filesystem::path> enumerateLexiconFiles(const std::filesystem::
     struct FindGuard {HANDLE value;~FindGuard(){FindClose(value);}} guard{handle};
     do {
         if(data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) continue;
-        result.push_back(root/std::filesystem::path(data.cFileName));
+        auto file=root/std::filesystem::path(data.cFileName);
+        if(!isLearningFile(file.filename().u16string()))result.push_back(std::move(file));
     } while(FindNextFileW(handle,&data));
     auto error=GetLastError();
     if(error!=ERROR_NO_MORE_FILES) throw std::system_error(static_cast<int>(error),std::system_category(),"Enumerate table directory");
