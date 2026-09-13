@@ -69,6 +69,10 @@ jobs:
           Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           $arch = if ($env:TIGIRL_PLATFORM -eq 'Win32') { 'x86' } else { 'x64' }
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=$arch -host_arch=x64"
+          python tests/test_learning_maintenance.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/sentence_learning_test.py --cxx cl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/run_core_tests.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_layout_test.py --negative-control
@@ -110,6 +114,11 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
       - run: python tests/candidate_orientation_test.py --cxx clang++ --sanitize
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - run: python tests/test_learning_maintenance.py
+      - run: python tests/sentence_learning_test.py --cxx clang++ --sanitize
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
