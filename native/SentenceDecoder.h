@@ -7,6 +7,8 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <atomic>
+#include <exception>
 namespace tiger {
 struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
@@ -39,9 +41,21 @@ struct SentenceEarlyCommitEvidence {
     double proposalShare=0;
     std::map<std::u16string,int> rawLengths;
 };
+struct SentenceDecodeCancelled : std::exception {
+    const char* what() const noexcept override {return "Sentence decode superseded";}
+};
+struct SentenceDecoderMemory {
+    std::size_t positions=0,states=0,stateCapacity=0,stateBytes=0;
+};
 struct SentenceDecodeResult {
     std::u16string rawCode;
     std::vector<SentenceCandidate> candidates;
+    // Menu truncation must never manufacture confidence. This immutable pool
+    // contains all retained completed candidates (before the display limit).
+    std::shared_ptr<const std::vector<SentenceCandidate>> confidenceCandidates;
+    const std::vector<SentenceCandidate>& confidencePool() const {
+        return confidenceCandidates?*confidenceCandidates:candidates;
+    }
     int expandedStates=0;
     bool learningAffected=false;
     std::u16string learningMode;
@@ -69,8 +83,13 @@ public:
     SentenceDecoder& operator=(const SentenceDecoder&)=delete;
     SentenceDecodeResult decode(std::u16string_view raw,int candidateLimit=20,
         bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={},
-        std::shared_ptr<const SentenceLockedPrefix> lockedPrefix={});
+        std::shared_ptr<const SentenceLockedPrefix> lockedPrefix={},
+        std::shared_ptr<const std::atomic<bool>> cancellation={});
     void resetDecodeCache();
+    // Drop only old position buckets, not competing frontier states, their
+    // scores/text/boundaries, or committed raw coordinates. Earlier edits rebuild.
+    void retainCommittedHistory(std::u16string_view raw,int committedRaw);
+    SentenceDecoderMemory memoryStatus() const;
     void setLearning(std::shared_ptr<const SentenceLearningSnapshot> snapshot,std::u16string mode);
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
         std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
@@ -81,6 +100,8 @@ public:
 private:
     struct Lattice;
     struct Cache;
+    void checkCancelled() const;
+    const std::atomic<bool>* cancellation_=nullptr; // guarded by decodeMutex_
     int expand(std::u16string_view raw,Lattice& lattice,int from,int minimumEnd=-1) const;
     SentenceDecodeResult emit(std::u16string_view raw,Lattice& lattice,int limit,int expanded,
         bool evidence,std::u16string_view required) const;
@@ -89,7 +110,8 @@ private:
     std::unique_ptr<Cache> cache_;
     mutable std::mutex decodeMutex_;
     double transition(Lattice& lattice,std::u16string_view previous2,std::u16string_view previous1,std::u16string_view target) const;
-    double isolation(std::u16string_view text) const;
+    bool observed(Lattice& lattice,std::u16string_view previous,std::u16string_view target) const;
+    double isolation(Lattice& lattice,std::u16string_view text) const;
     std::shared_ptr<const SentenceLexicon> lexicon_;
     std::shared_ptr<const SentenceLanguageModel> model_;
     const SentenceNgram* ngram_=nullptr;

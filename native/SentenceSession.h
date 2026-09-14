@@ -15,6 +15,7 @@ struct SentenceDecodeTicket {
     std::uint64_t session=0,generation=0,resources=0;
     std::u16string raw,requiredPrefix;
     std::shared_ptr<const SentenceLockedPrefix> lockedPrefix;
+    int committedRaw=0;
 };
 class SentenceSession {
 public:

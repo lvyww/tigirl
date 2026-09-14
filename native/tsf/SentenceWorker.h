@@ -29,7 +29,8 @@ class SentenceWorker {
 public:
     SentenceWorker();
     ~SentenceWorker();
-    void submit(std::uint64_t key,std::uint64_t revision,std::function<SentenceCompletion()> work);
+    void submit(std::uint64_t key,std::uint64_t revision,std::function<SentenceCompletion()> work,
+        std::shared_ptr<std::atomic<bool>> cancellation={});
     void cancel(std::uint64_t key);
     // Confirmed document writes are FIFO, not latest-wins. Accepted writes drain
     // before the retained worker DLL is released, even when the service closes.

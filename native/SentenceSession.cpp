@@ -51,11 +51,11 @@ void SentenceSession::changeResources(std::uint64_t resources) {
 }
 std::optional<SentenceDecodeTicket> SentenceSession::request() const {
     if(!active())return {};
-    return SentenceDecodeTicket{identity_,generation_,resources_,raw_,committed_,activeLock()};
+    return SentenceDecodeTicket{identity_,generation_,resources_,raw_,committed_,activeLock(),committedRaw_};
 }
 bool SentenceSession::matches(const SentenceDecodeTicket& ticket) const {
     return active() && ticket.session==identity_ && ticket.generation==generation_ && ticket.resources==resources_ &&
-        ticket.raw==raw_ && ticket.requiredPrefix==committed_ && ticket.lockedPrefix==activeLock();
+        ticket.raw==raw_ && ticket.requiredPrefix==committed_ && ticket.lockedPrefix==activeLock() && ticket.committedRaw==committedRaw_;
 }
 bool SentenceSession::current() const {
     return active() && hasResult_ && appliedGeneration_==generation_ && resultResources_==resources_ && result_->rawCode==raw_;
@@ -173,10 +173,13 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
         std::vector<const SentenceCandidate*> eligible;
         // Legal duplicate singles must compete in both uniqueness and confidence,
         // even while a whole-input candidate list is ordered by lexicon rank.
-        for(const auto& c:result_->candidates)
-            if(explicitSelection || c.maxLexiconRank<=1 || c.eligibleDuplicateSinglePath)eligible.push_back(&c);
-        if(!eligible.empty()) {
-            const auto& top=*eligible.front();bool strong=eligible.size()==1;
+        for(const auto& c:result_->confidencePool())
+            if(starts(c.text,committed_) && (explicitSelection || c.maxLexiconRank<=1 || c.eligibleDuplicateSinglePath))eligible.push_back(&c);
+        // Hidden candidates contribute probability, but cannot be selected by
+        // the empty-code shortcut when the current menu exposes no such text.
+        if(!eligible.empty() && std::any_of(result_->candidates.begin(),result_->candidates.end(),
+            [&](const auto& c){return c.text==eligible.front()->text;})) {
+            const auto& top=*eligible.front();bool strong=eligible.size()==1 && !result_->earlyCommitEvidence.confidenceTruncated;
             const auto& evidence=result_->earlyCommitEvidence;
             if(!strong && !evidence.confidenceTruncated && !evidence.prefixes.empty() &&
                top.text==result_->candidates.front().text) {

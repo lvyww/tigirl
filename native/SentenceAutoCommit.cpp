@@ -1,17 +1,12 @@
 #include "SentenceAutoCommit.h"
 #include "Grapheme.h"
 #include <algorithm>
+#include <map>
+#include <set>
 namespace tiger {
 namespace {
 bool starts(std::u16string_view text,std::u16string_view prefix){return text.size()>=prefix.size() && text.substr(0,prefix.size())==prefix;}
-const SentencePrefixEvidence* find(const std::vector<SentencePrefixEvidence>& list,std::u16string_view text,int raw) {
-    for(const auto& p:list)if(p.text==text && p.rawLength==raw)return &p;return nullptr;
-}
-bool visible(const SentencePrefixEvidence& prefix,const std::vector<SentenceCandidate>& candidates) {
-    for(const auto& c:candidates)if(!c.text.empty() && starts(c.text,prefix.text))
-        for(auto b=c.boundary;b;b=b->previous)if(b->rawLength==prefix.rawLength && b->textLength>=0 && static_cast<std::size_t>(b->textLength)==prefix.text.size())return true;
-    return false;
-}
+
 }
 std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceAutoCommitInput& in,const SentenceDecodeResult& result) {
     const auto& raw=result.rawCode;const auto& evidence=result.earlyCommitEvidence;
@@ -23,21 +18,31 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
     if(!lastSeen_.empty() && !(raw.size()==lastSeen_.size()+1 && starts(raw,lastSeen_)))trackers_.clear();
     lastSeen_=raw;
     const auto* accepted=!result.candidates.empty() && result.candidates.front().supplementScore>0?&result.candidates.front().text:nullptr;
+    using Key=std::pair<std::u16string_view,int>;
+    std::map<Key,const SentencePrefixEvidence*> evidenceIndex;
+    for(const auto& p:evidence.prefixes)evidenceIndex.emplace(Key{p.text,p.rawLength},&p);
+    std::map<Key,const Tracker*> trackerIndex;
+    for(const auto& t:trackers_)trackerIndex.emplace(Key{t.text,t.rawLength},&t);
+    std::set<Key> visibleBoundaries;
+    for(const auto& c:result.candidates)if(!c.text.empty())for(auto b=c.boundary;b;b=b->previous)
+        if(b->textLength>=0 && static_cast<std::size_t>(b->textLength)<=c.text.size())
+            visibleBoundaries.emplace(std::u16string_view(c.text).substr(0,b->textLength),b->rawLength);
     std::vector<SentencePrefixEvidence> qualifying;
+    std::map<Key,std::size_t> qualifyingIndex;
     for(const auto& p:evidence.prefixes) {
         if(p.text.empty() || !p.boundaryClosed || p.share<.995 || p.rawLength<=in.committedRaw ||
            p.text.size()<=in.committedText.size() || !starts(p.text,in.committedText) ||
-           (accepted && !starts(*accepted,p.text)) || (!evidence.mergedIncompleteTail && !visible(p,result.candidates)))continue;
-        auto it=std::find_if(qualifying.begin(),qualifying.end(),[&](const auto& q){return p.text==q.text && p.rawLength==q.rawLength;});
-        if(it==qualifying.end())qualifying.push_back(p);else *it=p;
+           (accepted && !starts(*accepted,p.text)) || (!evidence.mergedIncompleteTail && !visibleBoundaries.count(Key{p.text,p.rawLength})))continue;
+        auto [it,inserted]=qualifyingIndex.emplace(Key{p.text,p.rawLength},qualifying.size());
+        if(inserted)qualifying.push_back(p);else qualifying[it->second]=p;
     }
     const bool retain=(evidence.mergedIncompleteTail && !options_.countMergedTail) ||
         (qualifying.empty() && (evidence.neutralLowConfidence || evidence.mergedIncompleteTail));
     std::vector<Tracker> next;
     if(retain) {
         for(auto t:trackers_) {
-            const auto* self=find(evidence.prefixes,t.text,t.rawLength);
-            if(!self)continue;
+            auto found=evidenceIndex.find(Key{t.text,t.rawLength});if(found==evidenceIndex.end())continue;
+            const auto* self=found->second;
             bool contradicted=false;
             for(const auto& p:evidence.prefixes) {
                 if(p.text.empty() || p.text==t.text || starts(p.text,t.text) || starts(t.text,p.text))continue;
@@ -49,8 +54,8 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
         }
     } else {
         for(const auto& p:qualifying) {
-            auto old=std::find_if(trackers_.begin(),trackers_.end(),[&](const auto& t){return t.text==p.text && t.rawLength==p.rawLength;});
-            Tracker t=old==trackers_.end()?Tracker{p.text,p.rawLength}:*old;
+            auto old=trackerIndex.find(Key{p.text,p.rawLength});
+            Tracker t=old==trackerIndex.end()?Tracker{p.text,p.rawLength}:*old->second;
             t.evidence=std::min(std::max(1,options_.requiredEvidence),t.evidence+1);
             t.strong=p.share>=.99999?std::min(std::max(1,options_.requiredStrong),t.strong+1):0;
             t.gap=0;t.share=p.share;next.push_back(std::move(t));

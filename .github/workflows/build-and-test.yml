@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
@@ -75,6 +76,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/run_core_tests.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/sentence_review_test.py --cxx cl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/SentenceWorkerProbe.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "./build/tests/$env:TIGIRL_PLATFORM/sentence_worker_probe.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_layout_test.py --negative-control
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_ui_presentation_test.py --negative-control
@@ -102,6 +109,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
@@ -122,3 +130,25 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - name: Review regressions including mapped model, history and journal
+        run: python tests/sentence_review_test.py --cxx clang++ --sanitize
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - name: Functional fault injection
+        run: python tests/sentence_review_negative.py --cxx g++
+      - name: Independent pre-review source comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/tigirl-pre-review"
+          mkdir -p "$baseline"
+          git archive 4f88a4eeffd07fa0cf26e5e26d04d2b760ab6c5b | tar -x -C "$baseline"
+          python tests/compare_sentence_revisions.py --baseline "$baseline" --report sentence-equivalence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: sentence-review-equivalence
+          path: sentence-equivalence*
+          retention-days: 7
+          if-no-files-found: warn

@@ -31,6 +31,7 @@ private:
     std::filesystem::file_time_type stamp_{};
     std::int64_t lastRead_=0;
     bool missing_=false;
+    SentenceLearningAccumulator accumulator_;
     struct FileLock {
 #ifdef _WIN32
         HANDLE file=INVALID_HANDLE_VALUE;OVERLAPPED overlap{};
@@ -78,9 +79,20 @@ private:
         std::string result(static_cast<std::size_t>(n),'\0');in.read(result.data(),static_cast<std::streamsize>(n));
         if(static_cast<std::uintmax_t>(in.gcount())!=n)throw std::runtime_error("Short learning journal read");return result;
     }
-    struct Journal {std::vector<SentenceLearningEvent> events;std::unordered_set<std::string> seen;};
-    static Journal parse(std::string_view data) {
-        Journal state;std::unordered_set<std::string> removed;
+    struct Journal {std::vector<SentenceLearningEvent> events;std::unordered_set<std::string> seen,removed;};
+    std::string parsedBytes_;
+    std::shared_ptr<const Journal> parsedJournal_;
+    std::shared_ptr<const Journal> journal(const std::string& data) {
+        // Verify actual bytes, not just mtime/size: replacement and cross-process
+        // edits cannot reuse stale replay state. Only parsing is skipped here.
+        if(parsedJournal_ && data==parsedBytes_)return parsedJournal_;
+        auto parsed=std::make_shared<Journal>(parse(data));
+        if(data.size()<=1024*1024){parsedBytes_=data;parsedJournal_=parsed;}
+        else {std::string().swap(parsedBytes_);parsedJournal_.reset();}
+        return parsed;
+    }
+    static Journal parse(std::string_view data,bool limitWindow=true) {
+        Journal state;auto& removed=state.removed;
         while(!data.empty()) {
             auto end=data.find('\n');if(end==data.npos)break;auto line=data.substr(0,end);data.remove_prefix(end+1);
             if(line.size()>8192)continue;auto crc=line.rfind('\t');if(crc==line.npos)continue;
@@ -105,10 +117,10 @@ private:
         }
         auto& events=state.events;
         events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& e){return removed.count(e.id);}),events.end());
-        if(events.size()>maximumEvents)events.erase(events.begin(),events.end()-maximumEvents);
+        if(limitWindow && events.size()>maximumEvents)events.erase(events.begin(),events.end()-maximumEvents);
         return state;
     }
-    void appendBytes(std::string data,std::string_view addition) {
+    void appendBytes(std::string data,std::string_view addition,const Journal* appended=nullptr) {
         // Recover a torn tail under the SAME cross-process lock as the append.
         if(!data.empty() && data.back()!='\n') {
             auto end=data.rfind('\n');auto length=end==data.npos?0:end+1;
@@ -129,14 +141,25 @@ private:
         ::close(file);if(flushed<0)throw std::runtime_error("Durable learning flush");
 #endif
         // Failed or torn writes never enter the in-memory ranking snapshot.
-        publish(parse(data+std::string(addition)).events);
+        data+=addition;
+        if(appended) {
+            auto next=std::make_shared<Journal>(*appended);
+            // Parse only new E records, using exactly the journal validator. This
+            // retains malformed-field rejection and unknown-target tombstones.
+            const auto delta=parse(addition,false);next->seen.insert(delta.seen.begin(),delta.seen.end());
+            for(const auto& e:delta.events)if(!next->removed.count(e.id))next->events.push_back(e);
+            if(next->events.size()>maximumEvents)next->events.erase(next->events.begin(),next->events.end()-maximumEvents);
+            if(data.size()<=1024*1024){parsedBytes_=std::move(data);parsedJournal_=next;}
+            else {std::string().swap(parsedBytes_);parsedJournal_.reset();}
+            publish(next->events);
+        }else publish(journal(data)->events);
     }
     void publish(const std::vector<SentenceLearningEvent>& events) {
         // Pointer identity is the decoder's cache revision. Reuse an unchanged
         // empty snapshot (missing, empty, cleared or entirely invalid journal).
         const auto current=snapshot();
         if(!events.empty() || !current->empty()) {
-            auto next=SentenceLearningSnapshot::build(events);
+            auto next=accumulator_.update(events);
             if(!current->empty() || !next->empty())std::atomic_store(&snapshot_,std::move(next));
         }
         missing_=!std::filesystem::exists(path_);
@@ -153,19 +176,19 @@ public:
         if(!std::filesystem::exists(path_)){if(!missing_)publish({});return;}
         auto size=std::filesystem::file_size(path_);auto stamp=std::filesystem::last_write_time(path_);
         if(!missing_ && size==size_ && stamp==stamp_ && learningNow()-lastRead_<60)return;
-        FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));publish(parse(bytes()).events);
+        FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));publish(journal(bytes())->events);
     }
     void confirm(const std::vector<SentenceLearningEvent>& events) {
         if(events.empty())return;std::lock_guard<std::mutex> local(mutex_);
         std::filesystem::create_directories(path_.parent_path());
-        FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto state=parse(data);std::string addition;
+        FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto original=journal(data);auto state=*original;std::string addition;
         for(const auto& e:events) {
             if(e.id.empty()||e.id.size()>128||e.id.find_first_of("\t\r\n")!=std::string::npos || state.seen.count(e.id) || e.mode.empty() || e.mode.size()>512 ||
                e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||(!e.context.empty()&&!learningCharacters(e.context))||learningCharacters(e.context)>2)continue;
             state.seen.insert(e.id);
             addition+=seal("TCL1\tE\t"+e.id+'\t'+std::to_string(e.time)+'\t'+hex(e.mode)+'\t'+hex(e.code)+'\t'+hex(e.text)+'\t'+hex(e.context));
         }
-        if(addition.empty()){publish(state.events);return;}appendBytes(std::move(data),addition);
+        if(addition.empty()){publish(state.events);return;}appendBytes(std::move(data),addition,original.get());
     }
     // Maintenance only. Undo records remove precisely one event, then replay
     // competitors; they do not delete a whole phrase or alter manual user words.
