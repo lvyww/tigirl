@@ -80,14 +80,52 @@ bool SentenceLexicon::hasAllowed(const Dictionary::Entry& entry) const {
     return false;
 }
 std::vector<SentenceLexiconCandidate> SentenceLexicon::candidates(std::u16string_view code) const {
-    const auto key=ordinalCaseKey(code);const auto entry=dictionary_->find(Section::Main,key);
-    std::vector<SentenceLexiconCandidate> result;
+    return *candidateView(code);
+}
+std::shared_ptr<const std::vector<SentenceLexiconCandidate>> SentenceLexicon::candidateView(std::u16string_view code) const {
+    const auto key=ordinalCaseKey(code);
+    {std::lock_guard<std::mutex> lock(metadataMutex_);auto found=metadata_.find(key);if(found!=metadata_.end())return found->second.values;}
+    const auto entry=dictionary_->find(Section::Main,key);
+    struct Storage {std::shared_ptr<const Dictionary> owner;std::vector<SentenceLexiconCandidate> values;};
+    auto storage=std::make_shared<Storage>();storage->owner=dictionary_;
+    auto result=std::shared_ptr<std::vector<SentenceLexiconCandidate>>(storage,&storage->values);
+    result->reserve(std::min<std::uint32_t>(entry.count,128));
+    std::size_t bytes=sizeof(CachedCandidates)+128+key.size()*sizeof(char16_t)*2;
     for(std::uint32_t i=0;i<entry.count;++i){const auto text=dictionary_->value(entry,i);if(!allowed(key,text))continue;
-        result.push_back({text,i+1,std::log(i+1.0),wordTextElements(text),
-            dictionary_->value(dictionary_->find(Section::ConstructCode,text),0)==key});}
+        result->push_back({text,i+1,std::log(i+1.0),wordTextElements(text),
+            dictionary_->value(dictionary_->find(Section::ConstructCode,text),0)==key});
+        const auto& elements=result->back().textElements;
+        bytes+=elements.capacity()*sizeof(std::u16string);
+        for(const auto& element:elements)bytes+=(element.capacity()+1)*sizeof(char16_t);
+    }
+    bytes+=result->capacity()*sizeof(SentenceLexiconCandidate);
+    constexpr std::size_t budget=1024*1024;
+    if(bytes<=budget) {
+        std::lock_guard<std::mutex> lock(metadataMutex_);
+        auto found=metadata_.find(key);if(found!=metadata_.end())return found->second.values;
+        while(!metadataOrder_.empty() && (metadata_.size()>=256 || metadataBytes_+bytes>budget)) {
+            auto old=metadata_.find(metadataOrder_.front());metadataBytes_-=old->second.bytes;
+            metadata_.erase(old);metadataOrder_.pop_front();
+        }
+        metadata_.emplace(key,CachedCandidates{result,bytes});metadataOrder_.push_back(key);metadataBytes_+=bytes;
+    }
     return result;
 }
 bool SentenceLexicon::isProperCodePrefix(std::u16string_view code) const {
+    if(code.empty())return false;const auto key=ordinalCaseKey(code);
+    {std::lock_guard<std::mutex> lock(metadataMutex_);auto found=prefixes_.find(key);if(found!=prefixes_.end())return found->second;}
+    const bool value=properPrefixUncached(code);
+    // Long custom codes do not create an unbounded side cache.
+    if(key.size()<=128) {
+        std::lock_guard<std::mutex> lock(metadataMutex_);
+        if(!prefixes_.count(key)) {
+            if(prefixes_.size()>=256){prefixes_.erase(prefixOrder_.front());prefixOrder_.pop_front();}
+            prefixes_.emplace(key,value);prefixOrder_.push_back(key);
+        }
+    }
+    return value;
+}
+bool SentenceLexicon::properPrefixUncached(std::u16string_view code) const {
     if(code.empty())return false;const auto key=ordinalCaseKey(code);
     std::uint32_t low=0,high=dictionary_->count(Section::Main);
     while(low<high){const auto mid=low+(high-low)/2;if(dictionary_->at(Section::Main,mid).key<=key)low=mid+1;else high=mid;}

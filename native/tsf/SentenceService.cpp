@@ -71,14 +71,17 @@ void Service::queueSentence(const std::shared_ptr<Context>& context) {
     context->sentenceQueuedIdentity=request->session;context->sentenceQueuedGeneration=request->generation;
     auto decoder=context->sentenceDecoder;auto ticket=*request;const bool evidence=sentenceSettings_.autoCommit;
     auto learning=sentenceLearningStore_;auto mode=sentenceLearningMode_;
-    sentenceWorker_->submit(ticket.session,ticket.generation,[decoder,ticket,evidence,learning,mode] {
+    auto cancellation=std::make_shared<std::atomic<bool>>(false);
+    sentenceWorker_->submit(ticket.session,ticket.generation,[decoder,ticket,evidence,learning,mode,cancellation] {
         SentenceCompletion result;result.ticket=ticket;
         if(learning)try{learning->refresh();}catch(const std::exception& e){result.error=e.what();}
         decoder->setLearning(learning?learning->snapshot():nullptr,mode);
-        try{result.result=decoder->decode(ticket.raw,20,evidence,ticket.requiredPrefix,ticket.lockedPrefix);}
+        try{result.result=decoder->decode(ticket.raw,20,evidence,ticket.requiredPrefix,ticket.lockedPrefix,cancellation);
+            decoder->retainCommittedHistory(ticket.raw,ticket.committedRaw);}
+        catch(const SentenceDecodeCancelled&){return result;}
         catch(const std::exception& e){result.error=e.what();}
         return result;
-    });
+    },cancellation);
     if(sentenceTimer_)sentenceTimer_->schedule(10);
 }
 void Service::completeSentenceNow(const std::shared_ptr<Context>& context,Engine& next) {
@@ -87,9 +90,14 @@ void Service::completeSentenceNow(const std::shared_ptr<Context>& context,Engine
         context->sentenceDecoder=sentenceResources_->createDecoder();context->sentenceResourceRevision=sentenceLoadedRevision_;
         context->sentenceQueuedIdentity=0;
     }
+    // A synchronous selection must not wait for obsolete long-sentence work.
+    // Confirmed learning writes use their separate FIFO and are never cancelled.
+    if(sentenceWorker_)sentenceWorker_->cancel(ticket->session);
+    context->sentenceQueuedIdentity=0;
     SentenceDecodeResult result;
     context->sentenceDecoder->setLearning(sentenceLearningStore_?sentenceLearningStore_->snapshot():nullptr,sentenceLearningMode_);
-    try{result=context->sentenceDecoder->decode(ticket->raw,20,sentenceSettings_.autoCommit,ticket->requiredPrefix,ticket->lockedPrefix);}
+    try{result=context->sentenceDecoder->decode(ticket->raw,20,sentenceSettings_.autoCommit,ticket->requiredPrefix,ticket->lockedPrefix);
+        context->sentenceDecoder->retainCommittedHistory(ticket->raw,ticket->committedRaw);}
     catch(const std::exception& e){report(e.what());}
     next.applySentenceResult(*ticket,std::move(result));
 }

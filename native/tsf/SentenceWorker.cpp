@@ -7,13 +7,14 @@
 #include <stdexcept>
 namespace tiger::tsf {
 struct SentenceWorker::State {
-    struct Task {std::uint64_t revision;std::function<SentenceCompletion()> work;};
+    struct Task {std::uint64_t revision;std::function<SentenceCompletion()> work;std::shared_ptr<std::atomic<bool>> cancellation;};
     std::mutex mutex;std::condition_variable ready;bool closed=false,running=false;
     std::map<std::uint64_t,Task> tasks;
     std::deque<std::uint64_t> order;
     std::deque<std::function<void()>> confirmed;
     std::vector<SentenceCompletion> confirmationResults;
     std::map<std::uint64_t,std::uint64_t> latest;
+    std::map<std::uint64_t,std::shared_ptr<std::atomic<bool>>> cancellation;
     std::map<std::uint64_t,SentenceCompletion> completed;
 };
 struct SentenceWorker::Launch {std::shared_ptr<State> state;HMODULE module;};
@@ -24,13 +25,15 @@ SentenceWorker::SentenceWorker():state_(std::make_shared<State>()) {
     if(!thread){delete launch;FreeLibrary(module);throw std::runtime_error("Start sentence worker");}CloseHandle(thread);
 }
 SentenceWorker::~SentenceWorker() {
-    {std::lock_guard<std::mutex> lock(state_->mutex);state_->closed=true;state_->tasks.clear();state_->order.clear();state_->completed.clear();state_->latest.clear();}
+    {std::lock_guard<std::mutex> lock(state_->mutex);state_->closed=true;for(auto& p:state_->cancellation)if(p.second)p.second->store(true,std::memory_order_relaxed);state_->cancellation.clear();state_->tasks.clear();state_->order.clear();state_->completed.clear();state_->latest.clear();}
     state_->ready.notify_one();
 }
-void SentenceWorker::submit(std::uint64_t key,std::uint64_t revision,std::function<SentenceCompletion()> work) {
+void SentenceWorker::submit(std::uint64_t key,std::uint64_t revision,std::function<SentenceCompletion()> work,std::shared_ptr<std::atomic<bool>> cancellation) {
     {std::lock_guard<std::mutex> lock(state_->mutex);if(state_->closed)return;
+     auto old=state_->cancellation.find(key);if(old!=state_->cancellation.end() && old->second)old->second->store(true,std::memory_order_relaxed);
+     state_->cancellation[key]=std::move(cancellation);
      if(!state_->tasks.count(key))state_->order.push_back(key);
-     state_->latest[key]=revision;state_->completed.erase(key);state_->tasks.insert_or_assign(key,State::Task{revision,std::move(work)});}
+     state_->latest[key]=revision;state_->completed.erase(key);state_->tasks.insert_or_assign(key,State::Task{revision,std::move(work),state_->cancellation[key]});}
     state_->ready.notify_one();
 }
 bool SentenceWorker::submitConfirmed(std::function<void()> work) {
@@ -41,7 +44,9 @@ bool SentenceWorker::submitConfirmed(std::function<void()> work) {
 }
 bool SentenceWorker::busy() const {std::lock_guard<std::mutex> lock(state_->mutex);return state_->running || !state_->tasks.empty() || !state_->completed.empty() || !state_->confirmed.empty() || !state_->confirmationResults.empty();}
 void SentenceWorker::cancel(std::uint64_t key) {
-    std::lock_guard<std::mutex> lock(state_->mutex);state_->tasks.erase(key);state_->latest.erase(key);state_->completed.erase(key);
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    auto token=state_->cancellation.find(key);if(token!=state_->cancellation.end()){if(token->second)token->second->store(true,std::memory_order_relaxed);state_->cancellation.erase(token);}
+    state_->tasks.erase(key);state_->latest.erase(key);state_->completed.erase(key);
     auto& order=state_->order;order.erase(std::remove(order.begin(),order.end(),key),order.end());
 }
 std::vector<SentenceCompletion> SentenceWorker::take() {
@@ -72,7 +77,7 @@ DWORD WINAPI SentenceWorker::run(void* parameter) {
             try{result=task.work();}catch(const std::exception& e){result.error=e.what();}catch(...){result.error="Sentence worker failed";}
             result.key=key;result.revision=task.revision;
             {std::lock_guard<std::mutex> lock(state->mutex);state->running=false;auto found=state->latest.find(key);
-             if(!state->closed && found!=state->latest.end() && found->second==task.revision)state->completed.insert_or_assign(key,std::move(result));}
+             if(!state->closed && found!=state->latest.end() && found->second==task.revision && (!task.cancellation || !task.cancellation->load(std::memory_order_relaxed)))state->completed.insert_or_assign(key,std::move(result));}
         }
     }
     // No C++ object with DLL-defined destructors survives this point.
