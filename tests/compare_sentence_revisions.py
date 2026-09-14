@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
-import tempfile
+from work_directory import temporary_work_directory
 from sentence_review_test import SOURCES, ROOT
 
 def fixture(path):
@@ -34,8 +34,8 @@ def main():
     if not cxx:p.error('compiler unavailable')
     baseline=args.baseline.resolve();msvc=Path(cxx).name.lower() in ('cl','cl.exe')
     sources=SOURCES[1:]+(['native/LexiconOrder.cpp'] if msvc else [])
-    with tempfile.TemporaryDirectory(prefix='tigirl-revisions-') as tmp:
-        work=Path(tmp);model=work/'synthetic.bin';fixture(model);outputs={};manifest={}
+    with temporary_work_directory(prefix='tigirl-revisions-') as work:
+        model=work/'synthetic.bin';fixture(model);outputs={};manifest={}
         for name,repo in [('old',baseline),('new',ROOT)]:
             folder=work/name;folder.mkdir();exe=folder/('probe.exe' if msvc else 'probe')
             flags=['/nologo','/std:c++17','/EHsc','/utf-8','/O2',f'/I{repo/"native"}'] if msvc else ['-std=c++17','-O2','-pthread','-I',str(repo/'native')]

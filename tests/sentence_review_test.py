@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
+from work_directory import temporary_work_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ['tests/sentence_review_probe.cpp', 'native/SentenceDecoder.cpp',
@@ -28,8 +28,7 @@ def main():
     if not cxx: p.error('compiler unavailable')
     msvc = Path(cxx).name.lower() in ('cl', 'cl.exe')
     if args.sanitize and msvc: p.error('use GCC/Clang for ASan/UBSan')
-    with tempfile.TemporaryDirectory(prefix='tigirl-review-') as tmp:
-        work = Path(tmp)
+    with temporary_work_directory(prefix='tigirl-review-') as work:
         exe = work / ('review.exe' if msvc else 'review')
         flags = ['/nologo','/std:c++17','/EHsc','/utf-8','/O2',f'/I{ROOT/"native"}'] if msvc else ['-std=c++17','-O2','-pthread','-I',str(ROOT/'native')]
         if args.sanitize: flags += ['-O1','-g0','-fsanitize=address,undefined','-fno-omit-frame-pointer']

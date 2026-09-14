@@ -45,6 +45,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/test_candidate_placement_cleanup.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -Werror tests/test_sentence_review_cleanup.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/setup_resilience_policy_test.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($env:TIGIRL_PLATFORM -eq 'x64') {
@@ -115,6 +117,7 @@ jobs:
           python-version: '3.11'
       - run: python tests/test_candidate_ui_presentation_cleanup.py -v
       - run: python tests/test_candidate_placement_cleanup.py -v
+      - run: python -Werror tests/test_sentence_review_cleanup.py -v
       - run: python tests/setup_resilience_policy_test.py
       - run: python tests/bundled_schemas_test.py --verify-only
       - run: python tests/run_core_tests.py --cxx clang++ --sanitize

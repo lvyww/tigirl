@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import statistics
 import subprocess
-import tempfile
+from work_directory import temporary_work_directory
 from sentence_review_test import ROOT,SOURCES
 
 def main():
@@ -14,8 +14,8 @@ def main():
     if not cxx:p.error('compiler unavailable')
     if not 1<=a.runs<=20:p.error('--runs must be between 1 and 20')
     records=[]
-    with tempfile.TemporaryDirectory(prefix='tigirl-benchmark-') as tmp:
-        work=Path(tmp);binaries={}
+    with temporary_work_directory(prefix='tigirl-benchmark-') as work:
+        binaries={}
         for name,repo in [('old',a.baseline.resolve()),('new',ROOT)]:
             exe=work/name;flags=['-std=c++17','-O2','-pthread','-I',str(repo/'native')]
             if name=='new':flags+=['-DTIGIRL_REVIEW_NEW']

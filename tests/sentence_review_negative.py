@@ -1,13 +1,13 @@
 """Functional fault injection: prove review regressions reject broken variants.
 
-All variants live in TemporaryDirectory; never modifies the checkout. Reuses
+All variants use the shared scratch-directory helper; never modifies the checkout. Reuses
 unmodified object files, rebuilding only the deliberately mutated translation unit.
 """
 import argparse
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
+from work_directory import temporary_work_directory
 from sentence_review_test import ROOT, SOURCES
 
 def replace_once(text, old, new):
@@ -45,8 +45,8 @@ def main():
     if not cxx:p.error('compiler unavailable')
     if Path(cxx).name.lower() in ('cl','cl.exe'):p.error('negative-control runner uses GCC/Clang; normal regressions support MSVC')
     flags=['-std=c++17','-O2','-pthread','-I',str(ROOT/'native')]
-    with tempfile.TemporaryDirectory(prefix='tigirl-faults-') as tmp:
-        work=Path(tmp);objects={}
+    with temporary_work_directory(prefix='tigirl-faults-') as work:
+        objects={}
         for i,source in enumerate(SOURCES):
             obj=work/f'{i}.o';subprocess.run([cxx,*flags,'-c',str(ROOT/source),'-o',str(obj)],check=True,timeout=180);objects[source]=obj
         for name,case,source,mutate in MUTATIONS:
