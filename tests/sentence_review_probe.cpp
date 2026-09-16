@@ -42,6 +42,12 @@ struct FlatModel:SentenceLanguageModel {
     double logProbability(std::u16string_view,std::u16string_view,std::u16string_view,bool=true) const override{return 0;}
     bool hasObservedBigram(std::u16string_view,std::u16string_view) const override{return false;}
 };
+struct RankingConflictModel:SentenceLanguageModel {
+    double logProbability(std::u16string_view,std::u16string_view,std::u16string_view target,bool=true) const override {
+        return target==u"鼎"?-7.0:0.0;
+    }
+    bool hasObservedBigram(std::u16string_view,std::u16string_view) const override{return false;}
+};
 static bool boundaries(std::shared_ptr<const SentencePathBoundary> a,std::shared_ptr<const SentencePathBoundary> b) {
     while(a && b){if(a->textLength!=b->textLength || a->rawLength!=b->rawLength || a->learningScore!=b->learningScore ||
         a->codeScore!=b->codeScore || a->protectsRareCharacter!=b->protectsRareCharacter || a->codeLength!=b->codeLength)return false;
@@ -108,6 +114,26 @@ static void rankingPriors() {
     for(const auto& original:plain.candidates) {
         auto changed=std::find_if(ranked.candidates.begin(),ranked.candidates.end(),[&](const auto& value){return value.text==original.text;});
         check(changed!=ranked.candidates.end() && changed->confidenceScore==original.confidenceScore,"R1 confidence excludes code evidence");
+    }
+
+    // The old policy accumulated confidence for 甲乙 and committed it on the
+    // third generation even though canonical-code evidence displayed 鼎丁.
+    // Reproduce the conflict through the real decoder and session boundary.
+    auto conflictLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"uv",{u"乙"}},{u"cd",{u"乙"}},
+        {u"abcd",{u"鼎"}},{u"ef",{u"丁",u"丙"}},{u"efg",{u"丁",u"丙"}},{u"efgh",{u"丁",u"丙"}}});
+    auto conflictOptions=options(100);conflictOptions.canonicalCodeReward=2;
+    SentenceDecoder conflictDecoder(conflictLexicon,std::make_shared<RankingConflictModel>(),conflictOptions);
+    SentenceSession conflictSession;conflictSession.start(u"abcdef",1);
+    for(const auto* raw:{u"abcdef",u"abcdefg",u"abcdefgh"}) {
+        if(conflictSession.raw()!=raw)check(conflictSession.append(raw[std::char_traits<char16_t>::length(raw)-1]),"R1 conflict append");
+        auto result=conflictDecoder.decodeFull(raw,20,true);
+        check(!result.candidates.empty() && result.candidates.front().text==u"鼎丁","R1 final prior top is displayed");
+        const auto supported=std::find_if(result.earlyCommitEvidence.prefixes.begin(),result.earlyCommitEvidence.prefixes.end(),
+            [](const auto& prefix){return prefix.text==u"甲乙" && prefix.rawLength==4;});
+        check(supported!=result.earlyCommitEvidence.prefixes.end() && supported->share>=.995 && supported->share<.99999,
+            "R1 conflicting confidence fixture");
+        check(conflictSession.apply(*conflictSession.request(),std::move(result)),"R1 conflict result apply");
+        check(!conflictSession.tryAutoCommit(true),"R1 auto commit must follow displayed top");
     }
 
     auto rareFour=lex({{u"abcd",{u"揸"}}});auto rareBaseOptions=options();rareBaseOptions.isolationLambda=2;rareBaseOptions.isolationRankThreshold=3000;
