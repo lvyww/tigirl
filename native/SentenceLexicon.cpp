@@ -93,7 +93,8 @@ std::shared_ptr<const std::vector<SentenceLexiconCandidate>> SentenceLexicon::ca
     std::size_t bytes=sizeof(CachedCandidates)+128+key.size()*sizeof(char16_t)*2;
     for(std::uint32_t i=0;i<entry.count;++i){const auto text=dictionary_->value(entry,i);if(!allowed(key,text))continue;
         result->push_back({text,i+1,std::log(i+1.0),wordTextElements(text),
-            dictionary_->value(dictionary_->find(Section::ConstructCode,text),0)==key});
+            dictionary_->value(dictionary_->find(Section::ConstructCode,text),0)==key,
+            dictionary_->value(dictionary_->find(Section::FullCode,text),0)==key});
         const auto& elements=result->back().textElements;
         bytes+=elements.capacity()*sizeof(std::u16string);
         for(const auto& element:elements)bytes+=(element.capacity()+1)*sizeof(char16_t);

@@ -14,10 +14,14 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
        !(raw==in.raw || (raw.size()+1==in.raw.size() && starts(in.raw,raw))) || raw.size()<=4 || evidence.confidenceTruncated) {
         reset();return {};
     }
-    if(!lastSeen_.empty() && lastSeen_==raw)return mature(in,raw);
+    // Confidence intentionally excludes final-stage ranking priors. Require
+    // every automatic commit to remain a prefix of the candidate displayed
+    // first after those priors have reranked the menu. A null top preserves
+    // merged incomplete-tail evidence, where no candidate is displayable.
+    const auto* visibleTop=result.candidates.empty()?nullptr:&result.candidates.front().text;
+    if(!lastSeen_.empty() && lastSeen_==raw)return mature(in,raw,visibleTop);
     if(!lastSeen_.empty() && !(raw.size()==lastSeen_.size()+1 && starts(raw,lastSeen_)))trackers_.clear();
     lastSeen_=raw;
-    const auto* accepted=!result.candidates.empty() && result.candidates.front().supplementScore>0?&result.candidates.front().text:nullptr;
     using Key=std::pair<std::u16string_view,int>;
     std::map<Key,const SentencePrefixEvidence*> evidenceIndex;
     for(const auto& p:evidence.prefixes)evidenceIndex.emplace(Key{p.text,p.rawLength},&p);
@@ -32,7 +36,7 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
     for(const auto& p:evidence.prefixes) {
         if(p.text.empty() || !p.boundaryClosed || p.share<.995 || p.rawLength<=in.committedRaw ||
            p.text.size()<=in.committedText.size() || !starts(p.text,in.committedText) ||
-           (accepted && !starts(*accepted,p.text)) || (!evidence.mergedIncompleteTail && !visibleBoundaries.count(Key{p.text,p.rawLength})))continue;
+           (visibleTop && !starts(*visibleTop,p.text)) || (!evidence.mergedIncompleteTail && !visibleBoundaries.count(Key{p.text,p.rawLength})))continue;
         auto [it,inserted]=qualifyingIndex.emplace(Key{p.text,p.rawLength},qualifying.size());
         if(inserted)qualifying.push_back(p);else qualifying[it->second]=p;
     }
@@ -61,15 +65,16 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
             t.gap=0;t.share=p.share;next.push_back(std::move(t));
         }
     }
-    trackers_=std::move(next);return mature(in,raw);
+    trackers_=std::move(next);return mature(in,raw,visibleTop);
 }
-std::optional<SentencePrefixCommit> SentenceAutoCommit::mature(const SentenceAutoCommitInput& in,std::u16string_view raw) {
+std::optional<SentencePrefixCommit> SentenceAutoCommit::mature(const SentenceAutoCommitInput& in,std::u16string_view raw,const std::u16string* visibleTop) {
     const Tracker* best=nullptr;std::size_t bestLength=0;
     const int retained=in.configuredRetained>0?std::max(options_.minimumRetained,in.configuredRetained):options_.minimumRetained;
     for(const auto& t:trackers_) {
         if((t.evidence<options_.requiredEvidence && t.strong<options_.requiredStrong) || t.rawLength<=in.committedRaw ||
            t.rawLength>static_cast<int>(raw.size()) || static_cast<int>(raw.size())-t.rawLength<retained ||
-           t.text.size()<=in.committedText.size() || !starts(t.text,in.committedText))continue;
+           t.text.size()<=in.committedText.size() || !starts(t.text,in.committedText) ||
+           (visibleTop && !starts(*visibleTop,t.text)))continue;
         const auto length=wordTextElements(t.text).size();
         if(!best || length>bestLength || (length==bestLength && (t.share>best->share || (t.share==best->share && t.rawLength<best->rawLength)))) {
             best=&t;bestLength=length;

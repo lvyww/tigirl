@@ -15,9 +15,11 @@ std::shared_ptr<const SentenceResources> SentenceResources::Open(const std::file
         throw std::runtime_error("Sentence resource revision mismatch");
     result->lexicon_=std::make_shared<SentenceLexicon>(std::move(sentence),sentenceTopCharacters(commonLimit),std::move(whitelist));
     result->supplement_=std::make_shared<MappedSentenceSupplement>(Dictionary::Open(sentenceSupplementPath(ordinary)));
-    result->model_=SentenceNgram::Open(model);result->options_=options;return result;
+    result->model_=SentenceNgram::Open(model);
+    result->lexicalPrior_=SentenceLexicalPrior::Open(model.parent_path()/L"sentence-lexical-v1.bin");
+    result->options_=options;return result;
 }
 std::unique_ptr<SentenceDecoder> SentenceResources::createDecoder() const {
-    return std::make_unique<SentenceDecoder>(lexicon_,model_,options_,supplement_);
+    return std::make_unique<SentenceDecoder>(lexicon_,model_,options_,supplement_,lexicalPrior_);
 }
 }

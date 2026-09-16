@@ -16,6 +16,7 @@ struct SentenceLexiconCandidate {
     double logRank=0;
     std::vector<std::u16string> textElements;
     bool optimalSingleCharacterCode=false;
+    bool primarySingleCharacterCode=false;
 };
 // The backing file reuses the validated six-section TCD container, with a
 // sentence-format marker and sentence-specific metadata section meanings.

@@ -20,7 +20,7 @@ public:
     void reset(){trackers_.clear();lastSeen_.clear();}
 private:
     struct Tracker {std::u16string text;int rawLength=0,evidence=0,strong=0,gap=0;double share=0;};
-    std::optional<SentencePrefixCommit> mature(const SentenceAutoCommitInput&,std::u16string_view);
+    std::optional<SentencePrefixCommit> mature(const SentenceAutoCommitInput&,std::u16string_view,const std::u16string*);
     SentenceAutoCommitOptions options_;
     std::vector<Tracker> trackers_;
     std::u16string lastSeen_;

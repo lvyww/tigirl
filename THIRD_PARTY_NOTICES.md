@@ -13,6 +13,21 @@ Tigirl 自身的原创源代码、脚本及配套项目文档采用 GPL-3.0-only
 
 微软官方仓库的许可证副本保存在 [licenses/Microsoft-SampleIME-LICENSE.txt](licenses/Microsoft-SampleIME-LICENSE.txt)。个别资源另有授权时，仍以该资源的独立说明为准。
 
+## 紧凑整句词先验
+
+`resources/sentence-lexical-v1.bin` 是不可逆的 Bloom filter，派生自
+[`fcxxxz/rime-mohu`](https://github.com/fcxxxz/rime-mohu) 提交
+`9f43098cefdb450fe8dec0f3069fe8d9999b9d10` 的 `mohu_flypy.base.dict.yaml`。
+原文件由 rime-mohu contributors 以
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权，并列明 Rime
+八股文词库、THUOCL、雾凇拼音词库补充数据及人工补充词等来源。
+
+本项目只保留虎整句码表可编码的 2～4 字条目，按上游权重、词长和 Unicode
+顺序选取 50,000 条，再丢弃词文本和权重，转换为 1,200,000 bit、10 次散列的
+TCSLEX01 Bloom filter。转换不表示上游作者认可本项目。原文件 SHA-256 为
+`877c6dacb4d5bb6738e230ce2d9235f3ac0f48404959c2db26fb18c7ddd31cb6`，发布文件
+SHA-256 为 `8dbc884b6cb719d07e4cef153c8048db19a11f8224f75a4ed87853e688a27393`。
+
 ## 其他代码、模型和资源
 
 具有独立版权或许可证的依赖、参考代码和资源继续遵循其原有条款。本项目的 GPL 声明不替代这些授权。

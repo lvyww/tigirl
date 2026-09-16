@@ -7,6 +7,7 @@
 - [项目进展](docs/PROGRESS.md)
 - [验收记录](docs/ACCEPTANCE.md)
 - [构建与安装](docs/INSTALL.md)
+- [紧凑整句排序先验](docs/COMPACT_RANKING_PRIORS.md)
 - [方案与码表说明](SCHEMAS.md)
 - [Tab 纠正学习](TAB_LEARNING.md)
 
