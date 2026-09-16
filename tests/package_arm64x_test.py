@@ -57,6 +57,11 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     assert not (root / 'install-arm64.log').exists()
     model.unlink()
     os.link(PACKAGE / 'Models/sentence-ngram-v2.bin', model)
+    lexical = staged / 'Models/sentence-lexical-v1.bin'
+    lexical.unlink()
+    result = check(script)
+    assert result.returncode != 0 and 'lexical prior' in result.stderr, result.stderr
+    os.link(PACKAGE / 'Models/sentence-lexical-v1.bin', lexical)
     # AA64 in the PE header alone is insufficient: this is a valid ARM64 DLL.
     shutil.copyfile(BUILD / 'ARM64/Release/Tigirl.dll', staged / 'Tigirl.dll')
     result = check(script)
@@ -79,6 +84,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
 
 report = dict(status='passed', package=package, real_dual_loader_checks=True,
               sentence_model_included=True, missing_sentence_model_rejected=True,
+              lexical_prior_included=True, missing_lexical_prior_rejected=True,
               corrupt_sentence_model_rejected_before_elevation=True,
               arm64_only_substitution_rejected=True, missing_verifier_rejected=True,
               wrong_verifier_architecture_rejected=True, invalid_package_rejected_before_elevation=True,

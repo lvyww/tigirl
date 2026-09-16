@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory(prefix='package-preflight-',dir=BUILD) as tempo
  reminder=staged/'Tigirl.Reminder.exe';reminder_bytes=reminder.read_bytes();reminder.unlink()
  result=check(script);assert result.returncode!=0 and 'Missing build artifact' in result.stderr
  reminder.write_bytes(reminder_bytes)
+ lexical=staged/'Models/sentence-lexical-v1.bin';lexical_bytes=lexical.read_bytes();lexical.unlink()
+ result=check(script);assert result.returncode!=0 and 'lexical prior' in result.stderr
+ lexical.write_bytes(lexical_bytes)
  user=root/'用户 配置';user.mkdir();(user/'.schema-manager-test').touch()
  # Test the same path resolution used by no-argument startup with an isolated
  # override. Use the bundled default scheme so no prepared external schema is needed.
@@ -32,5 +35,7 @@ with tempfile.TemporaryDirectory(prefix='package-preflight-',dir=BUILD) as tempo
  result=run_windows([PS,'-NoProfile','-Command',command],capture_output=True,text=True,timeout=30)
  assert result.returncode==0,(result.stdout,result.stderr)
  assert '当前码表\t虎码字词' in (user/'config.txt').read_text(encoding='utf-8-sig')
- report=dict(package=package,management_tools_included=True,reminder_included=True,missing_reminder_rejected=True,wrong_architecture_rejected=True,missing_tool_rejected=True,default_path_window_selection=True,installation_performed=False)
+ report=dict(package=package,management_tools_included=True,reminder_included=True,missing_reminder_rejected=True,
+             lexical_prior_included=True,missing_lexical_prior_rejected=True,
+             wrong_architecture_rejected=True,missing_tool_rejected=True,default_path_window_selection=True,installation_performed=False)
 (BUILD/'native-package-preflight.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items() if k!='package'}))

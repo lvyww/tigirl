@@ -17,6 +17,7 @@
 using namespace tiger;
 namespace fs=std::filesystem;
 static fs::path root;
+static fs::path lexicalPath;
 static int serial=0,checks=0;
 static void check(bool value,const char* message){++checks;if(!value)throw std::runtime_error(message);}
 static auto lex(std::vector<ImportedLexiconEntry> source) {
@@ -37,12 +38,19 @@ struct Model:SentenceLanguageModel {
     }
     bool hasObservedBigram(std::u16string_view a,std::u16string_view b) const override {return a==u"甲" && b==u"乙";}
 };
+struct FlatModel:SentenceLanguageModel {
+    double logProbability(std::u16string_view,std::u16string_view,std::u16string_view,bool=true) const override{return 0;}
+    bool hasObservedBigram(std::u16string_view,std::u16string_view) const override{return false;}
+};
 static bool boundaries(std::shared_ptr<const SentencePathBoundary> a,std::shared_ptr<const SentencePathBoundary> b) {
-    while(a && b){if(a->textLength!=b->textLength || a->rawLength!=b->rawLength || a->learningScore!=b->learningScore)return false;a=a->previous;b=b->previous;}return !a && !b;
+    while(a && b){if(a->textLength!=b->textLength || a->rawLength!=b->rawLength || a->learningScore!=b->learningScore ||
+        a->codeScore!=b->codeScore || a->protectsRareCharacter!=b->protectsRareCharacter || a->codeLength!=b->codeLength)return false;
+        a=a->previous;b=b->previous;}return !a && !b;
 }
 static bool candidate(const SentenceCandidate& a,const SentenceCandidate& b) {
     return a.text==b.text && a.segmentedCode==b.segmentedCode && a.baseScore==b.baseScore && a.finalScore==b.finalScore &&
         a.confidenceScore==b.confidenceScore && a.supplementScore==b.supplementScore && a.learningScore==b.learningScore &&
+        a.codeScore==b.codeScore && a.lexicalScore==b.lexicalScore &&
         a.maxLexiconRank==b.maxLexiconRank && a.eligibleDuplicateSinglePath==b.eligibleDuplicateSinglePath && boundaries(a.boundary,b.boundary);
 }
 static bool equal(const SentenceDecodeResult& a,const SentenceDecodeResult& b) {
@@ -88,6 +96,55 @@ static void correctness() {
      SentenceLearningEvent e;e.id="c5";e.mode=u"m";e.code=u"dd";e.text=u"丁";e.context=u"乙丙";e.time=1700000000;d.setLearning(SentenceLearningSnapshot::build({e},e.time),u"m");
      d.decode(u"aabbcc");check(d.decode(u"aabbccdd",20,true).learningAffected,"C5 learned suffix reached");auto a=d.decode(u"aabbcc",20,true);
      check(!a.learningAffected && equal(a,d.decodeFull(u"aabbcc",20,true)),"C5 learning flags rolled back");}
+}
+static void rankingPriors() {
+    auto model=std::make_shared<FlatModel>();
+    auto codeLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"cd",{u"乙"}},{u"abcd",{u"鼎"}}});
+    auto baseOptions=options(100);SentenceDecoder baseline(codeLexicon,model,baseOptions);
+    auto shapedOptions=baseOptions;shapedOptions.canonicalCodeReward=2;SentenceDecoder shaped(codeLexicon,model,shapedOptions);
+    auto plain=baseline.decodeFull(u"abcd"),ranked=shaped.decodeFull(u"abcd");
+    check(plain.candidates.front().text==u"甲乙" && ranked.candidates.front().text==u"鼎","R1 primary-code evidence reranks final candidates");
+    check(plain.expandedStates==ranked.expandedStates && plain.candidates.size()==ranked.candidates.size(),"R1 Beam work/candidate set unchanged");
+    for(const auto& original:plain.candidates) {
+        auto changed=std::find_if(ranked.candidates.begin(),ranked.candidates.end(),[&](const auto& value){return value.text==original.text;});
+        check(changed!=ranked.candidates.end() && changed->confidenceScore==original.confidenceScore,"R1 confidence excludes code evidence");
+    }
+
+    auto rareFour=lex({{u"abcd",{u"揸"}}});auto rareBaseOptions=options();rareBaseOptions.isolationLambda=2;rareBaseOptions.isolationRankThreshold=3000;
+    auto rareProtectedOptions=rareBaseOptions;rareProtectedOptions.canonicalIsolationFactor=0;rareProtectedOptions.canonicalIsolationMinCodeLength=4;
+    SentenceDecoder rareBase(rareFour,model,rareBaseOptions),rareProtected(rareFour,model,rareProtectedOptions);
+    auto rarePlain=rareBase.decodeFull(u"abcd").candidates.front(),rareRanked=rareProtected.decodeFull(u"abcd").candidates.front();
+    check(std::abs((rareRanked.finalScore-rarePlain.finalScore)-2)<1e-12 && rareRanked.confidenceScore==rarePlain.confidenceScore,
+        "R2 four-code primary rare character protected outside confidence");
+    auto rareThree=lex({{u"abc",{u"揸"}}});SentenceDecoder rareThreeBase(rareThree,model,rareBaseOptions),rareThreeProtected(rareThree,model,rareProtectedOptions);
+    check(rareThreeBase.decodeFull(u"abc").candidates.front().finalScore==rareThreeProtected.decodeFull(u"abc").candidates.front().finalScore,
+        "R2 three-code rare character remains penalized");
+
+    auto prior=SentenceLexicalPrior::Open(lexicalPath);
+    check(prior && prior->byteCount()==150032 && prior->entryCount()==50000 && prior->contains(u"中国") && !prior->contains(u"一乙"),
+        "R3 production lexical prior parses and hashes exactly");
+    auto lexicalLexicon=lex({{u"ab",{u"一"}},{u"cd",{u"乙"}},{u"abcd",{u"中国"}}});
+    SentenceDecoder lexicalBase(lexicalLexicon,model,baseOptions);
+    auto lexicalOptions=baseOptions;lexicalOptions.lexicalPriorWeight=.1;lexicalOptions.lexicalCandidateLimit=5;
+    SentenceDecoder lexicalRanked(lexicalLexicon,model,lexicalOptions,{},prior);
+    auto lexicalPlain=lexicalBase.decodeFull(u"abcd"),lexicalResult=lexicalRanked.decodeFull(u"abcd");
+    check(lexicalPlain.candidates.front().text==u"一乙" && lexicalResult.candidates.front().text==u"中国","R3 lexical prior reranks original Top-5");
+    for(const auto& original:lexicalPlain.candidates) {
+        auto changed=std::find_if(lexicalResult.candidates.begin(),lexicalResult.candidates.end(),[&](const auto& value){return value.text==original.text;});
+        check(changed!=lexicalResult.candidates.end() && changed->confidenceScore==original.confidenceScore,"R3 confidence excludes lexical evidence");
+    }
+
+    SentenceDecoder noModel(codeLexicon,{},shapedOptions,{},prior);
+    check(noModel.decodeFull(u"abcd").candidates.front().text==u"甲乙","R4 ranking priors disabled without n-gram model");
+
+    auto lockedLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"cd",{u"乙"}},{u"abcd",{u"鼎"}},{u"ef",{u"丁"}}});
+    auto source=ranked.candidates.front();auto lockedPrefix=std::make_shared<SentenceLockedPrefix>();
+    lockedPrefix->rawCode=u"abcd";lockedPrefix->text=u"鼎";lockedPrefix->boundary=source.boundary;
+    SentenceDecoder lockedDecoder(lockedLexicon,model,shapedOptions);
+    auto lockedResult=lockedDecoder.decode(u"abcdef",20,false,u"",lockedPrefix);
+    auto lockedCandidate=std::find_if(lockedResult.candidates.begin(),lockedResult.candidates.end(),[](const auto& value){return value.text==u"鼎丁";});
+    check(lockedCandidate!=lockedResult.candidates.end() && std::abs(lockedCandidate->codeScore-12)<1e-12,
+        "R5 locked prefix preserves ranking-only code evidence");
 }
 static auto locked() {
     auto lock=std::make_shared<SentenceLockedPrefix>();lock->rawCode=u"aa";lock->text=u"甲";
@@ -250,9 +307,9 @@ static void cancellation() {
     m->cancel.reset();flag->store(false);check(equal(d.decode(u"aaaaaa",20,true),d.decodeFull(u"aaaaaa",20,true)),"P7 next generation after cancellation");
 }
 int main(int argc,char** argv) {
-    try{if(argc<2)return 2;root=argv[1];fs::create_directories(root);std::cout<<std::setprecision(17);
+    try{if(argc<2)return 2;root=argv[1];lexicalPath=argc>3?fs::path(argv[3]):fs::path{};fs::create_directories(root);std::cout<<std::setprecision(17);
         const std::string selected=argc>2?argv[2]:"all";
-        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"correctness",correctness},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
+        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"correctness",correctness},{"ranking",rankingPriors},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
             if(selected=="all" || selected==test.first){test.second();std::cout<<"{\"group\":\""<<test.first<<"\",\"status\":\"passed\"}\n"<<std::flush;}
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"production_model\":false,\"physical_input\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}

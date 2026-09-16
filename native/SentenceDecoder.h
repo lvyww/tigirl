@@ -2,6 +2,7 @@
 #include "SentenceLexicon.h"
 #include "SentenceLearning.h"
 #include "SentenceNgram.h"
+#include "SentenceLexicalPrior.h"
 #include "MappedSentenceSupplement.h"
 #include <memory>
 #include <map>
@@ -14,6 +15,9 @@ struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
     int textLength=0,rawLength=0;
     double learningScore=0; // Optimal non-overlapping learning reward up to this boundary.
+    double codeScore=0; // Cumulative final-ranking-only shape evidence.
+    bool protectsRareCharacter=false;
+    int codeLength=0;
 };
 struct SentenceLockedPrefix {
     std::u16string rawCode,text;
@@ -21,7 +25,7 @@ struct SentenceLockedPrefix {
 };
 struct SentenceCandidate {
     std::u16string text,segmentedCode;
-    double baseScore=0,finalScore=0,confidenceScore=0,supplementScore=0;
+    double baseScore=0,finalScore=0,confidenceScore=0,supplementScore=0,codeScore=0,lexicalScore=0;
     int maxLexiconRank=1;
     std::shared_ptr<const SentencePathBoundary> boundary;
     // Eligibility from the producing decoder's settings, retained with its snapshot.
@@ -69,6 +73,8 @@ struct SentenceDecoderOptions {
     bool isolationUseLogRank=false;
     bool scoreSentenceBoundaries=true;
     double emittedCharacterReward=0,wholeInputSingleCharacterReward=0;
+    double canonicalCodeReward=0,canonicalIsolationFactor=1,lexicalPriorWeight=0;
+    int canonicalIsolationMinCodeLength=4,lexicalCandidateLimit=5;
     bool allowDuplicateSingleCharacters=false;
 };
 // Decoder owns composition-local lattice state. Large data resources remain
@@ -77,7 +83,8 @@ class SentenceDecoder {
 public:
     SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
         std::shared_ptr<const SentenceLanguageModel> model={},SentenceDecoderOptions options={},
-        std::shared_ptr<const MappedSentenceSupplement> supplement={});
+        std::shared_ptr<const MappedSentenceSupplement> supplement={},
+        std::shared_ptr<const SentenceLexicalPrior> lexicalPrior={});
     ~SentenceDecoder();
     SentenceDecoder(const SentenceDecoder&)=delete;
     SentenceDecoder& operator=(const SentenceDecoder&)=delete;
@@ -112,10 +119,13 @@ private:
     double transition(Lattice& lattice,std::u16string_view previous2,std::u16string_view previous1,std::u16string_view target) const;
     bool observed(Lattice& lattice,std::u16string_view previous,std::u16string_view target) const;
     double isolation(Lattice& lattice,std::u16string_view text) const;
+    double pathIsolation(Lattice& lattice,std::u16string_view text,
+        std::shared_ptr<const SentencePathBoundary> boundary) const;
     std::shared_ptr<const SentenceLexicon> lexicon_;
     std::shared_ptr<const SentenceLanguageModel> model_;
     const SentenceNgram* ngram_=nullptr;
     SentenceDecoderOptions options_;
     std::shared_ptr<const MappedSentenceSupplement> supplement_;
+    std::shared_ptr<const SentenceLexicalPrior> lexicalPrior_;
 };
 }

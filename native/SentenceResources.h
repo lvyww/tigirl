@@ -14,10 +14,12 @@ public:
     std::unique_ptr<SentenceDecoder> createDecoder() const;
     const std::shared_ptr<const SentenceLexicon>& lexicon() const{return lexicon_;}
     const std::shared_ptr<const SentenceNgram>& model() const{return model_;}
+    const std::shared_ptr<const SentenceLexicalPrior>& lexicalPrior() const{return lexicalPrior_;}
 private:
     std::shared_ptr<const SentenceLexicon> lexicon_;
     std::shared_ptr<const SentenceNgram> model_;
     std::shared_ptr<const MappedSentenceSupplement> supplement_;
+    std::shared_ptr<const SentenceLexicalPrior> lexicalPrior_;
     SentenceDecoderOptions options_;
 };
 }

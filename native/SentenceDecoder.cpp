@@ -12,7 +12,7 @@ namespace tiger {
 namespace {
 constexpr std::u16string_view bos=u"\x02",eos=u"\x03";
 struct State {
-    double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0;
+    double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0,codeScore=0;
     std::u16string text;
     // Context tokens refer to immutable mapped lexicon text (or static BOS).
     // The decoder retains that lexicon for the whole lattice lifetime.
@@ -198,7 +198,10 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
             std::vector<std::shared_ptr<const SentencePathBoundary>> boundaries;
             for(auto b=lockedPrefix->boundary;b;b=b->previous)boundaries.push_back(b);
             for(auto i=boundaries.rbegin();i!=boundaries.rend();++i)
-                seed.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{seed.boundary,(*i)->textLength,(*i)->rawLength,0});
+                seed.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{
+                    seed.boundary,(*i)->textLength,(*i)->rawLength,0,(*i)->codeScore,
+                    (*i)->protectsRareCharacter,(*i)->codeLength});
+            seed.codeScore=lockedPrefix->boundary?lockedPrefix->boundary->codeScore:0;
             std::size_t offset=0;
             for(const auto& element:wordTextElements(lockedPrefix->text)) {
                 checkCancelled();const auto target=std::u16string_view(lockedPrefix->text).substr(offset,element.size());offset+=element.size();
@@ -298,14 +301,22 @@ bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16str
 }
 SentenceDecoder::SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
     std::shared_ptr<const SentenceLanguageModel> model,SentenceDecoderOptions options,
-    std::shared_ptr<const MappedSentenceSupplement> supplement)
-    :lexicon_(std::move(lexicon)),model_(std::move(model)),options_(options),supplement_(std::move(supplement)) {
+    std::shared_ptr<const MappedSentenceSupplement> supplement,
+    std::shared_ptr<const SentenceLexicalPrior> lexicalPrior)
+    :lexicon_(std::move(lexicon)),model_(std::move(model)),options_(options),supplement_(std::move(supplement)),
+     lexicalPrior_(std::move(lexicalPrior)) {
     if(!lexicon_)throw std::invalid_argument("Sentence decoder needs a lexicon");
     ngram_=dynamic_cast<const SentenceNgram*>(model_.get());
     options_.beamWidth=std::max(1,options_.beamWidth);
     options_.rankPenalty=std::max(0.0,options_.rankPenalty);
     options_.emittedCharacterReward=std::max(0.0,options_.emittedCharacterReward);
     options_.wholeInputSingleCharacterReward=std::max(0.0,options_.wholeInputSingleCharacterReward);
+    options_.canonicalCodeReward=model_?std::max(0.0,options_.canonicalCodeReward):0;
+    options_.canonicalIsolationFactor=model_?std::clamp(options_.canonicalIsolationFactor,0.0,1.0):1;
+    options_.canonicalIsolationMinCodeLength=std::max(2,options_.canonicalIsolationMinCodeLength);
+    options_.lexicalPriorWeight=model_?std::max(0.0,options_.lexicalPriorWeight):0;
+    options_.lexicalCandidateLimit=std::max(1,options_.lexicalCandidateLimit);
+    if(!model_)lexicalPrior_.reset();
 }
 std::u16string SentenceDecoder::normalizeRawCode(std::u16string_view raw) {
     std::u16string result;result.reserve(raw.size());
@@ -366,6 +377,40 @@ double SentenceDecoder::isolation(Lattice& lattice,std::u16string_view text) con
     }
     return penalty;
 }
+double SentenceDecoder::pathIsolation(Lattice& lattice,std::u16string_view text,
+    std::shared_ptr<const SentencePathBoundary> boundary) const {
+    if(options_.canonicalIsolationFactor>=1 || !boundary)return isolation(lattice,text);
+    if(options_.isolationRankThreshold<=0 || options_.isolationLambda<=0)return 0;
+    std::vector<std::shared_ptr<const SentencePathBoundary>> chain;
+    for(auto current=boundary;current;current=current->previous)chain.push_back(current);
+    std::reverse(chain.begin(),chain.end());
+    double penalty=0,previousWeight=0;std::u16string previous;std::size_t textStart=0;
+    const auto weight=[&](int rank,double factor) {
+        if(rank<=options_.isolationRankThreshold)return 0.0;
+        const double base=options_.isolationUseLogRank?options_.isolationLambda*std::log(
+            std::max(static_cast<double>(rank),static_cast<double>(options_.isolationRankThreshold)+1)/
+            options_.isolationRankThreshold):options_.isolationLambda;
+        return base*factor;
+    };
+    const auto consume=[&](std::u16string_view edge,double factor) {
+        for(const auto& current:wordTextElements(edge)) {
+            const double currentWeight=weight(sentenceCharacterRank(current),factor);
+            const bool linked=!previous.empty() && (previousWeight>0 || currentWeight>0) && observed(lattice,previous,current);
+            if(previousWeight>0 && linked)penalty-=previousWeight;
+            previousWeight=currentWeight>0 && !linked?currentWeight:0;
+            if(previousWeight>0)penalty+=previousWeight;
+            previous=current;
+        }
+    };
+    for(const auto& current:chain) {
+        const auto textEnd=std::min(text.size(),std::max(textStart,static_cast<std::size_t>(std::max(0,current->textLength))));
+        const double factor=current->protectsRareCharacter &&
+            current->codeLength>=options_.canonicalIsolationMinCodeLength?options_.canonicalIsolationFactor:1;
+        consume(text.substr(textStart,textEnd-textStart),factor);textStart=textEnd;
+    }
+    if(textStart<text.size())consume(text.substr(textStart),1);
+    return penalty;
+}
 SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int candidateLimit,
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
     std::lock_guard<std::mutex> lock(decodeMutex_);
@@ -408,6 +453,9 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 if(selected==0)next.score-=options_.rankPenalty*c.logRank;
                 double wholeReward=whole && selected==0 && c.optimalSingleCharacterCode && c.textElements.size()==1?options_.wholeInputSingleCharacterReward:0;
                 next.score+=wholeReward;next.mass=item.mass+(next.score-item.score-supplementAdded-wholeReward);
+                const double codeReward=selected==0 && c.primarySingleCharacterCode && c.textElements.size()==1?
+                    options_.canonicalCodeReward*codeLength:0;
+                next.codeScore=item.codeScore+codeReward;
                 next.text+=c.text;next.supplementScore+=supplementAdded;next.rank=std::max(item.rank,static_cast<int>(c.rank));
                 next.learningPotential=0;
                 if(learning_ && !learning_->empty()) {
@@ -431,7 +479,10 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                     }
                     next.score+=next.learningScore-item.learningScore;
                 }
-                next.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{item.boundary,static_cast<int>(next.text.size()),consumed,next.learningScore});
+                next.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{
+                    item.boundary,static_cast<int>(next.text.size()),consumed,next.learningScore,next.codeScore,
+                    options_.canonicalIsolationFactor<1 && c.textElements.size()==1 &&
+                        (c.primarySingleCharacterCode || selected>0),codeLength});
                 states[consumed].truncated|=bucket.truncated;
                 states[consumed].add(std::move(next));++expanded;
             }
@@ -446,10 +497,13 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     auto& completed=states[length];completed.limit(options_.beamWidth,options_.allowDuplicateSingleCharacters || lattice.learningAffected);
     bool scoreFirst=false;
     auto evaluate=[&](const State& state) {
-        double adjustment=transition(lattice,state.previous2,state.previous1,eos)-isolation(lattice,state.text);
+        const double eosScore=transition(lattice,state.previous2,state.previous1,eos);
+        double adjustment=eosScore-pathIsolation(lattice,state.text,state.boundary)+state.codeScore;
+        const double confidenceAdjustment=eosScore-isolation(lattice,state.text);
         SentenceCandidate c;c.text=state.text;c.baseScore=state.score-state.learningScore+adjustment;
         c.finalScore=c.baseScore+state.learningScore;c.learningScore=state.learningScore;
-        c.confidenceScore=state.mass+adjustment;c.supplementScore=state.supplementScore;c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
+        c.confidenceScore=state.mass+confidenceAdjustment;c.supplementScore=state.supplementScore;c.codeScore=state.codeScore;
+        c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
         c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
             ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
         return c;
@@ -478,6 +532,23 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         auto it=lattice.segments.find(c.boundary.get());
         if(it==lattice.segments.end())it=lattice.segments.emplace(c.boundary.get(),segmented(raw,c.boundary)).first;
         c.segmentedCode=it->second;
+    }
+    if(result.candidates.size()>1 && lexicalPrior_ && options_.lexicalPriorWeight>0) {
+        std::map<std::u16string,bool,std::less<>> lookupCache;
+        const auto lexicalLimit=std::min(result.candidates.size(),static_cast<std::size_t>(options_.lexicalCandidateLimit));
+        for(std::size_t i=0;i<lexicalLimit;++i) {
+            auto& candidate=result.candidates[i];candidate.lexicalScore=lexicalPrior_->score(candidate.text,&lookupCache)*options_.lexicalPriorWeight;
+            candidate.baseScore+=candidate.lexicalScore;candidate.finalScore+=candidate.lexicalScore;
+        }
+        const bool lexicalScoreFirst=std::any_of(all.begin(),all.end(),[&](const SentenceCandidate& candidate) {
+            return candidate.learningScore>0 || (options_.allowDuplicateSingleCharacters && candidate.boundary && candidate.boundary->previous);
+        });
+        std::sort(result.candidates.begin(),result.candidates.end(),[=](const SentenceCandidate& a,const SentenceCandidate& b) {
+            if(lexicalScoreFirst && a.finalScore!=b.finalScore)return a.finalScore>b.finalScore;
+            if(a.maxLexiconRank!=b.maxLexiconRank)return a.maxLexiconRank<b.maxLexiconRank;
+            if(a.finalScore!=b.finalScore)return a.finalScore>b.finalScore;
+            return a.text<b.text;
+        });
     }
     result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;
     result.earlyCommitEvidence.confidenceTruncated=completed.truncated || result.learningAffected;

@@ -22,7 +22,7 @@ def main():
     p.add_argument('--cxx', default=os.environ.get('CXX', 'g++'))
     p.add_argument('--sanitize', action='store_true')
     p.add_argument('--keep', type=Path)
-    p.add_argument('--case', default='all', choices=['all','correctness','caching','fuzz','learning','journal','mapped','history','cancellation'])
+    p.add_argument('--case', default='all', choices=['all','correctness','ranking','caching','fuzz','learning','journal','mapped','history','cancellation'])
     args = p.parse_args()
     cxx = shutil.which(args.cxx)
     if not cxx: p.error('compiler unavailable')
@@ -41,6 +41,6 @@ def main():
         if args.sanitize:
             env['ASAN_OPTIONS'] = env.get('ASAN_OPTIONS','') + ':detect_leaks=1:halt_on_error=1'
             env['UBSAN_OPTIONS'] = env.get('UBSAN_OPTIONS','') + ':halt_on_error=1:print_stacktrace=1'
-        subprocess.run([str(exe),str(work/'resources'),args.case],cwd=work,env=env,check=True,timeout=180)
+        subprocess.run([str(exe),str(work/'resources'),args.case,str(ROOT/'resources/sentence-lexical-v1.bin')],cwd=work,env=env,check=True,timeout=180)
 
 if __name__ == '__main__': main()

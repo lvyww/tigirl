@@ -42,7 +42,8 @@ try {
     $executables = @('Tigirl.dll', 'Tigirl.SchemaSelect.exe', 'Tigirl.Import.exe', 'Tigirl.exe', 'Tigirl.Reminder.exe')
     if ($Arm64X) { $executables += @('verify_load_arm64.exe', 'verify_load_x64.exe') }
     Assert-NativeTigerSentenceModel (Join-Path $source 'Models\sentence-ngram-v2.bin')
-    $artifacts = $executables + @('tiger-v2.tcd', 'Models\sentence-ngram-v2.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
+    Assert-NativeTigerSentenceLexicalPrior (Join-Path $source 'Models\sentence-lexical-v1.bin')
+    $artifacts = $executables + @('tiger-v2.tcd', 'Models\sentence-ngram-v2.bin', 'Models\sentence-lexical-v1.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
     foreach ($sidecar in @('tiger-v2.tcd.sentence.tcd', 'tiger-v2.tcd.supplement.tcd')) {
         if (Test-Path -LiteralPath (Join-Path $source $sidecar)) { $artifacts += $sidecar }
     }
