@@ -4,7 +4,7 @@ on:
   push:
     branches: [fix/review-hardening-20260917]
     paths:
-      - review_hardening.patch
+      - apply_review_hardening.py
       - .github/workflows/apply-review-hardening.yml
 
 permissions:
@@ -18,14 +18,13 @@ jobs:
         with:
           ref: fix/review-hardening-20260917
           fetch-depth: 0
-      - name: Apply patch and self-remove staging files
+      - name: Apply transform and self-remove staging files
         shell: bash
         run: |
           set -euo pipefail
-          git apply --check review_hardening.patch
-          git apply review_hardening.patch
+          python apply_review_hardening.py
           python tests/review_hardening_policy_test.py
-          git rm review_hardening.patch .github/workflows/apply-review-hardening.yml
+          git rm review_hardening.patch apply_review_hardening.py .github/workflows/apply-review-hardening.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
