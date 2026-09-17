@@ -35,9 +35,12 @@ A final incomplete record is ignored on read and removed before the next append.
 A complete record with an invalid checksum or structure causes an error and is
 never silently discarded. An interrupted first header is accepted only if its
 bytes are a prefix of the exact magic. Records are bounded to 16 MiB and journals
-to 128 MiB. Refresh currently replays the journal; compaction and notifications
-remain future lifecycle work. The TSF DLL now drains actual dispatch
-changes into this store and refreshes on focus. The current journal is
+to 128 MiB. `UserStore` now shares an in-process snapshot cache across its copies
+and keys it by the journal's file identity, size and last-write time. Focus/file
+reconciliation therefore returns the existing immutable `Lexicon` when the journal
+has not changed, while an external append or checkpoint replacement still forces
+a locked replay. Automatic compaction remains future lifecycle work. The TSF DLL
+drains actual dispatch changes into this store and refreshes on focus. The current journal is
 `%LOCALAPPDATA%/Tigirl/user/tiger-words.tcu`. Adjustment failures produce
 debug output/a beep and a language-bar warning icon/text/tooltip. The tooltip
 asks the user to check storage and explicitly repeat the adjustment. The warning

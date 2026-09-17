@@ -50,6 +50,14 @@ comparison, not as evidence of an accepted optimization. Further work should avo
 reallocating recently mutable beam buckets and investigate repeated scoring cost,
 while preserving exact original candidate order, scores and prefix evidence.
 
+Sentence overlay cache lifecycle is now bounded independently of decoder memory.
+After a sentence revision is opened or rebuilt, best-effort cleanup keeps the
+active revision plus the seven newest inactive revision directories. A revision
+whose `.import.lock` is currently held is skipped, and reparse-point directories
+are never traversed. If `Tigirl.Import.exe --ensure-sentence` exceeds the 30-second
+resource-load wait, the TSF worker terminates and reaps that helper before returning
+an error so abandoned helpers cannot accumulate behind the cache import lock.
+
 The accepted scoring/state optimization adds a direct-mapped 4,096-entry cache
 for immutable n-gram queries whose tokens fit two UTF-16 units. Exact keys are
 checked on every hit; longer tokens and non-file/custom models bypass it. Each

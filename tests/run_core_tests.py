@@ -6,6 +6,7 @@ Linux: optionally enable --sanitize for ASan/UBSan. All artifacts are temporary.
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,16 +19,20 @@ from work_directory import temporary_work_directory
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_SOURCES = SELECTION_SOURCES[1:] + [
     'native/CandidatePresentation.cpp', 'native/Settings.cpp', 'native/SelectionKeys.cpp',
+    'native/UserStore.cpp', 'native/SentenceNgram.cpp',
 ]
 PROBES = {
     'candidate_selection': ('tests/candidate_selection_probe.cpp', False, ['fixture.tcd']),
     'sentence_session': ('tests/sentence_session_probe.cpp', True, []),
     'candidate_reveal': ('tests/candidate_reveal_probe.cpp', False, []),
     'code_mask': ('tests/code_mask_probe.cpp', False, []),
+    'user_store_refresh_cache': ('tests/user_store_refresh_cache_probe.cpp', False, ['fixture.tcd']),
+    'sentence_ngram_validation': ('tests/sentence_ngram_validation_probe.cpp', False, []),
 }
 
 
 def main() -> None:
+    subprocess.run([sys.executable, str(ROOT / 'tests/review_hardening_policy_test.py')], check=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cxx', default=os.environ.get('CXX', 'g++'))
     parser.add_argument('--sanitize', action='store_true')
