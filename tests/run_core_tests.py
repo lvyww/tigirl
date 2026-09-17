@@ -6,7 +6,6 @@ Linux: optionally enable --sanitize for ASan/UBSan. All artifacts are temporary.
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +14,7 @@ import time
 from candidate_selection_test import SOURCES as SELECTION_SOURCES
 from candidate_placement_test import run_test as run_placement_test
 from work_directory import temporary_work_directory
+import review_hardening_policy_test  # Executes static review guardrails on import.
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_SOURCES = SELECTION_SOURCES[1:] + [
@@ -32,7 +32,6 @@ PROBES = {
 
 
 def main() -> None:
-    subprocess.run([sys.executable, str(ROOT / 'tests/review_hardening_policy_test.py')], check=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cxx', default=os.environ.get('CXX', 'g++'))
     parser.add_argument('--sanitize', action='store_true')
