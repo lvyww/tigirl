@@ -1,7 +1,9 @@
 #include "UserStore.h"
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <exception>
+#include <mutex>
 #include <set>
 #include "Text.h"
 #include <stdexcept>
@@ -22,6 +24,7 @@ namespace {
 constexpr char magic[]="TIGERU01";
 constexpr std::size_t maxJournal=128*1024*1024, maxRecord=16*1024*1024;
 using Bytes=std::vector<unsigned char>;
+using FileStamp=std::array<std::uint64_t,4>;
 std::filesystem::path coordinationPath(std::filesystem::path journal) {
     journal+=".lock";
     return journal;
@@ -40,6 +43,34 @@ void rejectMissingPublishedJournal(const std::filesystem::path& journal) {
     throw std::system_error(static_cast<int>(GetLastError()),std::system_category(),operation);
 #else
     throw std::system_error(errno,std::generic_category(),operation);
+#endif
+}
+FileStamp fileStamp(const std::filesystem::path& path) {
+#ifdef _WIN32
+    HANDLE handle=CreateFileW(path.c_str(),0,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+        nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(handle==INVALID_HANDLE_VALUE) {
+        const auto error=GetLastError();
+        if(error==ERROR_FILE_NOT_FOUND || error==ERROR_PATH_NOT_FOUND)return {};
+        SetLastError(error);systemFailure("Stat user journal");
+    }
+    BY_HANDLE_FILE_INFORMATION info{};
+    if(!GetFileInformationByHandle(handle,&info)) {
+        const auto error=GetLastError();CloseHandle(handle);SetLastError(error);systemFailure("Stat user journal");
+    }
+    CloseHandle(handle);
+    return {(static_cast<std::uint64_t>(info.dwVolumeSerialNumber)<<32)|info.nFileIndexHigh,
+        info.nFileIndexLow,(static_cast<std::uint64_t>(info.nFileSizeHigh)<<32)|info.nFileSizeLow,
+        (static_cast<std::uint64_t>(info.ftLastWriteTime.dwHighDateTime)<<32)|info.ftLastWriteTime.dwLowDateTime};
+#else
+    struct stat info{};
+    if(::stat(path.c_str(),&info)<0) {
+        if(errno==ENOENT)return {};
+        systemFailure("Stat user journal");
+    }
+    return {static_cast<std::uint64_t>(info.st_dev),static_cast<std::uint64_t>(info.st_ino),
+        static_cast<std::uint64_t>(info.st_size),
+        static_cast<std::uint64_t>(info.st_mtim.tv_sec)*1000000000ull+static_cast<std::uint64_t>(info.st_mtim.tv_nsec)};
 #endif
 }
 class LockedFile {
@@ -98,6 +129,21 @@ public:
             done+=static_cast<std::size_t>(count);
         }
         return bytes;
+    }
+    FileStamp stamp() const {
+#ifdef _WIN32
+        BY_HANDLE_FILE_INFORMATION info{};
+        if(!GetFileInformationByHandle(handle_,&info))systemFailure("Stat locked user journal");
+        return {(static_cast<std::uint64_t>(info.dwVolumeSerialNumber)<<32)|info.nFileIndexHigh,
+            info.nFileIndexLow,(static_cast<std::uint64_t>(info.nFileSizeHigh)<<32)|info.nFileSizeLow,
+            (static_cast<std::uint64_t>(info.ftLastWriteTime.dwHighDateTime)<<32)|info.ftLastWriteTime.dwLowDateTime};
+#else
+        struct stat info{};
+        if(fstat(handle_,&info)<0)systemFailure("Stat locked user journal");
+        return {static_cast<std::uint64_t>(info.st_dev),static_cast<std::uint64_t>(info.st_ino),
+            static_cast<std::uint64_t>(info.st_size),
+            static_cast<std::uint64_t>(info.st_mtim.tv_sec)*1000000000ull+static_cast<std::uint64_t>(info.st_mtim.tv_nsec)};
+#endif
     }
     void append(std::size_t validLength,const Bytes& records) {
         if(validLength+records.size()>maxJournal) throw std::runtime_error("User journal exceeds size limit");
@@ -198,6 +244,11 @@ void encode(Bytes& records,const UserChange& change) {
     records.insert(records.end(),payload.begin(),payload.end());
 }
 }
+struct UserStore::Cache {
+    std::mutex mutex;
+    std::shared_ptr<const Lexicon> lexicon;
+    FileStamp stamp{};
+};
 std::shared_ptr<Lexicon> UserStore::decode(const Bytes& bytes,std::shared_ptr<const Dictionary> dictionary,std::size_t& validLength) {
     auto lexicon=std::make_shared<Lexicon>(std::move(dictionary));
     validLength=0;
@@ -219,11 +270,20 @@ std::shared_ptr<Lexicon> UserStore::decode(const Bytes& bytes,std::shared_ptr<co
     return lexicon;
 }
 UserStore::UserStore(std::shared_ptr<const Dictionary> dictionary,std::filesystem::path journal)
-    :dictionary_(std::move(dictionary)),journal_(std::move(journal)) {
+    :dictionary_(std::move(dictionary)),journal_(std::move(journal)),cache_(std::make_shared<Cache>()) {
     if(!dictionary_ || journal_.empty()) throw std::invalid_argument("UserStore requires dictionary and journal path");
     if(!journal_.parent_path().empty()) std::filesystem::create_directories(journal_.parent_path());
 }
-std::shared_ptr<const Lexicon> UserStore::refresh() const { return commit({}); }
+std::shared_ptr<const Lexicon> UserStore::refresh() const {
+    try {
+        const auto observed=fileStamp(journal_);
+        std::lock_guard<std::mutex> lock(cache_->mutex);
+        if(cache_->lexicon && cache_->stamp==observed)return cache_->lexicon;
+    }catch(const std::exception&) {
+        // Metadata is only an optimization. Fall back to the authoritative locked replay.
+    }
+    return commit({});
+}
 std::vector<unsigned char> UserStore::checkpoint() const {
     LockedFile coordination(coordinationPath(journal_));
     rejectMissingPublishedJournal(journal_);
@@ -357,6 +417,7 @@ bool UserStore::compact() const {
 }
 #endif
 std::shared_ptr<const Lexicon> UserStore::commit(const std::vector<UserChange>& changes) const {
+    std::lock_guard<std::mutex> local(cache_->mutex);
     // Keep this sidecar's identity stable across future journal replacement.
     // Retain the journal lock as well while older installed clients still use
     // that lock alone. All new operations acquire sidecar before journal.
@@ -372,6 +433,12 @@ std::shared_ptr<const Lexicon> UserStore::commit(const std::vector<UserChange>& 
         if(lexicon->applyChange(change))encode(records,change);
     }
     if(!records.empty()) file.append(validLength,records);
+    try {
+        cache_->stamp=file.stamp();
+        cache_->lexicon=lexicon;
+    }catch(const std::exception&) {
+        cache_->stamp={};cache_->lexicon.reset();
+    }
     return lexicon;
 }
 }

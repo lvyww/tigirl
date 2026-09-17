@@ -130,11 +130,15 @@ BOOL RegisterCategories()
     for each(GUID guid in SupportCategories)
     {
         hr = pCategoryMgr->RegisterCategory(Global::SampleIMECLSID, guid, Global::SampleIMECLSID);
+        if (FAILED(hr))
+        {
+            pCategoryMgr->Release();
+            return FALSE;
+        }
     }
 
     pCategoryMgr->Release();
-
-    return (hr == S_OK);
+    return TRUE;
 }
 
 //+---------------------------------------------------------------------------
@@ -145,7 +149,7 @@ BOOL RegisterCategories()
 
 void UnregisterCategories()
 {
-    ITfCategoryMgr* pCategoryMgr = S_OK;
+    ITfCategoryMgr* pCategoryMgr = nullptr;
     HRESULT hr = S_OK;
 
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void**)&pCategoryMgr);

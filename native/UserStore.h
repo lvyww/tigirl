@@ -28,10 +28,12 @@ public:
     bool restoreCheckpoint(const std::filesystem::path& backup) const;
 #endif
 private:
+    struct Cache;
     std::vector<unsigned char> makeCheckpoint(std::vector<unsigned char> original) const;
     static std::shared_ptr<Lexicon> decode(const std::vector<unsigned char>& bytes,
         std::shared_ptr<const Dictionary> dictionary,std::size_t& validLength);
     std::shared_ptr<const Dictionary> dictionary_;
     std::filesystem::path journal_;
+    std::shared_ptr<Cache> cache_;
 };
 }

@@ -14,16 +14,21 @@ import time
 from candidate_selection_test import SOURCES as SELECTION_SOURCES
 from candidate_placement_test import run_test as run_placement_test
 from work_directory import temporary_work_directory
+import review_hardening_policy_test  # Executes static review guardrails on import.
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_SOURCES = SELECTION_SOURCES[1:] + [
     'native/CandidatePresentation.cpp', 'native/Settings.cpp', 'native/SelectionKeys.cpp',
+    'native/UserStore.cpp', 'native/SentenceNgram.cpp',
 ]
 PROBES = {
     'candidate_selection': ('tests/candidate_selection_probe.cpp', False, ['fixture.tcd']),
     'sentence_session': ('tests/sentence_session_probe.cpp', True, []),
     'candidate_reveal': ('tests/candidate_reveal_probe.cpp', False, []),
     'code_mask': ('tests/code_mask_probe.cpp', False, []),
+    'user_store_refresh_cache': ('tests/user_store_refresh_cache_probe.cpp', False, ['fixture.tcd']),
+    'sentence_ngram_validation': ('tests/sentence_ngram_validation_probe.cpp', False, []),
+    'sentence_cache_gc': ('tests/sentence_cache_gc_probe.cpp', False, []),
 }
 
 

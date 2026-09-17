@@ -81,6 +81,18 @@ void SentenceNgram::validate() {
         if(index.count>(length_-position)/stride)invalid();position+=index.count*stride;
     }
     if(position!=length_ || !indices_[0].count)invalid();
+    for(const auto& index:indices_) {
+        std::uint64_t previous=0;const std::uint64_t stride=index.wide?12:8;
+        for(std::uint64_t n=0;n<index.count;++n) {
+            const auto offset=index.offset+n*stride;
+            const auto key=index.wide?read<std::uint64_t>(offset):read<std::uint32_t>(offset);
+            const auto score=read<float>(offset+(index.wide?8:4));
+            // Binary search requires strict ordering; NaN/Inf or negative
+            // probabilities/backoff weights would also poison decoder ordering.
+            if((n && key<=previous) || !std::isfinite(score) || score<0)invalid();
+            previous=key;
+        }
+    }
     unknown_=lookup(indices_[0],0,0);
     if(!std::isfinite(unknown_) || unknown_<=0 || unknown_>1)invalid();
 }
