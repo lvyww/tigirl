@@ -43,6 +43,19 @@ require("Machine registration is the commit point" in iss, "transaction boundary
 require("UserInitFailed:=True" in iss, "user initialization failure has no non-fatal state")
 require("码表初始化未完成，正在恢复原安装" not in iss, "old fatal user-initialization rollback path remains")
 
+# The graphical installer runs the original-user step hidden and waits for it. It must
+# therefore be incapable of opening the conflict selector behind the disabled wizard.
+require("-NoDialogs -SkipConflicts" in iss, "graphical setup does not explicitly preserve conflicts noninteractively")
+require(
+    "if(!$SkipConflicts -and !$NoDialogs)" in initialize,
+    "-NoDialogs does not suppress the conflict-selection dialog",
+)
+require(
+    "Conflict dialogs suppressed; retaining existing files" in initialize,
+    "noninteractive conflict retention is not diagnosable in the user initialization log",
+)
+require("保留现有文件，不阻塞安装" in iss, "installer copy does not describe the noninteractive conflict policy")
+
 # Because machine commit now precedes user initialization, the user journal must carry
 # its own completion state. A crash in the user step must restore a prepared journal,
 # while an initialized journal can be discarded when the matching machine tx committed.
@@ -63,4 +76,4 @@ require("Input method registration belongs to another installation." in deploy, 
 require("The new machine registration remains active" in zip_install, "ZIP installer still treats user initialization as machine failure")
 require("$recovery=if($installed.previous)" not in zip_install, "ZIP user initialization still launches rollback/uninstall")
 
-print("PASS: repairable setup policy, commit boundary, persistent logs, durable user journal, and non-fatal file cleanup.")
+print("PASS: repairable setup policy, noninteractive conflict handling, commit boundary, persistent logs, durable user journal, and non-fatal file cleanup.")
