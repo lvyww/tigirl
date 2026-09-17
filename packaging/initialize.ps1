@@ -1,4 +1,4 @@
-﻿param([switch]$Quiet,[switch]$NoEnable,[switch]$SkipConflicts,[switch]$RequireStandardUser,[switch]$NoDialogs,
+param([switch]$Quiet,[switch]$NoEnable,[switch]$SkipConflicts,[switch]$RequireStandardUser,[switch]$NoDialogs,
  [string]$Transaction,[ValidateSet('Initialize','Complete','Rollback')][string]$TransactionAction='Initialize')
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\data.ps1"
@@ -54,11 +54,16 @@ try {
     if($Quiet -and !$Transaction -and (Test-Path -LiteralPath $marker) -and (Get-Content -LiteralPath $marker -Raw).Trim() -eq $version){exit 0}
     Write-InitializeLog 'Scanning dictionary conflicts'
     $plan=@(Get-DataMerge "$PSScriptRoot\DefaultData" $root)
-    Write-InitializeLog "Scan complete: files=$($plan.Count), conflicts=$(@($plan|Where-Object Conflict).Count)"
-    if(!$SkipConflicts){
+    $conflictCount=@($plan|Where-Object Conflict).Count
+    Write-InitializeLog "Scan complete: files=$($plan.Count), conflicts=$conflictCount"
+    # -NoDialogs is a hard non-interactive contract. Conflict entries already default
+    # to Skip, so installers and other hidden callers safely preserve the user's files.
+    if(!$SkipConflicts -and !$NoDialogs){
         Write-InitializeLog 'Selecting conflict actions (dialog if conflicts exist)'
         Select-DataConflicts $plan
         Write-InitializeLog 'Conflict selection complete'
+    }elseif($conflictCount){
+        Write-InitializeLog "Conflict dialogs suppressed; retaining existing files: conflicts=$conflictCount"
     }
     $backup=Join-Path $root ('backups\install-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N'))
     # Snapshot descriptors before the compiler publishes any generations.
