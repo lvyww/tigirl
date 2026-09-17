@@ -1,4 +1,4 @@
-param([switch]$Quiet,[switch]$NoEnable,[switch]$SkipConflicts,[switch]$RequireStandardUser,[switch]$NoDialogs,
+﻿param([switch]$Quiet,[switch]$NoEnable,[switch]$SkipConflicts,[switch]$RequireStandardUser,[switch]$NoDialogs,
  [string]$Transaction,[ValidateSet('Initialize','Complete','Rollback')][string]$TransactionAction='Initialize')
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\data.ps1"
