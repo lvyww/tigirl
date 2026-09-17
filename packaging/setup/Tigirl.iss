@@ -99,8 +99,9 @@ end;
 function UserStep(Action: String): Integer;
 var Params: String; Code: Integer;
 begin
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\versions\{#Generation}\initialize.ps1')+'" -Quiet -RequireStandardUser -NoDialogs -Transaction "'+TxId+'" -TransactionAction '+Action;
-  if WizardSilent then Params := Params+' -SkipConflicts';
+  { This hidden original-user step must never wait for a secondary modal UI. }
+  { Conflicting user files are therefore preserved during graphical setup. }
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\versions\{#Generation}\initialize.ps1')+'" -Quiet -RequireStandardUser -NoDialogs -SkipConflicts -Transaction "'+TxId+'" -TransactionAction '+Action;
   if not ExecAsOriginalUser(PowerShell,Params,'',SW_HIDE,ewWaitUntilTerminated,Code) then Code:=1;
   Result:=Code;
 end;
@@ -128,7 +129,7 @@ begin
   Info:=CreateOutputMsgPage(wpWelcome,'安装说明','将安装完整的虎娘输入法',
     '支持 x64 和 x86 应用。'+#13#10+#13#10+
     '程序安装到 Program Files，码表、设置和个人词条保存在当前用户的 %LOCALAPPDATA%\Tigirl。'+#13#10+#13#10+
-    '已有设置将保留。同名码表内容不同时，可选择覆盖或跳过；覆盖前会自动备份。'+#13#10+#13#10+
+    '已有设置将保留。升级时如默认码表与现有同名文件内容不同，将保留现有文件，不阻塞安装。'+#13#10+#13#10+
     '安装完成后请重新打开需要输入的程序。');
   Progress:=CreateOutputProgressPage('准备安装','正在校验安装文件，请稍候。');
   LogButton:=TNewButton.Create(WizardForm);LogButton.Parent:=WizardForm;LogButton.Caption:='打开日志';
