@@ -22,8 +22,11 @@ require("TerminateProcess(child.value,ERROR_TIMEOUT)" in cache and
         "WaitForSingleObject(child.value,5000)" in cache,
         "timed-out sentence helpers can survive the parent wait")
 require("maximumRevisions=8" in cache and "LOCKFILE_FAIL_IMMEDIATELY" in cache and
-        "remove_all(candidate.path" in cache,
-        "sentence revision cache does not have bounded best-effort GC")
+        "MoveFileExW(candidate.path.c_str(),tombstone.c_str(),MOVEFILE_WRITE_THROUGH)" in cache and
+        "remove_all(tombstone" in cache,
+        "sentence revision cache is not bounded through lock-protected retirement")
+require("FILE_ATTRIBUTE_REPARSE_POINT" in cache and "plainDirectory" in cache,
+        "sentence cache GC can traverse reparse-point directories")
 
 start = registration.index("BOOL RegisterCategories()")
 end = registration.index("void UnregisterCategories()")
