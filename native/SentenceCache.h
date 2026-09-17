@@ -3,6 +3,7 @@
 #include "SentenceImport.h"
 #include "SchemaCatalog.h"
 #include <algorithm>
+#include <atomic>
 #include <system_error>
 #include <vector>
 namespace tiger {
@@ -25,34 +26,55 @@ struct ImportLock {
     ~ImportLock(){if(locked)UnlockFileEx(handle,0,1,0,&offset);if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);}
     explicit operator bool()const{return locked;}
 };
+inline bool plainDirectory(const std::filesystem::path& path) {
+    const auto attributes=GetFileAttributesW(path.c_str());
+    return attributes!=INVALID_FILE_ATTRIBUTES && (attributes&FILE_ATTRIBUTE_DIRECTORY) &&
+        !(attributes&FILE_ATTRIBUTE_REPARSE_POINT);
+}
 inline void prune(const std::filesystem::path& root,std::u16string_view current) noexcept {
     try {
-        const auto rootAttributes=GetFileAttributesW(root.c_str());
-        if(rootAttributes==INVALID_FILE_ATTRIBUTES || (rootAttributes&FILE_ATTRIBUTE_REPARSE_POINT))return;
+        if(!plainDirectory(root))return;
         std::error_code error;
-        if(!std::filesystem::is_directory(root,error) || error)return;
         struct Candidate {std::filesystem::path path;std::filesystem::file_time_type time;};
         std::vector<Candidate> candidates;
+        std::vector<std::filesystem::path> retired;
         std::filesystem::directory_iterator it(root,error),end;
         for(;!error && it!=end;it.increment(error)) {
             std::error_code statusError;
             const auto name=it->path().filename().u16string();
-            if(!revisionName(name) || !it->is_directory(statusError) || statusError)continue;
-            const auto attributes=GetFileAttributesW(it->path().c_str());
-            if(attributes==INVALID_FILE_ATTRIBUTES || (attributes&FILE_ATTRIBUTE_REPARSE_POINT))continue;
+            if(name.rfind(u".gc-",0)==0) {
+                if(plainDirectory(it->path()))retired.push_back(it->path());
+                continue;
+            }
+            if(!revisionName(name) || !it->is_directory(statusError) || statusError || !plainDirectory(it->path()))continue;
             const auto time=it->last_write_time(statusError);if(statusError)continue;
             candidates.push_back({it->path(),time});
         }
+        // A failed previous cleanup is already detached from the cache namespace.
+        // Retrying it is safe and never walks a reparse-point directory.
+        for(const auto& path:retired) {
+            std::error_code removal;std::filesystem::remove_all(path,removal);
+        }
         std::sort(candidates.begin(),candidates.end(),[](const Candidate& a,const Candidate& b){return a.time>b.time;});
-        std::size_t retained=1; // Always reserve one slot for the active revision.
+        std::size_t retainedCount=1; // Always reserve one slot for the active revision.
+        static std::atomic<unsigned> serial{0};
         for(const auto& candidate:candidates) {
             if(candidate.path.filename().u16string()==current)continue;
-            if(retained<maximumRevisions){++retained;continue;}
-            // The producer holds this byte lock while publishing. Readers map
-            // immutable files with FILE_SHARE_DELETE, so old inactive revisions
-            // can disappear from the namespace without invalidating them.
-            ImportLock lock(candidate.path/L".import.lock");if(!lock)continue;
-            std::error_code removal;std::filesystem::remove_all(candidate.path,removal);
+            if(retainedCount<maximumRevisions){++retainedCount;continue;}
+            std::filesystem::path tombstone;
+            {
+                // The producer holds this byte lock while publishing. Rename the
+                // whole revision while we own the lock, then close the lock before
+                // recursive deletion. A new producer can safely recreate the old
+                // revision name without racing with deletion of its fresh files.
+                ImportLock lock(candidate.path/L".import.lock");if(!lock)continue;
+                const auto name=L".gc-"+candidate.path.filename().wstring()+L"-"+
+                    std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L"-"+
+                    std::to_wstring(serial.fetch_add(1,std::memory_order_relaxed));
+                tombstone=root/name;
+                if(!MoveFileExW(candidate.path.c_str(),tombstone.c_str(),MOVEFILE_WRITE_THROUGH))continue;
+            }
+            std::error_code removal;std::filesystem::remove_all(tombstone,removal);
         }
     }catch(...) { /* Cache GC is best effort and never disables sentence input. */ }
 }
