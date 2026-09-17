@@ -61,19 +61,17 @@ inline void prune(const std::filesystem::path& root,std::u16string_view current)
         for(const auto& candidate:candidates) {
             if(candidate.path.filename().u16string()==current)continue;
             if(retainedCount<maximumRevisions){++retainedCount;continue;}
-            std::filesystem::path tombstone;
-            {
-                // The producer holds this byte lock while publishing. Rename the
-                // whole revision while we own the lock, then close the lock before
-                // recursive deletion. A new producer can safely recreate the old
-                // revision name without racing with deletion of its fresh files.
-                ImportLock lock(candidate.path/L".import.lock");if(!lock)continue;
-                const auto name=L".gc-"+candidate.path.filename().wstring()+L"-"+
-                    std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L"-"+
-                    std::to_wstring(serial.fetch_add(1,std::memory_order_relaxed));
-                tombstone=root/name;
-                if(!MoveFileExW(candidate.path.c_str(),tombstone.c_str(),MOVEFILE_WRITE_THROUGH))continue;
-            }
+            // Probe the producer's byte lock, but close our handle before renaming
+            // its parent directory. If a producer starts in the tiny interval,
+            // its legacy non-delete-sharing lock handle makes the atomic rename
+            // fail; if it starts after the rename, it recreates the old revision
+            // name and cannot be touched by deletion of the detached tombstone.
+            {ImportLock lock(candidate.path/L".import.lock");if(!lock)continue;}
+            const auto name=L".gc-"+candidate.path.filename().wstring()+L"-"+
+                std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L"-"+
+                std::to_wstring(serial.fetch_add(1,std::memory_order_relaxed));
+            const auto tombstone=root/name;
+            if(!MoveFileExW(candidate.path.c_str(),tombstone.c_str(),MOVEFILE_WRITE_THROUGH))continue;
             std::error_code removal;std::filesystem::remove_all(tombstone,removal);
         }
     }catch(...) { /* Cache GC is best effort and never disables sentence input. */ }
