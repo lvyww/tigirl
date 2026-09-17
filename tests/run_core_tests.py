@@ -28,6 +28,7 @@ PROBES = {
     'code_mask': ('tests/code_mask_probe.cpp', False, []),
     'user_store_refresh_cache': ('tests/user_store_refresh_cache_probe.cpp', False, ['fixture.tcd']),
     'sentence_ngram_validation': ('tests/sentence_ngram_validation_probe.cpp', False, []),
+    'sentence_cache_gc': ('tests/sentence_cache_gc_probe.cpp', False, []),
 }
 
 
