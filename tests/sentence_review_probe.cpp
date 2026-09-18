@@ -50,12 +50,15 @@ struct RankingConflictModel:SentenceLanguageModel {
 };
 static bool boundaries(std::shared_ptr<const SentencePathBoundary> a,std::shared_ptr<const SentencePathBoundary> b) {
     while(a && b){if(a->textLength!=b->textLength || a->rawLength!=b->rawLength || a->learningScore!=b->learningScore ||
-        a->codeScore!=b->codeScore || a->protectsRareCharacter!=b->protectsRareCharacter || a->codeLength!=b->codeLength)return false;
+        a->codeScore!=b->codeScore || a->protectsRareCharacter!=b->protectsRareCharacter || a->codeLength!=b->codeLength ||
+        a->learningReward!=b->learningReward || a->learningRawStart!=b->learningRawStart || a->learningTextStart!=b->learningTextStart)return false;
         a=a->previous;b=b->previous;}return !a && !b;
 }
 static bool candidate(const SentenceCandidate& a,const SentenceCandidate& b) {
+    const bool earlyEqual=a.earlyCommitConfidenceScore==b.earlyCommitConfidenceScore ||
+        (std::isnan(a.earlyCommitConfidenceScore) && std::isnan(b.earlyCommitConfidenceScore));
     return a.text==b.text && a.segmentedCode==b.segmentedCode && a.baseScore==b.baseScore && a.finalScore==b.finalScore &&
-        a.confidenceScore==b.confidenceScore && a.supplementScore==b.supplementScore && a.learningScore==b.learningScore &&
+        a.confidenceScore==b.confidenceScore && earlyEqual && a.supplementScore==b.supplementScore && a.learningScore==b.learningScore &&
         a.codeScore==b.codeScore && a.lexicalScore==b.lexicalScore &&
         a.maxLexiconRank==b.maxLexiconRank && a.eligibleDuplicateSinglePath==b.eligibleDuplicateSinglePath && boundaries(a.boundary,b.boundary);
 }
@@ -68,7 +71,8 @@ static bool equal(const SentenceDecodeResult& a,const SentenceDecodeResult& b) {
     if(x.confidenceTruncated!=y.confidenceTruncated || x.mergedIncompleteTail!=y.mergedIncompleteTail || x.neutralIncompleteTail!=y.neutralIncompleteTail ||
        x.neutralLowConfidence!=y.neutralLowConfidence || x.proposal!=y.proposal || x.proposalShare!=y.proposalShare || x.rawLengths!=y.rawLengths || x.prefixes.size()!=y.prefixes.size())return false;
     for(std::size_t i=0;i<x.prefixes.size();++i){const auto& p=x.prefixes[i];const auto& q=y.prefixes[i];
-        if(p.text!=q.text || p.rawLength!=q.rawLength || p.share!=q.share || p.boundaryShare!=q.boundaryShare || p.boundaryClosed!=q.boundaryClosed)return false;}
+        const bool baseEqual=p.baseShare==q.baseShare || (std::isnan(p.baseShare) && std::isnan(q.baseShare));
+        if(p.text!=q.text || p.rawLength!=q.rawLength || p.share!=q.share || !baseEqual || p.boundaryShare!=q.boundaryShare || p.boundaryClosed!=q.boundaryClosed)return false;}
     return true;
 }
 static double share(const SentenceDecodeResult& r,std::u16string_view text){for(const auto& p:r.earlyCommitEvidence.prefixes)if(p.text==text)return p.share;return -1;}
