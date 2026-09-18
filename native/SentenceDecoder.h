@@ -10,6 +10,7 @@
 #include <optional>
 #include <atomic>
 #include <exception>
+#include <limits>
 namespace tiger {
 struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
@@ -18,6 +19,11 @@ struct SentencePathBoundary {
     double codeScore=0; // Cumulative final-ranking-only shape evidence.
     bool protectsRareCharacter=false;
     int codeLength=0;
+    // When this boundary closes a learnt span, retain its exact origin so a
+    // later explicit top1 commit can reinforce that preference without
+    // guessing text/code segmentation.
+    double learningReward=0;
+    int learningRawStart=0,learningTextStart=0;
 };
 struct SentenceLockedPrefix {
     std::u16string rawCode,text;
@@ -25,7 +31,9 @@ struct SentenceLockedPrefix {
 };
 struct SentenceCandidate {
     std::u16string text,segmentedCode;
-    double baseScore=0,finalScore=0,confidenceScore=0,supplementScore=0,codeScore=0,lexicalScore=0;
+    double baseScore=0,finalScore=0,confidenceScore=0;
+    double earlyCommitConfidenceScore=std::numeric_limits<double>::quiet_NaN();
+    double supplementScore=0,codeScore=0,lexicalScore=0;
     int maxLexiconRank=1;
     std::shared_ptr<const SentencePathBoundary> boundary;
     // Eligibility from the producing decoder's settings, retained with its snapshot.
@@ -37,6 +45,8 @@ struct SentencePrefixEvidence {
     int rawLength=0;
     double share=0,boundaryShare=0;
     bool boundaryClosed=false;
+    // Appended for source compatibility with existing aggregate fixtures.
+    double baseShare=std::numeric_limits<double>::quiet_NaN();
 };
 struct SentenceEarlyCommitEvidence {
     std::vector<SentencePrefixEvidence> prefixes;
@@ -76,6 +86,7 @@ struct SentenceDecoderOptions {
     double canonicalCodeReward=0,canonicalIsolationFactor=1,lexicalPriorWeight=0;
     int canonicalIsolationMinCodeLength=4,lexicalCandidateLimit=5;
     bool allowDuplicateSingleCharacters=false;
+    bool preserveTruncatedEarlyCommitEvidence=false;
 };
 // Decoder owns composition-local lattice state. Large data resources remain
 // shared immutable views. Engine commit policy is a separate integration step.

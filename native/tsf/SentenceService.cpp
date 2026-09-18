@@ -23,6 +23,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     options.canonicalCodeReward=2;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;
     options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
     options.allowDuplicateSingleCharacters=sentenceSettings_.allowDuplicateSingleCharacters;
+    options.preserveTruncatedEarlyCommitEvidence=true;
     const auto number=std::to_string(common);
     const auto signature=path.u16string()+u"\n"+model.u16string()+u"\n"+sentenceSettings_.fullCodeWhitelist+u"\n"+
         std::u16string(number.begin(),number.end())+(options.allowDuplicateSingleCharacters?u"1":u"0")+

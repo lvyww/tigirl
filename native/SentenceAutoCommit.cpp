@@ -1,6 +1,7 @@
 #include "SentenceAutoCommit.h"
 #include "Grapheme.h"
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 namespace tiger {
@@ -11,9 +12,11 @@ bool starts(std::u16string_view text,std::u16string_view prefix){return text.siz
 std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceAutoCommitInput& in,const SentenceDecodeResult& result) {
     const auto& raw=result.rawCode;const auto& evidence=result.earlyCommitEvidence;
     if(!in.enabled || in.suspended || !in.matchingLexicon ||
-       !(raw==in.raw || (raw.size()+1==in.raw.size() && starts(in.raw,raw))) || raw.size()<=4 || evidence.confidenceTruncated) {
+       !(raw==in.raw || (raw.size()+1==in.raw.size() && starts(in.raw,raw))) || raw.size()<=4) {
         reset();return {};
     }
+    const bool currentGeneration=raw==in.raw;
+    if(evidence.confidenceTruncated && !currentGeneration){reset();return {};}
     // Confidence intentionally excludes final-stage ranking priors. Require
     // every automatic commit to remain a prefix of the candidate displayed
     // first after those priors have reranked the menu. A null top preserves
@@ -34,7 +37,9 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
     std::vector<SentencePrefixEvidence> qualifying;
     std::map<Key,std::size_t> qualifyingIndex;
     for(const auto& p:evidence.prefixes) {
-        if(p.text.empty() || !p.boundaryClosed || p.share<.995 || p.rawLength<=in.committedRaw ||
+        const double baseShare=std::isnan(p.baseShare)?p.share:p.baseShare;
+        if(p.text.empty() || !p.boundaryClosed || p.share<.99 ||
+           (evidence.confidenceTruncated && baseShare<.999) || p.rawLength<=in.committedRaw ||
            p.text.size()<=in.committedText.size() || !starts(p.text,in.committedText) ||
            (visibleTop && !starts(*visibleTop,p.text)) || (!evidence.mergedIncompleteTail && !visibleBoundaries.count(Key{p.text,p.rawLength})))continue;
         auto [it,inserted]=qualifyingIndex.emplace(Key{p.text,p.rawLength},qualifying.size());
@@ -61,7 +66,8 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
             auto old=trackerIndex.find(Key{p.text,p.rawLength});
             Tracker t=old==trackerIndex.end()?Tracker{p.text,p.rawLength}:*old->second;
             t.evidence=std::min(std::max(1,options_.requiredEvidence),t.evidence+1);
-            t.strong=p.share>=.99999?std::min(std::max(1,options_.requiredStrong),t.strong+1):0;
+            const double baseShare=std::isnan(p.baseShare)?p.share:p.baseShare;
+            t.strong=baseShare>=.999?std::min(std::max(1,options_.requiredStrong),t.strong+1):0;
             t.gap=0;t.share=p.share;next.push_back(std::move(t));
         }
     }

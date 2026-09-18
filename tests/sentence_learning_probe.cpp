@@ -141,6 +141,32 @@ static void decoderTests(const std::filesystem::path& folder) {
     check(learned.learningAffected && learned.earlyCommitEvidence.prefixes.empty() && learned.earlyCommitEvidence.confidenceTruncated,"learned candidate pool not auto confidence");
     check(std::abs(learned.candidates.front().finalScore-learned.candidates.front().baseScore-9)<1e-5,"learning reward exactly once");
     check(std::abs(learned.candidates.front().confidenceScore-learned.candidates.front().baseScore)<1e-5,"confidence excludes reward");
+    // A complete confidence pool now lets learning contribute gradually to
+    // ordinary early evidence while the model-only confidence remains intact.
+    auto confidenceOptions=options;confidenceOptions.beamWidth=100;
+    SentenceDecoder confidenceDecoder(lex,{},confidenceOptions);
+    auto baselineConfidence=confidenceDecoder.decode(u"aabb",20,true);
+    auto target=[](const SentenceDecodeResult& r)->const SentenceCandidate& {
+        auto it=std::find_if(r.candidates.begin(),r.candidates.end(),[](const auto& c){return c.text==u"乙中";});
+        if(it==r.candidates.end())throw std::runtime_error("learning confidence target missing");return *it;
+    };
+    const auto baseTarget=target(baselineConfidence);
+    confidenceDecoder.setLearning(SentenceLearningSnapshot::build({e},e.time),e.mode);
+    auto firstConfidence=confidenceDecoder.decode(u"aabb",20,true);const auto firstTarget=target(firstConfidence);
+    check(firstConfidence.learningAffected && !firstConfidence.earlyCommitEvidence.prefixes.empty(),"learning keeps ordinary early evidence");
+    check(std::abs(firstTarget.earlyCommitConfidenceScore-firstTarget.confidenceScore)<1e-12,"first correction adds zero early confidence");
+    auto e2=e;e2.id=learningId();auto e3=e;e3.id=learningId();
+    confidenceDecoder.setLearning(SentenceLearningSnapshot::build({e,e2},e.time),e.mode);
+    const auto secondTarget=target(confidenceDecoder.decode(u"aabb",20,true));
+    confidenceDecoder.setLearning(SentenceLearningSnapshot::build({e,e2,e3},e.time),e.mode);
+    auto matureConfidence=confidenceDecoder.decode(u"aabb",20,true);const auto matureTarget=target(matureConfidence);
+    check(secondTarget.earlyCommitConfidenceScore>firstTarget.earlyCommitConfidenceScore &&
+        matureTarget.earlyCommitConfidenceScore>secondTarget.earlyCommitConfidenceScore,"learning early confidence matures progressively");
+    check(std::abs(baseTarget.confidenceScore-matureTarget.confidenceScore)<1e-12,"mature learning does not alter model confidence");
+    bool sawPersonalizedPrefix=false;
+    for(const auto& prefix:matureConfidence.earlyCommitEvidence.prefixes)
+        if(prefix.share>prefix.baseShare+1e-12){sawPersonalizedPrefix=true;break;}
+    check(sawPersonalizedPrefix,"mature learning raises ordinary Share while retaining BaseShare");
     auto incremental=decoder.decode(u"aabbcc",20,true);check(incremental.candidates.front().text==u"乙中国","local preference survives added suffix");
     auto exact=decoder.decode(u"aa2bb",20,true);check(exact.candidates.front().text==u"乙中","explicit rank semantics unchanged");
     auto illegal=event(u"aabb",u"重庆中");decoder.setLearning(SentenceLearningSnapshot::build({illegal}),illegal.mode);

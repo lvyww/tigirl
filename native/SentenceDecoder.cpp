@@ -11,8 +11,24 @@
 namespace tiger {
 namespace {
 constexpr std::u16string_view bos=u"\x02",eos=u"\x03";
+constexpr double supplementEarlyScale=.05,supplementEarlyCap=.75;
+constexpr double learningEarlyScale=.075,learningEarlyCap=.75,personalizedEarlyCap=.80;
+inline double learningMaturity(double score) {
+    if(score<=9)return 0;
+    const double weight=std::exp((score-9)/2);
+    return std::clamp((weight-1)/2,0.0,1.0);
+}
+inline double learningEarlyContribution(double score) {
+    return std::min(learningEarlyCap,std::max(0.0,score)*learningMaturity(score)*learningEarlyScale);
+}
+inline double supplementEarlyContribution(double score) {
+    return std::min(supplementEarlyCap,std::max(0.0,score)*supplementEarlyScale);
+}
+inline double earlyScore(const SentenceCandidate& c) {
+    return std::isnan(c.earlyCommitConfidenceScore)?c.confidenceScore:c.earlyCommitConfidenceScore;
+}
 struct State {
-    double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0,codeScore=0;
+    double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0,learningEarlyCommitBonus=0,codeScore=0;
     std::u16string text;
     // Context tokens refer to immutable mapped lexicon text (or static BOS).
     // The decoder retains that lexicon for the whole lattice lifetime.
@@ -458,6 +474,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 next.codeScore=item.codeScore+codeReward;
                 next.text+=c.text;next.supplementScore+=supplementAdded;next.rank=std::max(item.rank,static_cast<int>(c.rank));
                 next.learningPotential=0;
+                double chosenLearningReward=0;int chosenLearningRawStart=0,chosenLearningTextStart=0;
                 if(learning_ && !learning_->empty()) {
                     // Consider only suffixes with real raw/text boundaries. A DP
                     // maximum prevents overlapping learnt fragments being counted twice.
@@ -473,7 +490,13 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                         if(potential>0){lattice.learningAffected=true;next.learningPotential=std::max(next.learningPotential,potential);}
                         if(reward>0) {
                             lattice.learningAffected=true;
-                            next.learningScore=std::max(next.learningScore,(start?start->learningScore:0)+reward);
+                            const double candidateLearning=(start?start->learningScore:0)+reward;
+                            const double candidateBonus=std::max(item.learningEarlyCommitBonus,learningEarlyContribution(reward));
+                            if(candidateLearning>next.learningScore ||
+                               (candidateLearning==next.learningScore && candidateBonus>next.learningEarlyCommitBonus)) {
+                                next.learningScore=candidateLearning;next.learningEarlyCommitBonus=candidateBonus;
+                                chosenLearningReward=reward;chosenLearningRawStart=rawStart;chosenLearningTextStart=textStart;
+                            }
                         }
                         if(!start)break;start=start->previous;
                     }
@@ -482,7 +505,8 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 next.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{
                     item.boundary,static_cast<int>(next.text.size()),consumed,next.learningScore,next.codeScore,
                     options_.canonicalIsolationFactor<1 && c.textElements.size()==1 &&
-                        (c.primarySingleCharacterCode || selected>0),codeLength});
+                        (c.primarySingleCharacterCode || selected>0),codeLength,chosenLearningReward,
+                    chosenLearningRawStart,chosenLearningTextStart});
                 states[consumed].truncated|=bucket.truncated;
                 states[consumed].add(std::move(next));++expanded;
             }
@@ -502,7 +526,11 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         const double confidenceAdjustment=eosScore-isolation(lattice,state.text);
         SentenceCandidate c;c.text=state.text;c.baseScore=state.score-state.learningScore+adjustment;
         c.finalScore=c.baseScore+state.learningScore;c.learningScore=state.learningScore;
-        c.confidenceScore=state.mass+confidenceAdjustment;c.supplementScore=state.supplementScore;c.codeScore=state.codeScore;
+        c.confidenceScore=state.mass+confidenceAdjustment;
+        const double personalization=std::min(personalizedEarlyCap,
+            supplementEarlyContribution(state.supplementScore)+state.learningEarlyCommitBonus);
+        c.earlyCommitConfidenceScore=c.confidenceScore+personalization;
+        c.supplementScore=state.supplementScore;c.codeScore=state.codeScore;
         c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
         c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
             ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
@@ -551,10 +579,8 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         });
     }
     result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;
-    result.earlyCommitEvidence.confidenceTruncated=completed.truncated || result.learningAffected;
-    // Truncated/learned mass cannot authorize automatic commits. Do not build
-    // expensive unusable prefix evidence; retain the full scored pool for callers.
-    if(includeEarlyCommitEvidence && !result.earlyCommitEvidence.confidenceTruncated) {
+    result.earlyCommitEvidence.confidenceTruncated=completed.truncated;
+    if(includeEarlyCommitEvidence && (!completed.truncated || options_.preserveTruncatedEarlyCommitEvidence)) {
         auto& evidence=result.earlyCommitEvidence;
         evidence.confidenceTruncated=completed.truncated;
         auto required=[&](std::u16string_view text) {
@@ -567,10 +593,14 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             if(c.text.empty())return;
             auto [it,inserted]=poolIndex.emplace(Key{c.text,c.boundary?c.boundary->rawLength:0},pool.size());
             if(inserted){pool.push_back(c);return;}
-            auto& old=pool[it->second];double top=std::max(old.confidenceScore,c.confidenceScore);
+            auto& old=pool[it->second];
+            double top=std::max(old.confidenceScore,c.confidenceScore);
             double combined=top+std::log(std::exp(old.confidenceScore-top)+std::exp(c.confidenceScore-top));
-            if(c.confidenceScore>old.confidenceScore)old=c;
-            old.confidenceScore=combined;
+            const double oldEarly=earlyScore(old),newEarly=earlyScore(c);
+            double earlyTop=std::max(oldEarly,newEarly);
+            double combinedEarly=earlyTop+std::log(std::exp(oldEarly-earlyTop)+std::exp(newEarly-earlyTop));
+            if(newEarly>oldEarly)old=c;
+            old.confidenceScore=combined;old.earlyCommitConfidenceScore=combinedEarly;
         };
         for(const auto& c:all)if(required(c.text)){visible.push_back(&c);add(c);}
         int maxCode=1;for(int n:lexicon_->codeLengths())maxCode=std::max(maxCode,n);
@@ -590,34 +620,40 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             if(added){evidence.mergedIncompleteTail=true;evidence.confidenceTruncated|=partial.truncated;}
         }
         evidence.neutralIncompleteTail=visible.empty() && evidence.mergedIncompleteTail;
-        // A truncated partial tail also invalidates all posterior evidence.
-        // Keep the diagnostic flags/pool, but do not build unusable prefix mass.
-        if(evidence.confidenceTruncated)return result;
+        // Preserve retained prefix mass when the product opts into the
+        // strong-truncated policy. The engine still requires model-only strong
+        // evidence and the current generation before committing it.
+        if(evidence.confidenceTruncated && !options_.preserveTruncatedEarlyCommitEvidence)return result;
         if(!visible.empty()) {
             double maximum=visible.front()->confidenceScore,total=0;
             for(const auto* c:visible)maximum=std::max(maximum,c->confidenceScore);
             for(const auto* c:visible)total+=std::exp(c->confidenceScore-maximum);
-            evidence.neutralLowConfidence=total>0 && 1/total<0.995;
+            evidence.neutralLowConfidence=total>0 && 1/total<0.99;
         }
         if(!pool.empty()) {
-            double maximum=pool.front().confidenceScore,total=0;
-            for(const auto& c:pool)maximum=std::max(maximum,c.confidenceScore);
-            std::map<Key,std::size_t> massIndex;std::vector<std::pair<Key,double>> mass;
+            double baseMaximum=pool.front().confidenceScore,earlyMaximum=earlyScore(pool.front());
+            for(const auto& c:pool){baseMaximum=std::max(baseMaximum,c.confidenceScore);earlyMaximum=std::max(earlyMaximum,earlyScore(c));}
+            double baseTotal=0,earlyTotal=0;
+            struct Mass {Key key;double base=0,early=0;};
+            std::map<Key,std::size_t> massIndex;std::vector<Mass> mass;
             std::map<int,double> boundaryMass;
             for(const auto& c:pool) {
                 checkCancelled();
-                double weight=std::exp(c.confidenceScore-maximum);total+=weight;std::set<int> boundaries;
+                double baseWeight=std::exp(c.confidenceScore-baseMaximum);
+                double earlyWeight=std::exp(earlyScore(c)-earlyMaximum);
+                baseTotal+=baseWeight;earlyTotal+=earlyWeight;std::set<int> boundaries;
                 for(auto b=c.boundary;b;b=b->previous)if(b->textLength>0 && b->textLength<=static_cast<int>(c.text.size())) {
                     Key key{std::u16string_view(c.text).substr(0,b->textLength),b->rawLength};
                     auto [it,inserted]=massIndex.emplace(key,mass.size());
-                    if(inserted)mass.push_back({std::move(key),0});
-                    mass[it->second].second+=weight;boundaries.insert(b->rawLength);
+                    if(inserted)mass.push_back({std::move(key),0,0});
+                    mass[it->second].base+=baseWeight;mass[it->second].early+=earlyWeight;boundaries.insert(b->rawLength);
                 }
-                for(int b:boundaries)boundaryMass[b]+=weight;
+                for(int b:boundaries)boundaryMass[b]+=baseWeight;
             }
-            if(total>0)for(const auto& item:mass) {
-                double boundaryShare=boundaryMass[item.first.second]/total;
-                evidence.prefixes.push_back({std::u16string(item.first.first),item.first.second,item.second/total,boundaryShare,boundaryShare>=0.99999});
+            if(baseTotal>0 && earlyTotal>0)for(const auto& item:mass) {
+                double boundaryShare=boundaryMass[item.key.second]/baseTotal;
+                evidence.prefixes.push_back({std::u16string(item.key.first),item.key.second,item.early/earlyTotal,
+                    boundaryShare,boundaryShare>=0.99999,item.base/baseTotal});
             }
         }
         const SentencePrefixEvidence* longest=nullptr;std::size_t longestElements=0;
@@ -626,7 +662,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             auto found=closed.find(prefix.text);
             if(found==closed.end() || prefix.share>found->second->share ||
                 (prefix.share==found->second->share && prefix.rawLength<found->second->rawLength))closed[prefix.text]=&prefix;
-            if(prefix.share<0.995)continue;
+            if(prefix.share<0.99)continue;
             auto count=wordTextElements(prefix.text).size();
             if(!longest || count>longestElements || (count==longestElements &&
                 (prefix.share>longest->share || (prefix.share==longest->share && prefix.rawLength<longest->rawLength)))) {
