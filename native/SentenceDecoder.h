@@ -12,6 +12,11 @@
 #include <exception>
 #include <limits>
 namespace tiger {
+enum SentenceCandidateSource : unsigned {
+    SentenceSourceNone=0,
+    SentenceSourceDirect=1,
+    SentenceSourceComposed=2
+};
 struct SentencePathBoundary {
     std::shared_ptr<const SentencePathBoundary> previous;
     int textLength=0,rawLength=0;
@@ -35,6 +40,8 @@ struct SentenceCandidate {
     double earlyCommitConfidenceScore=std::numeric_limits<double>::quiet_NaN();
     double supplementScore=0,codeScore=0,lexicalScore=0;
     int maxLexiconRank=1;
+    unsigned source=SentenceSourceNone;
+    int directRank=std::numeric_limits<int>::max();
     std::shared_ptr<const SentencePathBoundary> boundary;
     // Eligibility from the producing decoder's settings, retained with its snapshot.
     bool eligibleDuplicateSinglePath=false;
@@ -109,6 +116,7 @@ public:
     void retainCommittedHistory(std::u16string_view raw,int committedRaw);
     SentenceDecoderMemory memoryStatus() const;
     void setLearning(std::shared_ptr<const SentenceLearningSnapshot> snapshot,std::u16string mode);
+    void applyFusionOrdering(std::u16string_view raw,std::vector<SentenceCandidate>& candidates) const;
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
         std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
     bool isProperCodePrefix(std::u16string_view raw) const;
