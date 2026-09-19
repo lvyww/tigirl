@@ -70,7 +70,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
         if(action==L"settings")showInputSettings(nullptr,root/L"config.txt");
         else if(action==L"folder"){std::filesystem::create_directories(source);openTarget(source);}
-        else if(action==L"official")openTarget(L"https://github.com/lvyww/bime");
+        else if(action==L"official")openTarget(L"https://github.com/lvyww/tigirl");
         else if(action==L"use" || action==L"reload" || action==L"recent" || action==L"initialize") {
             if(action==L"initialize")for(const auto& item:names)prepare(item);else prepare(name);
             tiger::selectSchemaConfiguration(root/L"config.txt",name);

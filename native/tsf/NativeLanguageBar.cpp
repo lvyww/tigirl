@@ -115,7 +115,7 @@ void LanguageBar::refreshMenu() {
     for(const auto& name:names)schemas.children.push_back({id++,wide(name),L"use",wide(name),ordinalCompareIgnoreCase(name,current.empty()?u"虎码字词":current)==0});
     const auto theme=parseCandidateStyle(text).theme;
     for(const auto name:candidateThemeNames)themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
-    menu_={{7,L"虎爪 Github 页面",L"official"},{},
+    menu_={{7,L"虎娘 GitHub 页面",L"official"},{},
         {3,L"方案文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
         {5,L"加词"},std::move(schemas),std::move(themes),{2,L"输入设置"}};
 }
