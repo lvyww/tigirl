@@ -51,11 +51,13 @@ try {
     }
     $version=(Get-Content -LiteralPath "$PSScriptRoot\manifest.json" -Raw|ConvertFrom-Json).version
     $marker=Join-Path $root 'installed-data-version.txt'
+    $baselinePath=Join-Path $root 'installed-data-baseline.json'
     if($Quiet -and !$Transaction -and (Test-Path -LiteralPath $marker) -and (Get-Content -LiteralPath $marker -Raw).Trim() -eq $version){exit 0}
     Write-InitializeLog 'Scanning dictionary conflicts'
     $plan=@(Get-DataMerge "$PSScriptRoot\DefaultData" $root)
     $conflictCount=@($plan|Where-Object Conflict).Count
     Write-InitializeLog "Scan complete: files=$($plan.Count), conflicts=$conflictCount"
+    foreach($item in $plan|Where-Object Choice -eq 'Skip'){Write-InitializeLog ("Retaining user file ({0}): {1}" -f $item.Reason,$item.Target)}
     # -NoDialogs is a hard non-interactive contract. Conflict entries already default
     # to Skip, so installers and other hidden callers safely preserve the user's files.
     if(!$SkipConflicts -and !$NoDialogs){
@@ -67,7 +69,7 @@ try {
     }
     $backup=Join-Path $root ('backups\install-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N'))
     # Snapshot descriptors before the compiler publishes any generations.
-    $paths=@($config,(Join-Path $root 'installed-data-version.txt'))+@(Get-ChildItem -LiteralPath (Join-Path $root 'schemas') -Filter current.txt -Recurse -ErrorAction SilentlyContinue|ForEach-Object FullName)
+    $paths=@($config,$baselinePath,(Join-Path $root 'installed-data-version.txt'))+@(Get-ChildItem -LiteralPath (Join-Path $root 'schemas') -Filter current.txt -Recurse -ErrorAction SilentlyContinue|ForEach-Object FullName)
     foreach($path in $paths){$snapshots+= [pscustomobject]@{Path=$path;Bytes=$(if(Test-Path -LiteralPath $path){[IO.File]::ReadAllBytes($path)}else{$null})}}
     Save-UserJournal @{id=$Transaction;state='prepared';backup=$backup;snapshots=$snapshots} $userJournal
     $compilationStarted=$true
@@ -85,6 +87,8 @@ try {
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class NativeTigerTip { [DllImport("input.dll", CharSet=CharSet.Unicode)] public static extern bool InstallLayoutOrTip(string profile, uint flags); }'
         if(![NativeTigerTip]::InstallLayoutOrTip('0804:{D2291A80-84D8-4641-9AB2-BDD1472C846B}{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}',0)){throw 'Cannot enable input profile.'}
     }
+    # Baseline and data share the same recovery journal; skipped entries retain their old baseline.
+    Save-DataBaseline $plan $baselinePath
     Write-InitializeLog 'Writing completion marker'
     $version|Set-Content -LiteralPath $marker -Encoding UTF8
     Save-UserJournal @{id=$Transaction;state='initialized';backup=$backup;snapshots=$snapshots} $userJournal

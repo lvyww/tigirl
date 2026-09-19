@@ -36,7 +36,7 @@ jobs:
       - name: Test script cleanup, installer resilience and failure propagation
         shell: pwsh
         run: |
-          foreach ($script in @('packaging/setup/deploy.ps1','packaging/install.ps1','packaging/initialize.ps1')) {
+          foreach ($script in @('packaging/setup/deploy.ps1','packaging/install.ps1','packaging/initialize.ps1','packaging/data.ps1','packaging/retirement.ps1')) {
             $tokens=$null; $errors=$null
             [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
             if ($errors) { throw (($errors | ForEach-Object { "${script}: $_" }) -join "`n") }
@@ -54,7 +54,23 @@ jobs:
             & ./tests/setup_locked_cleanup_test.ps1
             & ./tests/setup_transaction_test.ps1
             & ./tests/setup_repair_adoption_test.ps1
+            & ./tests/package_data_test.ps1
+            & ./tests/setup_data_baseline_test.ps1
+            & ./tests/setup_retirement_test.ps1
+            & ./tests/setup_package_paths_test.ps1
           }
+      - name: Compile installer and test runtime generations (no installation)
+        if: matrix.platform == 'x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tools = Join-Path $env:RUNNER_TEMP 'Tigirl-Inno-6.7.3'
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $setup
+          if ((Get-FileHash $setup).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Inno download hash mismatch' }
+          $p = Start-Process $setup -ArgumentList @('/PORTABLE=1','/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/SP-',('/DIR="'+$tools+'"')) -Wait -PassThru
+          if ($p.ExitCode) { throw 'Portable compiler extraction failed' }
+          & ./tests/setup_compiler_smoke_test.ps1 -Compiler (Join-Path $tools 'ISCC.exe')
       - name: Compile DLL, loader probe and all production tools (no model)
         shell: pwsh
         run: ./build_native.ps1 -Platform $env:TIGIRL_PLATFORM -PlatformToolset v145

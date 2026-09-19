@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 function Check($Value,$Message){if(!$Value){throw $Message}}
 # Load function definitions only; never execute the elevated entry point or real registry calls.
 $tokens=$null;$errors=$null
@@ -28,6 +28,14 @@ try{
  Check ((Get-Content $NativeTigerRecord -Raw|ConvertFrom-Json).directory -eq $old) 'Install record not restored'
  Check (!(Test-Path $journal)) 'Recovery was not committed'
  Restore-Transaction
+ # A crash after atomic commit must not reactivate a now-retired previous version.
+ $script:registry=@{Registry64=(Get-PackageDll $new 'x64');Registry32=(Get-PackageDll $new 'x86')}
+ Save-Json @{directory=$new;version='2026.9.20.1';transaction='published';previous=$null} $NativeTigerRecord
+ Save-Json @{id='published';directory=$new;previous=$previous;state='registered'} $journal
+ Restore-Transaction
+ Check ($script:registry.Registry64 -eq (Get-PackageDll $new 'x64')) 'Published commit rolled back'
+ Check ((Get-Content $NativeTigerRecord -Raw|ConvertFrom-Json).directory -eq $new) 'Published install record replaced'
+ Check (Test-Path (Join-Path $InstallRoot 'committed-published.json')) 'Published journal not finalized'
  Save-Json @{id='foreign';directory=$new;previous=$previous;state='registering'} $journal
  $script:registry.Registry32='C:\another-input-method\other.dll'
  $blocked=$false;try{Restore-Transaction}catch{$blocked=$true}

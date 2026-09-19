@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 deploy = (ROOT / "packaging" / "setup" / "deploy.ps1").read_text(encoding="utf-8-sig")
 iss = (ROOT / "packaging" / "setup" / "Tigirl.iss").read_text(encoding="utf-8-sig")
+retirement = (ROOT / "packaging" / "retirement.ps1").read_text(encoding="utf-8-sig")
 zip_install = (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8-sig")
 initialize = (ROOT / "packaging" / "initialize.ps1").read_text(encoding="utf-8-sig")
 
@@ -17,6 +18,18 @@ require("\nCompression=lzma2/ultra64\n" in iss, "installer no longer uses the ul
 require("\nSolidCompression=yes\n" in iss, "installer solid compression is disabled")
 require("\nLZMAUseSeparateProcess=yes\n" in iss, "high-compression builds can exhaust the 32-bit compiler address space")
 require("ExtractTemporaryFiles('{tmp}\\payload\\*')" in iss, "installer no longer fully extracts its payload before preflight")
+
+# Simpler full-payload lifecycle: distinct runtime generations, no shared resources.
+require("InstallGeneration:=NewInstallGeneration" in iss, "setup no longer generates a per-run directory")
+require("{#Generation}" not in iss, "setup still reuses a package-hash directory")
+require("Get-NewVersionDirectory $Generation" in deploy, "fresh-directory collision guard is bypassed")
+require("previous=$null;transaction=$j.id" in deploy, "committed installs retain a rollback generation")
+require("Retained committed installation after interruption" in deploy, "committed recovery may reactivate retired files")
+require("Remove-Version $old.FullName -AtReboot" in retirement, "upgrade immediately deletes old runtime files")
+require("uninsneveruninstall" in iss, "Inno can bypass hash-aware runtime-file cleanup")
+require("{app}\\maintenance" in iss, "uninstall backend depends on a retired directory")
+require("Save-DataBaseline $plan $baselinePath" in initialize, "successful data initialization does not publish its baseline")
+require("$paths=@($config,$baselinePath," in initialize, "baseline is outside the user-data rollback journal")
 
 # The machine log must survive deletion of Program Files\Tigirl.
 require("Join-Path $env:ProgramData 'Tigirl\\Logs'" in deploy, "deploy log is not in ProgramData")

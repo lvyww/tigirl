@@ -11,10 +11,28 @@ function Assert-PlainTree([string]$Path) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing redirected data: $($item.FullName)" }
     }
 }
+# A per-user baseline describes bytes actually installed, never merely offered.
+function Read-DataBaseline([string]$Path) {
+    $result=@{}
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { return $result }
+    try {
+        $record=Get-Content -LiteralPath $Path -Raw|ConvertFrom-Json
+        if ($record.schemaVersion -ne 1) { throw 'Unknown baseline format.' }
+        foreach ($entry in $record.files) {
+            if (!$entry.path -or $entry.path -match '(^[\\/]|:|(^|[\\/])\.\.?([\\/]|$))' -or $entry.sha256 -notmatch '^[a-fA-F0-9]{64}$' -or $result.ContainsKey($entry.path)) { throw 'Invalid baseline entry.' }
+            $result[$entry.path]=$entry.sha256
+        }
+    } catch {
+        Write-Warning 'Installation baseline is unreadable; existing user files will be preserved.'
+        return @{}
+    }
+    return $result
+}
 function Get-DataMerge([string]$Source,[string]$Destination) {
     Assert-PlainTree $Source
     Assert-PlainTree $Destination
     if (!(Test-Path -LiteralPath $Source -PathType Container)) { return }
+    $baseline=Read-DataBaseline (Join-Path $Destination 'installed-data-baseline.json')
     $prefix=[IO.Path]::GetFullPath($Source).TrimEnd('\')+'\'
     foreach ($file in Get-ChildItem -LiteralPath $Source -Recurse -File) {
         $relative=$file.FullName.Substring($prefix.Length)
@@ -23,8 +41,21 @@ function Get-DataMerge([string]$Source,[string]$Destination) {
         if ($exists -and !(Test-Path -LiteralPath $target -PathType Leaf)) { throw "A directory occupies a file path: $target" }
         $hash=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
         $old=if ($exists) { (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash } else { '' }
-        [pscustomobject]@{Source=$file.FullName;Target=$target;Hash=$hash;OldHash=$old;Conflict=($exists -and $hash -ne $old);Choice=$(if($hash -eq $old){'Skip'}elseif($exists){'Skip'}else{'Copy'})}
+        $managed=$exists -and $baseline.ContainsKey($relative) -and $old -eq $baseline[$relative]
+        $reason=if(!$exists){'Missing'}elseif($managed){'Unmodified'}elseif($baseline.ContainsKey($relative)){'Modified'}else{'Unknown'}
+        # Even identical official bytes may be copied. Unknown/modified files are not adopted.
+        [pscustomobject]@{Source=$file.FullName;Target=$target;RelativePath=$relative;Hash=$hash;OldHash=$old;BaselineHash=$baseline[$relative];Reason=$reason;Conflict=($exists -and !$managed -and $hash -ne $old);Choice=$(if(!$exists -or $managed){'Copy'}else{'Skip'})}
     }
+}
+function Save-DataBaseline($Plan,[string]$Path) {
+    $baseline=Read-DataBaseline $Path
+    foreach($item in $Plan) {
+        if($item.Choice -eq 'Copy') { $baseline[$item.RelativePath]=$item.Hash }
+    }
+    $files=@($baseline.Keys|Sort-Object|ForEach-Object {@{path=$_;sha256=$baseline[$_]}})
+    $tmp=$Path+'.tmp'
+    @{schemaVersion=1;files=$files}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $tmp -Encoding UTF8
+    if(Test-Path -LiteralPath $Path){[IO.File]::Replace($tmp,$Path,[NullString]::Value)}else{[IO.File]::Move($tmp,$Path)}
 }
 function Select-DataConflicts($Plan) {
     $conflicts=@($Plan | Where-Object Conflict)
