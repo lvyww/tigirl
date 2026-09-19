@@ -41,7 +41,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     auto helper=dictionaryPath_.parent_path()/L"Tigirl.Import.exe";auto cache=userRoot_/L"cache"/L"sentence";
     auto whitelist=sentenceSettings_.whitelist();
     auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L".tigirl-learning-v1.log";
-    auto learningMode=std::u16string(u"sentence-v1|dup=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
+    auto learningMode=std::u16string(u"sentence-v2|dup=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
         u"|optimal="+std::u16string(number.begin(),number.end())+u"|whitelist="+learningConfigurationHash(sentenceSettings_.fullCodeWhitelist);
     const bool learningEnabled=sentenceSettings_.selfLearning;
     sentenceWorker_->submit(0,revision,[path,model,common,whitelist=std::move(whitelist),options,source,journal,helper,cache,learningPath,learningMode,learningEnabled] {
