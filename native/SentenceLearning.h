@@ -205,6 +205,30 @@ public:
     }
 };
 
+struct SentenceFusionPreference {
+    static std::u16string mode(std::u16string_view sentenceMode) {
+        if(sentenceMode.empty())return {};
+        std::u16string value=u"fusion-v1|";value+=sentenceMode;return value;
+    }
+    static std::u16string pairCode(std::u16string_view raw,std::u16string_view direct,std::u16string_view composed) {
+        std::u16string value(raw);value+=u"\0D\0";value+=direct;value+=u"\0C\0";value+=composed;
+        return learningConfigurationHash(value);
+    }
+    static double signedScore(const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,
+        std::u16string_view sentenceMode,std::u16string_view raw,
+        std::u16string_view direct,std::u16string_view composed) {
+        if(!snapshot || snapshot->empty() || sentenceMode.empty())return 0;
+        auto m=mode(sentenceMode),code=pairCode(raw,direct,composed);
+        return snapshot->score(m,code,u"D",u"")-snapshot->score(m,code,u"C",u"");
+    }
+    static SentenceLearningEvent event(std::u16string_view sentenceMode,std::u16string_view raw,
+        std::u16string_view direct,std::u16string_view composed,bool directWins,int rawEnd) {
+        SentenceLearningEvent e;e.id=learningId();e.time=learningNow();e.mode=mode(sentenceMode);
+        e.code=pairCode(raw,direct,composed);e.text=directWins?u"D":u"C";e.context=u"";
+        e.rawStart=0;e.rawEnd=std::max(0,rawEnd);e.textStart=0;e.textEnd=1;return e;
+    }
+};
+
 // Writer-local replay state, never shared with decoders. Immutable snapshots
 // share untouched code partitions only within the same scoring second. Clock
 // rollback, future-clamped events, undo/clear and dropped history replay fully.
