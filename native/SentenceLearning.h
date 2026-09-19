@@ -214,7 +214,7 @@ struct SentenceFusionPreference {
         std::u16string value(raw);
         value.push_back(0);value.push_back(u'D');value.push_back(0);value+=direct;
         value.push_back(0);value.push_back(u'C');value.push_back(0);value+=composed;
-        return learningConfigurationHash(value);
+        return std::u16string(u"~f")+learningConfigurationHash(value);
     }
     static double signedScore(const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,
         std::u16string_view sentenceMode,std::u16string_view raw,
