@@ -29,8 +29,11 @@ WizardSmallImageFile=..\..\assets\Tigirl-wizard-small.bmp
 UninstallDisplayIcon={app}\Tigirl.Maintenance.exe
 OutputDir={#OutputPath}
 OutputBaseFilename=虎娘-{#ProductVersion}-x64-x86-安装程序
-Compression=lzma2
+; Highest standard preset; leave payload extraction and installation unchanged.
+Compression=lzma2/ultra64
 SolidCompression=yes
+; Let 32-bit ISCC use the native compressor process for its larger dictionary.
+LZMAUseSeparateProcess=yes
 DiskSpanning=no
 CloseApplications=no
 RestartApplications=no

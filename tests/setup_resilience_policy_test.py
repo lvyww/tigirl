@@ -12,6 +12,12 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+# Use the highest standard LZMA2 preset without changing the full-extraction lifecycle.
+require("\nCompression=lzma2/ultra64\n" in iss, "installer no longer uses the ultra64 compression preset")
+require("\nSolidCompression=yes\n" in iss, "installer solid compression is disabled")
+require("\nLZMAUseSeparateProcess=yes\n" in iss, "high-compression builds can exhaust the 32-bit compiler address space")
+require("ExtractTemporaryFiles('{tmp}\\payload\\*')" in iss, "installer no longer fully extracts its payload before preflight")
+
 # The machine log must survive deletion of Program Files\Tigirl.
 require("Join-Path $env:ProgramData 'Tigirl\\Logs'" in deploy, "deploy log is not in ProgramData")
 require("{commonappdata}\\Tigirl\\Logs" in iss, "installer log button does not use the persistent log directory")
