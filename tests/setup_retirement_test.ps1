@@ -13,7 +13,9 @@ function Queue-Deletion([string]$Path){
  if($Path -eq $script:failPath){throw 'Fixture queue failure'}
  $script:queued.Add($Path);$script:restart=$true
 }
-$InstallRoot=Join-Path $env:TEMP ('Tigirl-retire-fixture-'+[guid]::NewGuid().ToString('N'))
+# Hosted Windows TEMP may contain an 8.3 alias. FileInfo.FullName expands it;
+# normalize our root too before slicing manifest paths or comparing queued paths.
+$InstallRoot=[IO.Path]::GetFullPath((Join-Path $env:TEMP ('Tigirl-retire-fixture-'+[guid]::NewGuid().ToString('N'))))
 function Make-Version($Id){
  $dir=Join-Path $InstallRoot ('versions\'+$Id)
  New-Item "$dir\x64","$dir\x86" -ItemType Directory -Force|Out-Null
