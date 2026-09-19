@@ -705,8 +705,14 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             return requiredTextPrefix.empty() || (!text.empty() && text.substr(0,requiredTextPrefix.size())==requiredTextPrefix);
         };
         using Key=std::pair<std::u16string_view,int>;
+        struct CandidatePoolHash {
+            std::size_t operator()(const Key& key) const noexcept {
+                auto h=std::hash<std::u16string_view>{}(key.first);
+                return combineHash(h,static_cast<std::size_t>(key.second));
+            }
+        };
         std::vector<const SentenceCandidate*> visible;std::vector<SentenceCandidate> pool;
-        std::map<Key,std::size_t> poolIndex;
+        std::unordered_map<Key,std::size_t,CandidatePoolHash> poolIndex;poolIndex.reserve(all.size()+16);
         auto add=[&](const SentenceCandidate& c) {
             if(c.text.empty())return;
             auto [it,inserted]=poolIndex.emplace(Key{c.text,c.boundary?c.boundary->rawLength:0},pool.size());
