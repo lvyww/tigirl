@@ -130,13 +130,17 @@ void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>
     target_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     if(!brush_)checked(target_->CreateSolidColorBrush(D2D1::ColorF(0,0.f),&brush_));
     if(!clip_)checked(target_->CreateLayer(&clip_));
-    const auto& theme=candidateTheme(style_.theme);auto shape=outline(0,frameWidth,frameHeight),border=outline(static_cast<float>(theme.borderWidth)/2,frameWidth,frameHeight);
+    const auto& theme=candidateTheme(style_.theme);
+    if(!shape_ || frameWidth!=geometryWidth_ || frameHeight!=geometryHeight_) {
+        shape_=outline(0,frameWidth,frameHeight);border_=outline(static_cast<float>(theme.borderWidth)/2,frameWidth,frameHeight);
+        geometryWidth_=frameWidth;geometryHeight_=frameHeight;
+    }
     target_->BeginDraw();target_->Clear(D2D1::ColorF(0,0.f));
-    target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape.Get()),clip_.Get());
+    target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape_.Get()),clip_.Get());
     brush_->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush_.Get());
     // The first candidate is the default choice, not a visually highlighted row.
     if(selected>0 && selected<items_.size()){brush_->SetColor(color(theme.selection));target_->FillRectangle(items_[selected],brush_.Get());}
-    brush_->SetColor(color(theme.border));target_->DrawGeometry(border.Get(),brush_.Get(),static_cast<float>(theme.borderWidth));
+    brush_->SetColor(color(theme.border));target_->DrawGeometry(border_.Get(),brush_.Get(),static_cast<float>(theme.borderWidth));
     brush_->SetColor(color(theme.foreground));
     for(std::size_t i=0;i<layouts_.size();++i)target_->DrawTextLayout(D2D1::Point2F(rectangles_[i].left,rectangles_[i].top),layouts_[i].Get(),brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
     target_->PopLayer();const auto hr=target_->EndDraw();
