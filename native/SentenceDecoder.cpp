@@ -149,18 +149,18 @@ struct SentenceDecoder::Lattice {
         std::uint64_t textHash=textHashSeed;
     };
     std::vector<Boundary> boundaries;
-    std::vector<std::shared_ptr<const SentencePathBoundary>> publishedBoundaries;
-    int addBoundary(Boundary value) {boundaries.push_back(value);publishedBoundaries.emplace_back();return static_cast<int>(boundaries.size()-1);}
+    std::unordered_map<int,std::shared_ptr<const SentencePathBoundary>> publishedBoundaries;
+    int addBoundary(Boundary value) {boundaries.push_back(value);return static_cast<int>(boundaries.size()-1);}
     std::shared_ptr<const SentencePathBoundary> publishBoundary(int index) {
         if(index<0)return {};if(index>=static_cast<int>(boundaries.size()))throw std::out_of_range("Sentence boundary index");
-        if(publishedBoundaries[index])return publishedBoundaries[index];
+        if(auto found=publishedBoundaries.find(index);found!=publishedBoundaries.end())return found->second;
         std::vector<int> pending;int current=index;
-        while(current>=0 && !publishedBoundaries[current]){pending.push_back(current);current=boundaries[current].previous;}
-        auto previous=current>=0?publishedBoundaries[current]:std::shared_ptr<const SentencePathBoundary>{};
+        while(current>=0 && publishedBoundaries.find(current)==publishedBoundaries.end()){pending.push_back(current);current=boundaries[current].previous;}
+        auto previous=current>=0?publishedBoundaries.at(current):std::shared_ptr<const SentencePathBoundary>{};
         for(auto it=pending.rbegin();it!=pending.rend();++it){const auto& b=boundaries[*it];
             previous=std::make_shared<SentencePathBoundary>(SentencePathBoundary{previous,b.textLength,b.rawLength,b.learningScore,b.codeScore,
-                b.protectsRareCharacter,b.codeLength,b.learningReward,b.learningRawStart,b.learningTextStart,b.textHash});publishedBoundaries[*it]=previous;}
-        return publishedBoundaries[index];
+                b.protectsRareCharacter,b.codeLength,b.learningReward,b.learningRawStart,b.learningTextStart,b.textHash});publishedBoundaries.emplace(*it,previous);}
+        return publishedBoundaries.at(index);
     }
     std::u16string materialize(int boundary,std::u16string_view tail={}) const {
         std::vector<std::u16string_view> parts;parts.reserve(32);std::size_t size=tail.size();
@@ -222,7 +222,7 @@ SentenceDecoderMemory SentenceDecoder::memoryStatus() const {
     for(const auto& b:cache_->lattice->states.values){result.states+=b.values.size();result.stateCapacity+=b.values.capacity();}
     result.stateBytes=result.stateCapacity*sizeof(State);result.boundaryNodes=cache_->lattice->boundaries.size();
     result.boundaryCapacity=cache_->lattice->boundaries.capacity();result.boundaryBytes=result.boundaryCapacity*sizeof(Lattice::Boundary);
-    result.publishedBoundaries=static_cast<std::size_t>(std::count_if(cache_->lattice->publishedBoundaries.begin(),cache_->lattice->publishedBoundaries.end(),[](const auto& p){return bool(p);}));return result;
+    result.publishedBoundaries=cache_->lattice->publishedBoundaries.size();return result;
 }
 void SentenceDecoder::retainCommittedHistory(std::u16string_view input,int committedRaw) {
     std::lock_guard<std::mutex> lock(decodeMutex_);
