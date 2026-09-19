@@ -4,6 +4,7 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 #include <filesystem>
+#include <array>
 #include "../CandidatePresentation.h"
 #include "../CandidateTheme.h"
 namespace tiger::tsf {
@@ -30,11 +31,15 @@ private:
     Microsoft::WRL::ComPtr<IDWriteTextFormat> format_;
     Microsoft::WRL::ComPtr<IWICBitmap> surface_;
     Microsoft::WRL::ComPtr<ID2D1RenderTarget> target_;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_;
+    Microsoft::WRL::ComPtr<ID2D1Layer> clip_;
     std::vector<Layout> layouts_;
     std::vector<D2D1_RECT_F> rectangles_,items_;
     CandidateStyle style_;
     float width_=1,height_=1;
     UINT surfaceWidth_=0,surfaceHeight_=0;
+    std::array<float,8> spaceWidths_{};
+    std::array<bool,8> spaceMeasured_{};
     bool privateFamily_=false;
 };
 }

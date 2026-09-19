@@ -29,6 +29,7 @@ struct SentencePathBoundary {
     // guessing text/code segmentation.
     double learningReward=0;
     int learningRawStart=0,learningTextStart=0;
+    std::uint64_t textHash=0; // Internal rolling UTF-16 hash; ranking never depends on collisions.
 };
 struct SentenceLockedPrefix {
     std::u16string rawCode,text;
@@ -67,6 +68,7 @@ struct SentenceDecodeCancelled : std::exception {
 };
 struct SentenceDecoderMemory {
     std::size_t positions=0,states=0,stateCapacity=0,stateBytes=0;
+    std::size_t boundaryNodes=0,boundaryCapacity=0,boundaryBytes=0,publishedBoundaries=0;
 };
 struct SentenceDecodeResult {
     std::u16string rawCode;
@@ -138,8 +140,7 @@ private:
     double transition(Lattice& lattice,std::u16string_view previous2,std::u16string_view previous1,std::u16string_view target) const;
     bool observed(Lattice& lattice,std::u16string_view previous,std::u16string_view target) const;
     double isolation(Lattice& lattice,std::u16string_view text) const;
-    double pathIsolation(Lattice& lattice,std::u16string_view text,
-        std::shared_ptr<const SentencePathBoundary> boundary) const;
+    double pathIsolation(Lattice& lattice,std::u16string_view text,int boundary) const;
     std::shared_ptr<const SentenceLexicon> lexicon_;
     std::shared_ptr<const SentenceLanguageModel> model_;
     const SentenceNgram* ngram_=nullptr;

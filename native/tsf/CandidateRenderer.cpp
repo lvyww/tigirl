@@ -3,31 +3,44 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
+#include <memory>
 #include <stdexcept>
 namespace tiger::tsf {
 namespace {
 void checked(HRESULT hr) { if(FAILED(hr)) throw hr; }
 std::wstring wide(std::u16string_view s) { return {reinterpret_cast<const wchar_t*>(s.data()),s.size()}; }
 D2D1_COLOR_F color(std::uint32_t c) { return D2D1::ColorF((c>>16&255)/255.f,(c>>8&255)/255.f,(c&255)/255.f,(c>>24)/255.f); }
+struct SharedResources {
+    Microsoft::WRL::ComPtr<ID2D1Factory> drawing;
+    Microsoft::WRL::ComPtr<IDWriteFactory3> writing;
+    Microsoft::WRL::ComPtr<IWICImagingFactory> imaging;
+    Microsoft::WRL::ComPtr<IDWriteFontCollection1> collection;
+};
+std::wstring resourceKey(const std::vector<std::filesystem::path>& files) {
+    std::wstring key;for(const auto& file:files){key+=std::filesystem::absolute(file).lexically_normal().native();key.push_back(L'\0');}return key;
+}
+std::shared_ptr<SharedResources> sharedResources(const std::vector<std::filesystem::path>& files) {
+    static thread_local std::map<std::wstring,std::shared_ptr<SharedResources>> cache;
+    auto key=resourceKey(files);auto found=cache.find(key);if(found!=cache.end())return found->second;
+    auto result=std::make_shared<SharedResources>();
+    checked(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,result->drawing.GetAddressOf()));
+    checked(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory3),reinterpret_cast<IUnknown**>(result->writing.GetAddressOf())));
+    checked(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&result->imaging)));
+    Microsoft::WRL::ComPtr<IDWriteFontSetBuilder> builder;checked(result->writing->CreateFontSetBuilder(&builder));
+    for(const auto& path:files) {
+        Microsoft::WRL::ComPtr<IDWriteFontFile> file;checked(result->writing->CreateFontFileReference(path.c_str(),nullptr,&file));
+        BOOL supported=FALSE;DWRITE_FONT_FILE_TYPE fileType{};DWRITE_FONT_FACE_TYPE faceType{};UINT32 faces=0;
+        checked(file->Analyze(&supported,&fileType,&faceType,&faces));if(!supported)continue;
+        for(UINT32 face=0;face<faces;++face) {Microsoft::WRL::ComPtr<IDWriteFontFaceReference> reference;
+            checked(result->writing->CreateFontFaceReference(path.c_str(),nullptr,face,DWRITE_FONT_SIMULATIONS_NONE,&reference));checked(builder->AddFontFaceReference(reference.Get()));}
+    }
+    Microsoft::WRL::ComPtr<IDWriteFontSet> set;checked(builder->CreateFontSet(&set));checked(result->writing->CreateFontCollectionFromFontSet(set.Get(),&result->collection));
+    if(cache.size()>=4)cache.clear();cache.emplace(std::move(key),result);return result;
+}
 }
 CandidateRenderer::CandidateRenderer(const CandidateStyle& style,const std::vector<std::filesystem::path>& files):style_(style) {
-    checked(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,drawing_.GetAddressOf()));
-    checked(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory3),reinterpret_cast<IUnknown**>(writing_.GetAddressOf())));
-    checked(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&imaging_)));
-    Microsoft::WRL::ComPtr<IDWriteFontSetBuilder> builder;checked(writing_->CreateFontSetBuilder(&builder));
-    for(const auto& path:files) {
-        Microsoft::WRL::ComPtr<IDWriteFontFile> file;checked(writing_->CreateFontFileReference(path.c_str(),nullptr,&file));
-        BOOL supported=FALSE;DWRITE_FONT_FILE_TYPE fileType{};DWRITE_FONT_FACE_TYPE faceType{};UINT32 faces=0;
-        checked(file->Analyze(&supported,&fileType,&faceType,&faces));
-        if(!supported)continue;
-        for(UINT32 face=0;face<faces;++face) {
-            Microsoft::WRL::ComPtr<IDWriteFontFaceReference> reference;
-            checked(writing_->CreateFontFaceReference(path.c_str(),nullptr,face,DWRITE_FONT_SIMULATIONS_NONE,&reference));
-            checked(builder->AddFontFaceReference(reference.Get()));
-        }
-    }
-    Microsoft::WRL::ComPtr<IDWriteFontSet> set;checked(builder->CreateFontSet(&set));
-    checked(writing_->CreateFontCollectionFromFontSet(set.Get(),&collection_));
+    auto shared=sharedResources(files);drawing_=shared->drawing;writing_=shared->writing;imaging_=shared->imaging;collection_=shared->collection;
     auto family=wide(style.font);if(!family.empty() && family.front()==L'#')family.erase(0,1);
     if(family.empty())family=L"Microsoft YaHei UI";
     UINT32 index=0;BOOL exists=FALSE;checked(collection_->FindFamilyName(family.c_str(),&index,&exists));privateFamily_=exists!=FALSE;
@@ -53,8 +66,10 @@ void CandidateRenderer::layout(const CandidatePresentation& presentation,float m
     const float border=static_cast<float>(candidateTheme(style_.theme).borderWidth);
     const float row=std::ceil(size*(!codeOnly && style_.vertical?1.5f:1.f));
     const float minimum=codeOnly?0.f:std::ceil(size*(style_.vertical?3.76f:2.88f)+15.f);
-    const auto measure=[&](std::u16string_view text) {
-        auto layout=makeLayout(text,100000,row);DWRITE_TEXT_METRICS m{};checked(layout->GetMetrics(&m));return m.widthIncludingTrailingWhitespace;
+    const auto measureSpaces=[&](std::size_t count) {
+        if(!count)return 0.f;count=std::min<std::size_t>(count,spaceWidths_.size()-1);
+        if(!spaceMeasured_[count]){auto measured=makeLayout(std::u16string(count,u' '),100000,row);DWRITE_TEXT_METRICS m{};checked(measured->GetMetrics(&m));spaceWidths_[count]=m.widthIncludingTrailingWhitespace;spaceMeasured_[count]=true;}
+        return spaceWidths_[count];
     };
     float x=left+border,y=top+border,right=x;
     layouts_.clear();rectangles_.clear();items_.clear();
@@ -71,10 +86,10 @@ void CandidateRenderer::layout(const CandidatePresentation& presentation,float m
     };
     if(!presentation.code.empty()) {
         add(presentation.code,false);
-        if(!style_.vertical && !presentation.items.empty())x+=measure(std::u16string(presentation.code.size()<7?7-presentation.code.size():0,u' '));
+        if(!style_.vertical && !presentation.items.empty())x+=measureSpaces(presentation.code.size()<7?7-presentation.code.size():0);
     }
     for(std::size_t i=0;i<presentation.items.size();++i) {
-        if(!style_.vertical && i)x+=measure(u"  ");
+        if(!style_.vertical && i)x+=measureSpaces(2);
         // Original horizontal text does not wrap. Keep off-screen items out of hit testing.
         if(!style_.vertical && x>=maxWidth-rightPadding-border)break;
         add(presentation.items[i],true);
@@ -104,7 +119,7 @@ void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>
     const float frameWidth=frameSize?width*96.f/dpi:width_,frameHeight=frameSize?height*96.f/dpi:height_;
     if(static_cast<std::uint64_t>(width)*height>16000000)throw std::length_error("Candidate surface exceeds limit");
     if(!target_ || width!=surfaceWidth_ || height!=surfaceHeight_) {
-        target_.Reset();surface_.Reset();
+        target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();
         checked(imaging_->CreateBitmap(width,height,GUID_WICPixelFormat32bppPBGRA,WICBitmapCacheOnLoad,&surface_));
         const auto properties=D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_SOFTWARE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED),static_cast<float>(dpi),static_cast<float>(dpi));
@@ -113,19 +128,19 @@ void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>
     target_->SetDpi(static_cast<float>(dpi),static_cast<float>(dpi));
     // Subpixel RGB coverage is unsuitable for per-pixel transparent windows.
     target_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;checked(target_->CreateSolidColorBrush(D2D1::ColorF(0,0.f),&brush));
+    if(!brush_)checked(target_->CreateSolidColorBrush(D2D1::ColorF(0,0.f),&brush_));
+    if(!clip_)checked(target_->CreateLayer(&clip_));
     const auto& theme=candidateTheme(style_.theme);auto shape=outline(0,frameWidth,frameHeight),border=outline(static_cast<float>(theme.borderWidth)/2,frameWidth,frameHeight);
-    Microsoft::WRL::ComPtr<ID2D1Layer> clip;checked(target_->CreateLayer(&clip));
     target_->BeginDraw();target_->Clear(D2D1::ColorF(0,0.f));
-    target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape.Get()),clip.Get());
-    brush->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush.Get());
+    target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape.Get()),clip_.Get());
+    brush_->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush_.Get());
     // The first candidate is the default choice, not a visually highlighted row.
-    if(selected>0 && selected<items_.size()){brush->SetColor(color(theme.selection));target_->FillRectangle(items_[selected],brush.Get());}
-    brush->SetColor(color(theme.border));target_->DrawGeometry(border.Get(),brush.Get(),static_cast<float>(theme.borderWidth));
-    brush->SetColor(color(theme.foreground));
-    for(std::size_t i=0;i<layouts_.size();++i)target_->DrawTextLayout(D2D1::Point2F(rectangles_[i].left,rectangles_[i].top),layouts_[i].Get(),brush.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    if(selected>0 && selected<items_.size()){brush_->SetColor(color(theme.selection));target_->FillRectangle(items_[selected],brush_.Get());}
+    brush_->SetColor(color(theme.border));target_->DrawGeometry(border.Get(),brush_.Get(),static_cast<float>(theme.borderWidth));
+    brush_->SetColor(color(theme.foreground));
+    for(std::size_t i=0;i<layouts_.size();++i)target_->DrawTextLayout(D2D1::Point2F(rectangles_[i].left,rectangles_[i].top),layouts_[i].Get(),brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
     target_->PopLayer();const auto hr=target_->EndDraw();
-    if(FAILED(hr)){target_.Reset();surface_.Reset();checked(hr);}
+    if(FAILED(hr)){target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();checked(hr);}
     pixels.resize(static_cast<std::size_t>(width)*height);
     checked(surface_->CopyPixels(nullptr,width*4,static_cast<UINT>(pixels.size()*4),reinterpret_cast<BYTE*>(pixels.data())));
 }
