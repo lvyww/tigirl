@@ -82,7 +82,8 @@ struct Bucket {
         auto order=[=](const State& a,const State& b){return better(a,b,scoreFirst);};
         if(values.size()>static_cast<std::size_t>(width)) {
             truncated=true;
-            std::partial_sort(values.begin(),values.begin()+width,values.end(),order);
+            std::nth_element(values.begin(),values.begin()+width,values.end(),order);
+            std::sort(values.begin(),values.begin()+width,order);
             // Four extra legal states may finish a learned multi-edge span.
             // Potential is never added to score/mass and disappears if the
             // remaining raw code cannot complete that span.
@@ -585,6 +586,19 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
         return c;
     };
+    // Incomplete-tail evidence never participates in final ranking. Avoid the
+    // path-isolation/final-score work performed by evaluate(); confidence uses
+    // the same EOS and isolation terms as the full candidate path.
+    const auto evaluateEvidence=[&](const State& state) {
+        SentenceCandidate c;c.text=state.text;c.boundary=state.boundary;
+        const double eosScore=transition(lattice,state.previous2,state.previous1,eos);
+        c.confidenceScore=state.mass+eosScore-isolation(lattice,state.text);
+        const bool direct=(state.source&SentenceSourceDirect)!=0;
+        const double personalization=std::min(personalizedEarlyCap,
+            supplementEarlyContribution(state.supplementScore)+(direct?0:state.learningEarlyCommitBonus));
+        c.earlyCommitConfidenceScore=c.confidenceScore+personalization;
+        return c;
+    };
     auto cached=lattice.evaluated.find(length);
     if(cached==lattice.evaluated.end()) {
         auto all=std::make_shared<std::vector<SentenceCandidate>>();all->reserve(completed.values.size());
@@ -663,7 +677,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             auto found=lattice.evaluated.find(consumed);
             if(found==lattice.evaluated.end()) {
                 auto evaluated=std::make_shared<std::vector<SentenceCandidate>>();evaluated->reserve(partial.values.size());
-                for(const auto& state:partial.values){checkCancelled();evaluated->push_back(evaluate(state));}
+                for(const auto& state:partial.values){checkCancelled();evaluated->push_back(evaluateEvidence(state));}
                 found=lattice.evaluated.emplace(consumed,std::move(evaluated)).first;
             }
             for(const auto& c:*found->second){if(!required(c.text))continue;add(c);added=true;}
@@ -685,23 +699,30 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             for(const auto& c:pool){baseMaximum=std::max(baseMaximum,c.confidenceScore);earlyMaximum=std::max(earlyMaximum,earlyScore(c));}
             double baseTotal=0,earlyTotal=0;
             struct Mass {Key key;double base=0,early=0;};
-            std::map<Key,std::size_t> massIndex;std::vector<Mass> mass;
-            std::map<int,double> boundaryMass;
+            struct PrefixHash {
+                std::size_t operator()(const Key& key) const noexcept {
+                    auto h=std::hash<std::u16string_view>{}(key.first);
+                    return h^(static_cast<std::size_t>(key.second)+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2));
+                }
+            };
+            std::unordered_map<Key,std::size_t,PrefixHash> massIndex;std::vector<Mass> mass;
+            massIndex.reserve(std::min<std::size_t>(65536,pool.size()*8+1));
+            std::vector<double> boundaryMass(static_cast<std::size_t>(length)+1,0.0);
             for(const auto& c:pool) {
                 checkCancelled();
                 double baseWeight=std::exp(c.confidenceScore-baseMaximum);
                 double earlyWeight=std::exp(earlyScore(c)-earlyMaximum);
-                baseTotal+=baseWeight;earlyTotal+=earlyWeight;std::set<int> boundaries;
+                baseTotal+=baseWeight;earlyTotal+=earlyWeight;
                 for(auto b=c.boundary;b;b=b->previous)if(b->textLength>0 && b->textLength<=static_cast<int>(c.text.size())) {
                     Key key{std::u16string_view(c.text).substr(0,b->textLength),b->rawLength};
                     auto [it,inserted]=massIndex.emplace(key,mass.size());
-                    if(inserted)mass.push_back({std::move(key),0,0});
-                    mass[it->second].base+=baseWeight;mass[it->second].early+=earlyWeight;boundaries.insert(b->rawLength);
+                    if(inserted)mass.push_back({key,0,0});
+                    mass[it->second].base+=baseWeight;mass[it->second].early+=earlyWeight;
+                    if(b->rawLength>=0 && b->rawLength<=length)boundaryMass[static_cast<std::size_t>(b->rawLength)]+=baseWeight;
                 }
-                for(int b:boundaries)boundaryMass[b]+=baseWeight;
             }
             if(baseTotal>0 && earlyTotal>0)for(const auto& item:mass) {
-                double boundaryShare=boundaryMass[item.key.second]/baseTotal;
+                double boundaryShare=item.key.second>=0 && item.key.second<=length?boundaryMass[static_cast<std::size_t>(item.key.second)]/baseTotal:0;
                 evidence.prefixes.push_back({std::u16string(item.key.first),item.key.second,item.early/earlyTotal,
                     boundaryShare,boundaryShare>=0.99999,item.base/baseTotal});
             }
