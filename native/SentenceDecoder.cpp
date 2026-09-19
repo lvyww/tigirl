@@ -14,6 +14,15 @@ constexpr std::u16string_view bos=u"\x02",eos=u"\x03";
 constexpr double supplementEarlyScale=.05,supplementEarlyCap=.75;
 constexpr std::uint64_t textHashSeed=14695981039346656037ull,textHashPrime=1099511628211ull;
 inline std::uint64_t appendTextHash(std::uint64_t hash,std::u16string_view text) {for(char16_t c:text){hash^=c;hash*=textHashPrime;}return hash;}
+inline std::size_t foldTextHash(std::uint64_t value) {
+    if constexpr(sizeof(std::size_t)>=sizeof(std::uint64_t))return static_cast<std::size_t>(value);
+    return static_cast<std::size_t>(value^(value>>32));
+}
+inline std::size_t combineHash(std::size_t hash,std::size_t value) {
+    if constexpr(sizeof(std::size_t)>=sizeof(std::uint64_t))
+        return hash^(value+static_cast<std::size_t>(UINT64_C(0x9e3779b97f4a7c15))+(hash<<6)+(hash>>2));
+    return hash^(value+static_cast<std::size_t>(UINT32_C(0x9e3779b9))+(hash<<6)+(hash>>2));
+}
 constexpr double learningEarlyScale=.075,learningEarlyCap=.75,personalizedEarlyCap=.80;
 inline double learningMaturity(double score) {
     if(score<=9)return 0;
@@ -48,7 +57,7 @@ struct Bucket {
     // candidate string. Full text equality below resolves all hash collisions.
     std::unordered_multimap<std::size_t,std::size_t> indices;
     static std::size_t hashState(const State& state) {
-        auto h=static_cast<std::size_t>(state.textHash);return h^(static_cast<std::size_t>(state.textLength)+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2));
+        return combineHash(foldTextHash(state.textHash),static_cast<std::size_t>(state.textLength));
     }
     template<class Equal>void add(State item,Equal equal) {
         if(frozen) {for(std::size_t i=0;i<values.size();++i)indices.emplace(hashState(values[i]),i);frozen=false;}
@@ -744,7 +753,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             for(const auto& c:pool){baseMaximum=std::max(baseMaximum,c.confidenceScore);earlyMaximum=std::max(earlyMaximum,earlyScore(c));}
             double baseTotal=0,earlyTotal=0;
             struct PrefixKey {std::u16string_view text;int raw=0;std::uint64_t hash=0;};
-            struct PrefixHash {std::size_t operator()(const PrefixKey& key) const noexcept {auto h=static_cast<std::size_t>(key.hash);return h^(static_cast<std::size_t>(key.raw)+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2));}};
+            struct PrefixHash {std::size_t operator()(const PrefixKey& key) const noexcept {return combineHash(foldTextHash(key.hash),static_cast<std::size_t>(key.raw));}};
             struct PrefixEqual {bool operator()(const PrefixKey& a,const PrefixKey& b) const noexcept {return a.raw==b.raw && a.text==b.text;}};
             struct Mass {PrefixKey key;double base=0,early=0;};
             std::unordered_map<PrefixKey,std::size_t,PrefixHash,PrefixEqual> massIndex;std::vector<Mass> mass;
