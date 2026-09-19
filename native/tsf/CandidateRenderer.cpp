@@ -21,8 +21,15 @@ std::wstring resourceKey(const std::vector<std::filesystem::path>& files) {
     std::wstring key;for(const auto& file:files){key+=std::filesystem::absolute(file).lexically_normal().native();key.push_back(L'\0');}return key;
 }
 std::shared_ptr<SharedResources> sharedResources(const std::vector<std::filesystem::path>& files) {
-    static thread_local std::map<std::wstring,std::shared_ptr<SharedResources>> cache;
-    auto key=resourceKey(files);auto found=cache.find(key);if(found!=cache.end())return found->second;
+    // Candidate UI lives inside arbitrary application COM apartments. A normal
+    // thread_local map would release WIC/DWrite COM objects during TLS teardown,
+    // which can occur after the host has already called CoUninitialize(). Keep
+    // this tiny (<=4-entry) per-thread cache process-owned instead; the OS
+    // reclaims it with the process and no COM Release happens after apartment
+    // teardown. This also preserves cross-composition resource reuse.
+    using Cache=std::map<std::wstring,std::shared_ptr<SharedResources>>;
+    static thread_local Cache* cache=new Cache;
+    auto key=resourceKey(files);auto found=cache->find(key);if(found!=cache->end())return found->second;
     auto result=std::make_shared<SharedResources>();
     checked(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,result->drawing.GetAddressOf()));
     checked(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory3),reinterpret_cast<IUnknown**>(result->writing.GetAddressOf())));
@@ -36,7 +43,7 @@ std::shared_ptr<SharedResources> sharedResources(const std::vector<std::filesyst
             checked(result->writing->CreateFontFaceReference(path.c_str(),nullptr,face,DWRITE_FONT_SIMULATIONS_NONE,&reference));checked(builder->AddFontFaceReference(reference.Get()));}
     }
     Microsoft::WRL::ComPtr<IDWriteFontSet> set;checked(builder->CreateFontSet(&set));checked(result->writing->CreateFontCollectionFromFontSet(set.Get(),&result->collection));
-    if(cache.size()>=4)cache.clear();cache.emplace(std::move(key),result);return result;
+    if(cache->size()>=4)cache->clear();cache->emplace(std::move(key),result);return result;
 }
 }
 CandidateRenderer::CandidateRenderer(const CandidateStyle& style,const std::vector<std::filesystem::path>& files):style_(style) {
