@@ -56,7 +56,7 @@ for arm64x in ([True] if os.environ.get('SENTENCE_ARM64X_ONLY') else [False]):
    result={'platform':platform,'journal_aware':journal_mode,'dll_sha256':hashlib.sha256(dll.read_bytes()).hexdigest(),'host_sha256':hashlib.sha256(host.read_bytes()).hexdigest(),'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr}
    checks.append(result)
    if bundled:
-    packaged_model=dll.parent/'Models/sentence-ngram-v2.bin'
+    packaged_model=dll.parent/'Models/sentence-ngram-mobile.bin'
     result['bundled_model_sha256']=hashlib.sha256(packaged_model.read_bytes()).hexdigest()
     assert result['bundled_model_sha256']==hashlib.sha256(model.read_bytes()).hexdigest()
    name='sentence-tsf-x86-validation.json' if os.environ.get('SENTENCE_X86') else 'sentence-tsf-arm64x-validation.json' if arm64x else 'sentence-tsf-validation.json'

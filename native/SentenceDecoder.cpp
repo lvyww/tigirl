@@ -405,10 +405,10 @@ double SentenceDecoder::pathIsolation(Lattice& lattice,std::u16string_view text,
     std::shared_ptr<const SentencePathBoundary> boundary) const {
     if(options_.canonicalIsolationFactor>=1 || !boundary)return isolation(lattice,text);
     if(options_.isolationRankThreshold<=0 || options_.isolationLambda<=0)return 0;
-    std::vector<std::shared_ptr<const SentencePathBoundary>> chain;
-    for(auto current=boundary;current;current=current->previous)chain.push_back(current);
+    std::vector<const SentencePathBoundary*> chain;chain.reserve(32);
+    for(auto current=boundary.get();current;current=current->previous.get())chain.push_back(current);
     std::reverse(chain.begin(),chain.end());
-    double penalty=0,previousWeight=0;std::u16string previous;std::size_t textStart=0;
+    double penalty=0,previousWeight=0;std::u16string previousOwned;std::u16string_view previous;std::size_t textStart=0;
     const auto weight=[&](int rank,double factor) {
         if(rank<=options_.isolationRankThreshold)return 0.0;
         const double base=options_.isolationUseLogRank?options_.isolationLambda*std::log(
@@ -416,15 +416,20 @@ double SentenceDecoder::pathIsolation(Lattice& lattice,std::u16string_view text,
             options_.isolationRankThreshold):options_.isolationLambda;
         return base*factor;
     };
+    const auto consumeOne=[&](std::u16string_view current,double factor,bool own) {
+        const double currentWeight=weight(sentenceCharacterRank(current),factor);
+        const bool linked=!previous.empty() && (previousWeight>0 || currentWeight>0) && observed(lattice,previous,current);
+        if(previousWeight>0 && linked)penalty-=previousWeight;
+        previousWeight=currentWeight>0 && !linked?currentWeight:0;
+        if(previousWeight>0)penalty+=previousWeight;
+        if(own){previousOwned.assign(current);previous=previousOwned;}else previous=current;
+    };
     const auto consume=[&](std::u16string_view edge,double factor) {
-        for(const auto& current:wordTextElements(edge)) {
-            const double currentWeight=weight(sentenceCharacterRank(current),factor);
-            const bool linked=!previous.empty() && (previousWeight>0 || currentWeight>0) && observed(lattice,previous,current);
-            if(previousWeight>0 && linked)penalty-=previousWeight;
-            previousWeight=currentWeight>0 && !linked?currentWeight:0;
-            if(previousWeight>0)penalty+=previousWeight;
-            previous=current;
-        }
+        const bool simple=std::all_of(edge.begin(),edge.end(),[](char16_t c){
+            return (c>=0x4e00 && c<=0x9fff) || (c>=u'a' && c<=u'z') || (c>=u'A' && c<=u'Z');
+        });
+        if(simple) { for(std::size_t i=0;i<edge.size();++i)consumeOne(edge.substr(i,1),factor,false);return; }
+        for(const auto& value:wordTextElements(edge))consumeOne(value,factor,true);
     };
     for(const auto& current:chain) {
         const auto textEnd=std::min(text.size(),std::max(textStart,static_cast<std::size_t>(std::max(0,current->textLength))));

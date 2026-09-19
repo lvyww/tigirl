@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     result = check(script)
     assert result.returncode == 0, result.stderr
     # Unlink the fixture's hard link before corrupting its private replacement.
-    model = staged / 'Models/sentence-ngram-v2.bin'
+    model = staged / 'Models/sentence-ngram-mobile.bin'
     model.unlink()
     result = check(script)
     assert result.returncode != 0 and 'Missing sentence model' in result.stderr, result.stderr
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     assert result.returncode != 0 and 'Sentence model does not match' in result.stderr, result.stderr
     assert not (root / 'install-arm64.log').exists()
     model.unlink()
-    os.link(PACKAGE / 'Models/sentence-ngram-v2.bin', model)
+    os.link(PACKAGE / 'Models/sentence-ngram-mobile.bin', model)
     lexical = staged / 'Models/sentence-lexical-v1.bin'
     lexical.unlink()
     result = check(script)
