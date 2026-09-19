@@ -30,6 +30,8 @@ inline double earlyScore(const SentenceCandidate& c) {
 struct State {
     double score=0,mass=0,supplementScore=0,learningScore=0,learningPotential=0,learningEarlyCommitBonus=0,codeScore=0;
     std::u16string text;
+    unsigned source=SentenceSourceNone;
+    int directRank=std::numeric_limits<int>::max();
     // Context tokens refer to immutable mapped lexicon text (or static BOS).
     // The decoder retains that lexicon for the whole lattice lifetime.
     std::u16string_view previous2=bos,previous1=bos;
@@ -62,12 +64,14 @@ struct Bucket {
         auto& old=values[it->second];
         double top=std::max(old.mass,item.mass);
         double combined=top+std::log(std::exp(old.mass-top)+std::exp(item.mass-top));
+        unsigned source=old.source|item.source;
+        int directRank=std::min(old.directRank,item.directRank);
         // Keep a legal learned path rather than another segmentation of the
         // same text which loses the remembered raw/text boundary alignment.
         bool learned=item.learningScore>0 || old.learningScore>0 || item.learningPotential>0 || old.learningPotential>0;
         if((learned && item.score+item.learningPotential>old.score+old.learningPotential) ||
            (!learned && (item.rank<old.rank || (item.rank==old.rank && item.score>old.score))))old=std::move(item);
-        old.mass=combined;
+        old.mass=combined;old.source=source;old.directRank=directRank;
     }
     void limit(int width,bool scoreFirst) {
         if(frozen)return;
@@ -473,9 +477,12 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                     options_.canonicalCodeReward*codeLength:0;
                 next.codeScore=item.codeScore+codeReward;
                 next.text+=c.text;next.supplementScore+=supplementAdded;next.rank=std::max(item.rank,static_cast<int>(c.rank));
+                const bool directEdge=!item.boundary && position==0 && whole;
+                next.source=directEdge?SentenceSourceDirect:SentenceSourceComposed;
+                next.directRank=directEdge?static_cast<int>(c.rank):std::numeric_limits<int>::max();
                 next.learningPotential=0;
                 double chosenLearningReward=0;int chosenLearningRawStart=0,chosenLearningTextStart=0;
-                if(learning_ && !learning_->empty()) {
+                if(!directEdge && learning_ && !learning_->empty()) {
                     // Consider only suffixes with real raw/text boundaries. A DP
                     // maximum prevents overlapping learnt fragments being counted twice.
                     auto start=item.boundary;
@@ -514,6 +521,43 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
     }
     return expanded;
 }
+void SentenceDecoder::applyFusionOrdering(std::u16string_view raw,std::vector<SentenceCandidate>& candidates) const {
+    if(candidates.size()<2)return;
+    std::map<std::u16string,std::size_t,std::less<>> base;
+    for(std::size_t i=0;i<candidates.size();++i)base.try_emplace(candidates[i].text,i);
+    std::vector<SentenceCandidate> direct,composed;
+    for(const auto& c:candidates)((c.source&SentenceSourceDirect)!=0?direct:composed).push_back(c);
+    std::stable_sort(direct.begin(),direct.end(),[&](const auto& a,const auto& b) {
+        if(a.directRank!=b.directRank)return a.directRank<b.directRank;
+        return base[a.text]<base[b.text];
+    });
+    if(direct.empty() || composed.empty()) {
+        if(composed.empty())candidates=std::move(direct);
+        return;
+    }
+    std::vector<SentenceCandidate> merged;merged.reserve(candidates.size());
+    std::size_t di=0,ci=0;
+    while(di<direct.size() && ci<composed.size()) {
+        const auto& d=direct[di];const auto& c=composed[ci];
+        double directPrefix=0,composedPrefix=0;
+        for(std::size_t i=di;i<direct.size();++i)
+            directPrefix=std::max(directPrefix,SentenceFusionPreference::signedScore(
+                learning_,learningMode_,raw,direct[i].text,c.text));
+        for(std::size_t i=ci;i<composed.size();++i)
+            composedPrefix=std::max(composedPrefix,-SentenceFusionPreference::signedScore(
+                learning_,learningMode_,raw,d.text,composed[i].text));
+        bool takeDirect;
+        if(directPrefix>0 || composedPrefix>0) {
+            if(std::abs(directPrefix-composedPrefix)>1e-12)takeDirect=directPrefix>composedPrefix;
+            else takeDirect=base[d.text]<base[c.text];
+        } else takeDirect=base[d.text]<base[c.text];
+        merged.push_back(takeDirect?direct[di++]:composed[ci++]);
+    }
+    while(di<direct.size())merged.push_back(direct[di++]);
+    while(ci<composed.size())merged.push_back(composed[ci++]);
+    candidates=std::move(merged);
+}
+
 SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& lattice,int candidateLimit,int expanded,
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
     auto& states=lattice.states;int length=static_cast<int>(raw.size());
@@ -525,13 +569,15 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         double adjustment=eosScore-pathIsolation(lattice,state.text,state.boundary)+state.codeScore;
         const double confidenceAdjustment=eosScore-isolation(lattice,state.text);
         SentenceCandidate c;c.text=state.text;c.baseScore=state.score-state.learningScore+adjustment;
-        c.finalScore=c.baseScore+state.learningScore;c.learningScore=state.learningScore;
+        const bool direct=(state.source&SentenceSourceDirect)!=0;
+        c.learningScore=direct?0:state.learningScore;
+        c.finalScore=direct?c.baseScore:c.baseScore+state.learningScore;
         c.confidenceScore=state.mass+confidenceAdjustment;
         const double personalization=std::min(personalizedEarlyCap,
-            supplementEarlyContribution(state.supplementScore)+state.learningEarlyCommitBonus);
+            supplementEarlyContribution(state.supplementScore)+(direct?0:state.learningEarlyCommitBonus));
         c.earlyCommitConfidenceScore=c.confidenceScore+personalization;
         c.supplementScore=state.supplementScore;c.codeScore=state.codeScore;
-        c.maxLexiconRank=std::max(1,state.rank);c.boundary=state.boundary;
+        c.maxLexiconRank=std::max(1,state.rank);c.source=state.source;c.directRank=state.directRank;c.boundary=state.boundary;
         c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
             ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
         return c;
@@ -578,6 +624,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             return a.text<b.text;
         });
     }
+    applyFusionOrdering(raw,result.candidates);
     result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;
     result.earlyCommitEvidence.confidenceTruncated=completed.truncated;
     if(includeEarlyCommitEvidence && (!completed.truncated || options_.preserveTruncatedEarlyCommitEvidence)) {
