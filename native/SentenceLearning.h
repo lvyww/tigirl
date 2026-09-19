@@ -211,7 +211,9 @@ struct SentenceFusionPreference {
         std::u16string value=u"fusion-v1|";value+=sentenceMode;return value;
     }
     static std::u16string pairCode(std::u16string_view raw,std::u16string_view direct,std::u16string_view composed) {
-        std::u16string value(raw);value+=u"\0D\0";value+=direct;value+=u"\0C\0";value+=composed;
+        std::u16string value(raw);
+        value.push_back(0);value.push_back(u'D');value.push_back(0);value+=direct;
+        value.push_back(0);value.push_back(u'C');value.push_back(0);value+=composed;
         return learningConfigurationHash(value);
     }
     static double signedScore(const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,
