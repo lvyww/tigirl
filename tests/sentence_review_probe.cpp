@@ -293,10 +293,10 @@ static void journalTests() {
     auto invalid=good;invalid.mode=std::u16string(1,0xd800);
     store.confirm({invalid});check(store.snapshot()->empty(),"P5 malformed persisted mode is not learnt");
     store.confirm({good});check(store.entries().size()==1 && !store.snapshot()->empty(),"P5 invalid record must not reserve an id in the parse cache");
-    auto retained=store.snapshot();
+    auto retained=store.snapshot();const double retainedScore=retained->score(u"m",u"aa",u"虎娘",u"");
     {std::ofstream out(path,std::ios::app|std::ios::binary);out<<"torn-record";}
     good.id="after-torn";store.confirm({good});check(store.entries().size()==2,"P5 torn tail recovery with cached journal");
-    check(retained->score(u"m",u"aa",u"虎娘",u"")==9,"P5 old published scores stay immutable");
+    check(retained->score(u"m",u"aa",u"虎娘",u"")==retainedScore,"P5 old published scores stay immutable");
     SentenceLearningStore external(path);auto other=good;other.id="external";other.text=u"虎爪";external.confirm({other});store.refresh();
     check(store.entries().size()==3 && store.snapshot()->score(u"m",u"aa",u"虎爪",u"")>store.snapshot()->score(u"m",u"aa",u"虎娘",u""),"P5 external writer replay");
     store.undoLast();check(store.entries().size()==2,"P5 undo external event");store.clear();check(store.snapshot()->empty(),"P5 clear published snapshot");

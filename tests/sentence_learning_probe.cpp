@@ -20,6 +20,7 @@ static SentenceLearningEvent event(std::u16string code=u"aa",std::u16string text
 static SentenceDecodeResult fixture(std::u16string raw,std::initializer_list<std::u16string> values) {
     SentenceDecodeResult r;r.rawCode=raw;r.learningMode=u"test-v1";
     for(const auto& text:values){SentenceCandidate c;c.text=text;c.segmentedCode=raw;c.maxLexiconRank=r.candidates.empty()?1:2;
+        c.source=SentenceSourceComposed;
         for(std::size_t i=0;i<text.size();++i)c.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{c.boundary,static_cast<int>(i+1),static_cast<int>((i+1)*2)});
         r.candidates.push_back(std::move(c));}return r;
 }
@@ -88,6 +89,10 @@ static void sessionTests() {
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.moveSelection(1,5,true);s.moveSelection(1,5,true);s.commitCandidate(0);
     check(s.takeLearning().empty(),"wrap back to initial top no learning");
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.commitCandidate(0);check(s.takeLearning().empty(),"ordinary top use no learning");
+    auto direct=fixture(u"aa",{u"甲",u"乙"});direct.candidates[0].source=direct.candidates[1].source=SentenceSourceDirect;
+    direct.candidates[0].directRank=1;direct.candidates[1].directRank=2;
+    s.start(u"aa",1);apply(s,direct);s.moveSelection(1,5,true);s.commitCandidate(1);
+    check(s.takeLearning().empty(),"Direct-to-Direct manual choice never creates sentence learning");
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.moveSelection(1,5,true);
     auto preview=s;preview.commitCandidate(1);check(preview.takeLearning().size()==1 && s.takeLearning().empty() && s.active(),"pure preview cannot persist");
     check(s.commitWithSuffix(u"。")==u"乙。","Tab punctuation output");auto events=s.takeLearning();check(events.size()==1 && events[0].code==u"aa" && events[0].text==u"乙","Tab punctuation learn once");
@@ -174,10 +179,27 @@ static void decoderTests(const std::filesystem::path& folder) {
     decoder.setLearning({},u"");auto restored=decoder.decode(u"aabb",20,true);
     check(restored.candidates.front().text==plain.candidates.front().text && !restored.learningAffected,"disabled learning restores baseline");
     auto single=event();decoder.setLearning(SentenceLearningSnapshot::build({single}),single.mode);auto first=decoder.decode(u"aa",20,true);
-    check(first.candidates.front().text==u"乙","same-code standalone correction immediately affects sentence order");
+    check(first.candidates.front().text==u"甲" && (first.candidates.front().source&SentenceSourceDirect) &&
+        std::all_of(first.candidates.begin(),first.candidates.end(),[](const auto& c){return c.learningScore==0;}),
+        "same-code Direct correction cannot change table order");
     auto lock=std::make_shared<SentenceLockedPrefix>(SentenceLockedPrefix{u"aa",first.candidates.front().text,first.candidates.front().boundary});
     decoder.setLearning({},u"");auto locked=decoder.decode(u"aabb",20,true,u"",lock);
-    check(locked.candidates.front().text==u"乙中" && locked.candidates.front().learningScore==0,"locked prefix never carries stale learning scores");
+    check(locked.candidates.front().text==u"甲中" && locked.candidates.front().learningScore==0,"locked prefix never carries stale learning scores");
+
+    std::vector<SentenceCandidate> merge;
+    SentenceCandidate a;a.text=u"A";a.source=SentenceSourceComposed;merge.push_back(a);
+    SentenceCandidate b;b.text=u"B";b.source=SentenceSourceDirect;b.directRank=1;merge.push_back(b);
+    SentenceCandidate c;c.text=u"C";c.source=SentenceSourceDirect;c.directRank=2;merge.push_back(c);
+    decoder.setLearning({},u"sentence-v2|test");decoder.applyFusionOrdering(u"ii",merge);
+    check(merge[0].text==u"A" && merge[1].text==u"B" && merge[2].text==u"C","baseline cross-source order preserved");
+    auto fusion=SentenceFusionPreference::event(u"sentence-v2|test",u"ii",u"C",u"A",true,2);
+    decoder.setLearning(SentenceLearningSnapshot::build({fusion},fusion.time),u"sentence-v2|test");
+    merge={};a={};a.text=u"A";a.source=SentenceSourceComposed;merge.push_back(a);
+    b={};b.text=u"B";b.source=SentenceSourceDirect;b.directRank=1;merge.push_back(b);
+    c={};c.text=u"C";c.source=SentenceSourceDirect;c.directRank=2;merge.push_back(c);
+    decoder.applyFusionOrdering(u"ii",merge);
+    check(merge[0].text==u"B" && merge[1].text==u"C" && merge[2].text==u"A",
+        "Direct C over Composed A promotes only Direct prefix B,C");
 }
 static void engineTests(const std::filesystem::path& folder) {
     ImportedLexicon lex;lex.main={{u"aa",{u"甲",u"乙"}}};lex.indexedMain={{u"aa",8,0}};
