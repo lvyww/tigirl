@@ -39,12 +39,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 哈希并显示拟安装目录，不执行注册。
 
 开发版构建现在还包含 `Models\sentence-ngram-v2.bin` 和来源记录。
-默认从项目旁的 `bime_codex_src_20260513\release_arm64\Models` 读取已验证模型；
+默认从本地 `data\Models\sentence-ngram-v2.bin` 读取已验证模型（不纳入 Git）。
+当前使用 `merged-214-20260919/sentence-ngram-mobile.bin` 无损转换的模型；
+可运行 `python tools/convert_sentence_model.py <原始 mobile 文件> data/Models/sentence-ngram-v2.bin` 生成。
+转换只改变存储布局，保留每个 n-gram 及 float32 概率。
+其他来源须同步更新 `sentence_package.ps1` 的固定哈希与长度。
+
 其他目录可通过 `build_arm64.ps1` 或 `build_arm64x.ps1` 的
 `-SentenceModelPath '完整路径\sentence-ngram-v2.bin'` 参数指定。
 构建和安装预检均核对固定模型的长度与 SHA256，缺失或不匹配时停止。
 模型属于非神经整句功能，包内不包含 Qwen。整句选项见
-[整句输入设置](SENTENCE_SETTINGS.md)。这些开发版资源尚未更新到当前安装代。
+[整句输入设置](SENTENCE_SETTINGS.md)。
 
 ## 安装与使用
 
