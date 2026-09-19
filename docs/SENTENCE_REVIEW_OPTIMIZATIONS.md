@@ -94,3 +94,24 @@ python3 tests/bench_sentence_review.py --baseline /tmp/tigirl-pre-review --repor
 Windows 在对应架构 MSVC Developer PowerShell 中运行 `python tests/sentence_review_test.py --cxx cl`；新 worker 生命周期检查在 `tests/SentenceWorkerProbe.vcxproj`。CI 保留原 x64/Win32 和 Linux 作业并补入新专项，云端状态以本次提交的 Checks 为准。
 
 **未完成的验收：生产大模型逐键复测、Windows 前台 TSF 长句操作、实际进程峰值和物理按键延迟。** 本地工程测试不是标注语料准确率证明；没有修改并合并主分支，也没有部署到用户机器。
+
+## 2026-09-19 路径与模型布局优化
+
+在前述缓存/增量修复之上，本轮进一步把剩余长句热点从“对象与字符串”层拆开：
+
+- `State` 不再复制累计整句字符串；内部 boundary arena 保存父索引和映射词条 edge，
+  state 只保留文本长度与 rolling hash。哈希碰撞必须经过完整路径逐字符比较，哈希不参与
+  正确性判定。最终候选和需要学习的路径才物化完整字符串。
+- 每个扩展不再 `make_shared<SentencePathBoundary>`；连续 arena 保存内部节点，候选发布时
+  才按需构造并 memoize 公共 boundary 链。
+- 提前上屏 prefix mass 使用预计算 prefix hash、unordered index 和 raw-length vector；
+  incomplete-tail 只计算 confidence 所需字段。
+- Windows 原生直接读取 TCSKNM02 分页模型；同源 TCSKNM01 继续兼容。打包模型 SHA/长度
+  固定，mobile reader 对访问页逐项做边界和数值检查。
+- TSF raw-change 判定不再构造两次完整 Snapshot；候选 renderer 的 DirectWrite/WIC/font
+  collection 改为线程内有界复用。
+
+行为验证：Linux ASan+UBSan review 173,040 checks、5,120 exact decoder snapshots、
+163,440 learning replay comparisons、832 mapped-model snapshots均通过；Windows x64 和
+Win32 分别通过 25,985 learning checks、173,040 review checks 以及 90 个 renderer cases。
+ARM64/x64/Win32 均完成正式 Release 编译。

@@ -44,6 +44,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     shutil.copyfile(ROOT / 'install_arm64.ps1', script)
     shutil.copyfile(ROOT / 'shortcut_arm64.ps1', root / 'shortcut_arm64.ps1')
     shutil.copyfile(ROOT / 'sentence_package.ps1', root / 'sentence_package.ps1')
+    shutil.copyfile(ROOT / 'appcontainer_data.ps1', root / 'appcontainer_data.ps1')
     result = check(script)
     assert result.returncode == 0, result.stderr
     # Unlink the fixture's hard link before corrupting its private replacement.
@@ -53,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     assert result.returncode != 0 and 'Missing sentence model' in result.stderr, result.stderr
     model.write_bytes(b'corrupt model')
     result = check(script, preflight=False)
-    assert result.returncode != 0 and 'Sentence model does not match' in result.stderr, result.stderr
+    assert result.returncode != 0 and 'Sentence model does not' in result.stderr and 'validated non-neural reference model' in result.stderr, result.stderr
     assert not (root / 'install-arm64.log').exists()
     model.unlink()
     os.link(PACKAGE / 'Models/sentence-ngram-mobile.bin', model)
@@ -65,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='package-arm64x-', dir=BUILD) as tempora
     # AA64 in the PE header alone is insufficient: this is a valid ARM64 DLL.
     shutil.copyfile(BUILD / 'ARM64/Release/Tigirl.dll', staged / 'Tigirl.dll')
     result = check(script)
-    assert result.returncode != 0 and 'x64 loader rejected DLL' in result.stderr and '193' in result.stderr, result.stderr
+    assert result.returncode != 0 and 'x64 loader reject' in result.stderr and '193' in result.stderr, result.stderr
     shutil.copyfile(PACKAGE / 'Tigirl.dll', staged / 'Tigirl.dll')
     verifier = staged / 'verify_load_x64.exe'
     verifier.unlink()
