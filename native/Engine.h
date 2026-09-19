@@ -109,6 +109,7 @@ public:
     void configure(Config config);
     bool chinese() const noexcept { return mode_ != Mode::English; }
     bool composing() const noexcept { return !raw_.empty(); }
+    std::u16string_view compositionRaw() const noexcept { return mixedRaw_.empty()?std::u16string_view(raw_):std::u16string_view(mixedRaw_); }
     std::u16string recentText() const { return history_.text(); }
     std::vector<std::u16string> recentElements() const { return history_.recent(); }
 

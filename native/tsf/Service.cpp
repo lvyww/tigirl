@@ -455,7 +455,7 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         // The application receives that physical Enter; do not insert it twice.
         if(!result.handled && vk==VK_RETURN && result.commit==u"\n") result.commit.clear();
         const bool textChange=!result.commit.empty() || result.cancelComposition ||
-            current->engine.snapshot().raw!=next.snapshot().raw;
+            current->engine.compositionRaw()!=next.compositionRaw();
         if(textChange || result.handled) {
             const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result,nextConsumedSpace](TfEditCookie cookie) mutable {
                 const auto applied=apply(current,std::move(next),result,cookie);

@@ -139,3 +139,90 @@ The model remains a shared read-only mapping.
 medians and the preserved staging directory containing original output and all
 raw measurements. These hosts exercise the real TSF path but are hidden test
 applications, not installed Word/WeChat or physical keyboard acceptance.
+
+## 2026-09-19 comprehensive latency pass
+
+This pass keeps the beam width, candidate order, exposed scores and early-commit
+math unchanged. The exact decoder differential still compares 5,120 snapshots,
+and the learning replay compares 163,440 score/prefix results. The production
+model remains the same September 19 probability set; Windows now maps its native
+TCSKNM02 layout directly instead of expanding it back to TCSKNM01.
+
+The accepted changes are deliberately structural:
+
+- early-commit prefix mass uses a rolling exact-checked hash index and raw-length
+  vector instead of tree/set allocation; incomplete-tail evidence computes only
+  confidence fields and skips final-ranking `pathIsolation` work;
+- beam truncation selects top-K with `nth_element` then sorts only the retained
+  states;
+- internal sentence boundaries live in a contiguous lattice arena. Public
+  `shared_ptr<SentencePathBoundary>` chains are materialized only for published
+  candidates/evidence;
+- beam states no longer own/copy the entire accumulated UTF-16 sentence. They
+  retain a parent boundary, immutable edge view, text length and rolling hash;
+  full strings are materialized for published candidates, learning when active,
+  and exact collision/tie checks only;
+- common BMP CJK/ASCII `pathIsolation` traversal avoids grapheme vectors and
+  boundary `shared_ptr` copying;
+- the TSF key path compares a lightweight composition raw view instead of making
+  two complete candidate snapshots merely to detect a text change;
+- candidate rendering reuses per-thread D2D/DWrite/WIC/private-font resources,
+  target brush/layer objects and measured space widths across compositions;
+- the packaged model is `sentence-ngram-mobile.bin` (TCSKNM02, 224,475,584
+  bytes) instead of the 272,600,424-byte expanded TCSKNM01 file. The release
+  artifact is still SHA-256 pinned. Custom TCSKNM01 files remain supported with
+  the legacy full validation path; TCSKNM02 validates header/unigrams/sparse
+  indexes eagerly and bounds-checks variable pages during lookup.
+
+### Windows x64 paired real-model measurement
+
+Five fresh-process rounds were interleaved between `main@3eae011` and the final
+optimized tree, using the same prepared real 虎整句 dictionary and the same
+September 19 probabilities. Main used its packaged-form TCSKNM01; optimized used
+the bit-identical TCSKNM02 layout. Every workload expanded the same number of
+states (14 / 88 / 3,508 / 97,668 / 315,668 for 8/16/32/64/128 codes).
+
+| Measurement | main | optimized | change |
+| --- | ---: | ---: | ---: |
+| Resource open median | 127.71 ms | 8.80 ms | -93.1% |
+| 32-code full decode | 12.34 ms | 8.41 ms | -31.9% |
+| 64-code full decode | 80.57 ms | 52.55 ms | -34.8% |
+| 128-code full decode | 260.48 ms | 168.59 ms | -35.3% |
+| 64-key incremental p95 | 52.36 ms | 28.23 ms | -46.1% |
+| 128-code process private after decode | 102.24 MiB | 100.18 MiB | -2.0% |
+| Incremental phase process private | 51.93 MiB | 47.21 MiB | -9.1% |
+
+Process-private figures include the executable, allocator retention and earlier
+phases in the same probe, so they are not a boundary-arena byte count or a leak
+proof. The optimized synthetic dense-beam probe exposes the arena separately:
+on Windows x64 it retained 4,065 live states in 7,490 state slots (958,720 bytes),
+132,160 internal boundary nodes (11,060,400 bytes of boundary capacity), but only
+2,167 boundary nodes needed public `shared_ptr` materialization.
+
+A 14,000-query random/observed production-model equivalence check between the
+TCSKNM01 and TCSKNM02 native readers had zero score error and identical observed
+bigram flags. Fresh WSL processes opened the old layout in about 1.62–1.75 s and
+the paged layout in about 12–23 ms; those WSL numbers are diagnostic only and
+must not be substituted for the Windows figures above.
+
+The repository's existing ARM64 `sentence_measure_test.py`, now pointed at the
+packaged TCSKNM02 model, also completed its three-run standard probe. Current
+medians were 0.490 / 0.576 / 5.261 / 32.366 / 98.945 ms for 8/16/32/64/128
+codes; the three incremental p95 values were 20.10 / 17.92 / 17.20 ms. These
+are current-tree absolute measurements rather than a paired old/new experiment.
+
+Candidate-renderer construction plus layout, repeated on one Windows x64 thread
+with the bundled private font, fell from 0.391 to 0.257 ms per instance (~34%).
+The actual renderer regression still passes 90 render cases on both x64 and
+Win32, including private fonts, DPI round trips, premultiplied alpha and fallback.
+
+Release staging was built for x64, Win32, ARM64 and ARM64X. The ARM64X installer
+preflight passed real ARM64+x64 loader checks plus missing/corrupt-model, missing
+lexical-prior, wrong-architecture and pre-elevation negative controls.
+
+Release staging was built for x64, Win32 and ARM64. The x64 package manifest
+contains `Models\sentence-ngram-mobile.bin` at 224,475,584 bytes with SHA-256
+`23216acd8319885aa2431ffbf2231dab4677c5d4abb55a08a404450a15b865ca` and no
+expanded `sentence-ngram-v2.bin`; the generated x64+x86 ZIP was 175,868,508
+bytes. These measurements are engineering probes, not installed Word/WeChat or
+physical-keyboard latency claims.

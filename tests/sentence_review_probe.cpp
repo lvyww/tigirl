@@ -198,7 +198,7 @@ static void caching() {
     std::vector<std::u16string> vals;for(char16_t c=0x4e00;c<0x4e40;++c)vals.emplace_back(1,c);
     SentenceDecoder dense(lex({{u"aa",vals}}),{},options());dense.decode(u"aaaaaa");auto mem=dense.memoryStatus();
     check(mem.stateCapacity<mem.states*4+4096,"P2 oversized frozen capacity released");
-    std::cout<<"{\"test\":\"frozen_capacity\",\"live_states\":"<<mem.states<<",\"capacity_states\":"<<mem.stateCapacity<<",\"state_buffer_bytes\":"<<mem.stateBytes<<"}\n";
+    std::cout<<"{\"test\":\"frozen_capacity\",\"live_states\":"<<mem.states<<",\"capacity_states\":"<<mem.stateCapacity<<",\"state_buffer_bytes\":"<<mem.stateBytes<<",\"boundary_nodes\":"<<mem.boundaryNodes<<",\"boundary_bytes\":"<<mem.boundaryBytes<<",\"published_boundaries\":"<<mem.publishedBoundaries<<"}\n";
 }
 static void fuzz() {
     std::vector<ImportedLexiconEntry> entries={{u"aa",{u"甲",u"乙",u"e\u0301"}},{u"ab",{u"丙",u"丁戊"}},{u"bb",{u"国",u"\U00020000"}},

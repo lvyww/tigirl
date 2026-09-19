@@ -10,7 +10,7 @@ try {
         $platforms += $platform
         $info.FileName = "$root\build\tests\$platform\sentence_measure_probe.exe"
         if (!$Dictionary) { $Dictionary = "$root\build\real-sentence-measure\user\schemas\虎整句\tiger-v2.tcd" }
-        if (!$Model) { $Model = 'C:\Users\yc\Desktop\bime_codex_src_20260513\release_arm64\Models\sentence-ngram-v2.bin' }
+        if (!$Model) { $Model = "$root\data\Models\sentence-ngram-mobile.bin" }
         $info.Arguments = '"' + $dictionary + '" "' + $model + '" --memory'
         $info.UseShellExecute = $false
         $info.RedirectStandardInput = $true
