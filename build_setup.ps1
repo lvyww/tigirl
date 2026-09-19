@@ -23,10 +23,10 @@ $files=@(Get-ChildItem $stage -Recurse -File|Where-Object Name -ne 'manifest.jso
 }
 . "$stage\common.ps1"
 Assert-Package $stage|Out-Null
-$generation=(Get-FileHash "$stage\manifest.json").Hash.Substring(0,16).ToLowerInvariant()
-& $Compiler "/DPackageDir=$stage" "/DGeneration=$generation" "/DProductVersion=$Version" "/DOutputPath=$PSScriptRoot\build\packages" "/DChineseMessages=$PSScriptRoot\packaging\setup\ChineseSimplified.isl" "$PSScriptRoot\packaging\setup\Tigirl.iss"
+$packageId=(Get-FileHash "$stage\manifest.json").Hash.Substring(0,16).ToLowerInvariant()
+& $Compiler "/DPackageDir=$stage" "/DProductVersion=$Version" "/DOutputPath=$PSScriptRoot\build\packages" "/DChineseMessages=$PSScriptRoot\packaging\setup\ChineseSimplified.isl" "$PSScriptRoot\packaging\setup\Tigirl.iss"
 if($LASTEXITCODE){throw 'Installer compilation failed.'}
 $exe="$PSScriptRoot\build\packages\虎娘-$Version-x64-x86-安装程序.exe"
 (Get-FileHash $exe).Hash+'  '+[IO.Path]::GetFileName($exe)|Set-Content "$exe.sha256" -Encoding UTF8
-@{version=$Version;generation=$generation;compiler='Inno Setup 6.7.3';sha256=(Get-FileHash $exe).Hash;bytes=(Get-Item $exe).Length}|ConvertTo-Json|Set-Content "$exe.build.json" -Encoding UTF8
+@{version=$Version;packageId=$packageId;generationPolicy='per-install-guid';compiler='Inno Setup 6.7.3';sha256=(Get-FileHash $exe).Hash;bytes=(Get-Item $exe).Length}|ConvertTo-Json|Set-Content "$exe.build.json" -Encoding UTF8
 Write-Output $exe

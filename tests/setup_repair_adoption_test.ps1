@@ -19,6 +19,8 @@ foreach($root in @($dir,$other)){
 }
 $script:registry=@{Registry64=(Join-Path $dir 'x64\Tigirl.dll');Registry32=(Join-Path $dir 'x86\Tigirl.dll')}
 function Get-ComPath($View){$script:registry[$View]}
+# The fixture must not inspect the workstation's real protocol registration.
+function Get-MachineUriCommand { return $null }
 try{
  Check (SamePath (Get-ManagedRegistrationDirectory $script:registry.Registry64 'x64') $dir) 'Managed x64 registration path was not recognized'
  Check (SamePath (Get-ManagedRegistrationDirectory $script:registry.Registry32 'x86') $dir) 'Managed x86 registration path was not recognized'

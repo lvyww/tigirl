@@ -5,6 +5,7 @@ $ast=[Management.Automation.Language.Parser]::ParseFile("$PSScriptRoot\..\packag
 if($errors){throw $errors}
 foreach($fn in $ast.FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst]},$false)){Invoke-Expression $fn.Extent.Text}
 . "$PSScriptRoot\..\packaging\data.ps1"
+. "$PSScriptRoot\..\packaging\retirement.ps1"
 # Intercept the native boundary: this test never changes pending reboot operations.
 Add-Type @'
 using System;
@@ -24,8 +25,8 @@ $dir=Join-Path $InstallRoot 'versions\1111111111111111'
 New-Item "$dir\x64","$dir\setup" -ItemType Directory -Force|Out-Null
 $files=@('common.ps1','data.ps1','setup\deploy.ps1','x64\Tigirl.dll','x64\data.bin')
 foreach($file in $files){[IO.File]::WriteAllText((Join-Path $dir $file),'fixture')}
-@{version='2026.9.10.2';files=@($files|ForEach-Object {@{path=$_}})}|ConvertTo-Json -Depth 4|Set-Content "$dir\manifest.json" -Encoding UTF8
-$lock=[IO.File]::Open("$dir\x64\Tigirl.dll",[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+@{version='2026.9.10.2';files=@($files|ForEach-Object {@{path=$_;sha256=(Get-FileHash -LiteralPath (Join-Path $dir $_)).Hash}})}|ConvertTo-Json -Depth 4|Set-Content "$dir\manifest.json" -Encoding UTF8
+$lock=[IO.File]::Open("$dir\x64\Tigirl.dll",[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
 try{
  $script:restart=$false
  Remove-Version $dir -KeepControlFiles

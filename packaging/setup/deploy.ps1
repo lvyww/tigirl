@@ -4,6 +4,7 @@ param([Parameter(Mandatory)][ValidateSet('Preflight','Begin','Apply','Commit','R
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\common.ps1"
 . "$PSScriptRoot\..\data.ps1"
+. "$PSScriptRoot\..\retirement.ps1"
 Assert-X64System
 if(!(Test-Administrator)){throw 'Administrator privileges are required.'}
 $allowed=@((Join-Path $env:ProgramFiles 'Tigirl'))
@@ -27,8 +28,16 @@ function Assert-VersionPath([string]$Directory){
  $p=[IO.Path]::GetFullPath($Directory).TrimEnd('\')
  $versions=[IO.Path]::GetFullPath((Join-Path $InstallRoot 'versions')).TrimEnd('\')
  $parent=[IO.Path]::GetFullPath((Split-Path $p -Parent)).TrimEnd('\')
- if($parent -ne $versions -or (Split-Path $p -Leaf) -notmatch '^[a-f0-9]{16}$'){throw "Invalid managed version directory: $p"}
+ if($parent -ne $versions -or (Split-Path $p -Leaf) -notmatch '^(?:[a-f0-9]{16}|[a-f0-9]{32})$'){throw "Invalid managed version directory: $p"}
  Assert-PlainTree $p
+}
+function Get-NewVersionDirectory([string]$Id){
+ if($Id -notmatch '^[a-f0-9]{32}$'){throw 'A new installation requires a fresh GUID generation.'}
+ $directory=Join-Path $InstallRoot ('versions\'+$Id)
+ Assert-VersionPath $directory
+ if(Test-Path -LiteralPath $directory){throw 'Installation generation already exists. Restart Setup for a fresh directory.'}
+ if(Test-Path -LiteralPath (Get-RetirementPath $directory)){throw 'Installation generation has been retired.'}
+ return $directory
 }
 function Read-Record {
  if(!(Test-Path $NativeTigerRecord)){return $null}
@@ -67,14 +76,18 @@ function Get-DirectoryVersion([string]$Directory,[string]$Fallback='0.0.0.0'){
  if($Fallback -match '^\d+\.\d+\.\d+\.\d+$'){return $Fallback}
  return '0.0.0.0'
 }
+function Get-MachineUriCommand {
+ $uri='HKLM:\SOFTWARE\Classes\nativetiger\shell\open\command'
+ if(Test-Path $uri){return [string](Get-Item $uri).GetValue('')}
+ return $null
+}
 function Assert-NoForeignMachineState($Record){
  foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){
   $actual=Get-ComPath $pair[0]
   if($actual -and !(Get-ManagedRegistrationDirectory $actual $pair[1])){throw 'Input method registration belongs to another installation.'}
  }
- $uri='HKLM:\SOFTWARE\Classes\nativetiger\shell\open\command'
- if(Test-Path $uri){
-  $command=(Get-Item $uri).GetValue('')
+ $command=Get-MachineUriCommand
+ if($null -ne $command){
   $tool=$null
   if($command -match '^"([^"]+)" --uri "%1"$'){$tool=$matches[1]}
   if(!$tool -or !(Get-ManagedToolDirectory $tool)){throw 'URI protocol belongs to another installation.'}
@@ -115,6 +128,13 @@ function Restore-Transaction {
  if(!(Test-Path $journal)){return}
  $j=Get-Content $journal -Raw|ConvertFrom-Json
  Assert-VersionPath $j.directory
+ # Never undo an already-published commit, even if archiving its journal failed.
+ $committed=Read-Record
+ if($committed -and $j.id -and $committed.transaction -eq $j.id -and $committed.directory -eq $j.directory){
+  Move-Item $journal (Join-Path $InstallRoot ('committed-'+$j.id+'.json')) -Force
+  Write-SetupLog ('Retained committed installation after interruption: '+$j.id)
+  return
+ }
  if($j.previous){Assert-VersionPath $j.previous.directory}
  # Accept only the interrupted transaction's old/new COM paths, including a half registration.
  foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){
@@ -169,26 +189,9 @@ function Assert-UninstallPackage([string]$Directory){
  }
  return $m
 }
-function Remove-Version([string]$Directory,[switch]$KeepControlFiles){
- Assert-VersionPath $Directory
- # Delete only manifest-listed package files and explicitly created x86 hard links.
- $m=Get-Content (Join-Path $Directory 'manifest.json') -Raw|ConvertFrom-Json
- $paths=@($m.files|ForEach-Object path)
- foreach($entry in $m.files){if($entry.path -like 'x64\*' -and $entry.path -ne 'x64\Tigirl.dll'){$paths+=('x86\'+$entry.path.Substring(4))}}
- foreach($relative in $paths|Select-Object -Unique){
-  if($KeepControlFiles -and $relative -in @('common.ps1','data.ps1','setup\deploy.ps1')){continue}
-  if($relative -match '(^[\\/]|:|(^|[\\/])\.\.([\\/]|$))'){throw 'Invalid manifest path.'}
-  $file=Join-Path $Directory $relative
-  if(Test-Path -LiteralPath $file -PathType Leaf){try{Remove-Item -LiteralPath $file -Force}catch{Queue-Deletion $file}}
- }
- # Inno removes the active backend and inventory only after cleanup succeeds.
- if($KeepControlFiles){return}
- Remove-Item -LiteralPath (Join-Path $Directory 'manifest.json') -Force
- foreach($dir in @(Get-ChildItem $Directory -Directory -Recurse|Sort-Object {$_.FullName.Length} -Descending)+@(Get-Item $Directory)){
-  if(!(Get-ChildItem $dir.FullName -Force|Select-Object -First 1)){Remove-Item $dir.FullName}else{Queue-Deletion $dir.FullName}
- }
-}
+
 try {
+ $script:restart=$false
  Write-SetupLog "Action $Action started. InstallRoot=$InstallRoot Generation=$Generation"
  if($Action -in @('Preflight','Begin','Recover','UninstallCheck','Uninstall')){Restore-Transaction}
  $record=Resolve-OwnedRecord
@@ -201,18 +204,18 @@ try {
    $shortcut=Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '虎娘\输入设置.lnk'
    if(Test-Path $shortcut){Remove-Item $shortcut -Force}
   }
+  if($record -and $record.transaction -and !$record.previous){
+   try{Assert-RegisteredDirectory $record.directory;Invoke-RetiredVersionCleanup $record.directory}catch{Write-SetupLog ('Recovery cleanup retained for retry: '+$_.Exception.Message)}
+  }
+  if($script:restart){exit 3010}
   exit 0
  }
  if($Action -in @('Preflight','Begin')){
-  if($Generation -notmatch '^[a-f0-9]{16}$'){throw 'Invalid generation.'}
+  if($Generation -notmatch '^[a-f0-9]{32}$'){throw 'Invalid generation.'}
   $manifest=Assert-Package $Payload
   New-Item $InstallRoot -ItemType Directory -Force|Out-Null
   if($record -and $record.version -match '^\d+\.\d+\.\d+\.\d+$' -and [version]$manifest.version -lt [version]$record.version){throw 'Downgrading is not supported.'}
-  $destination=Join-Path $InstallRoot "versions\$Generation"
-  if(Test-Path $destination){
-   # Inno must never replace an occupied version's bytes, even during repair.
-   foreach($file in $manifest.files){$target=Join-Path $destination $file.path;if((Test-Path $target) -and (Get-FileHash $target).Hash -ne $file.sha256){throw 'Installed immutable version changed. Uninstall before replacing it.'}}
-  }
+  $destination=Get-NewVersionDirectory $Generation
   if($Action -eq 'Begin'){
    New-Item $InstallRoot -ItemType Directory -Force|Out-Null
    $tx=[guid]::NewGuid().ToString('N')
@@ -245,15 +248,13 @@ try {
  }elseif($Action -eq 'Commit'){
   $j=Get-Content $journal -Raw|ConvertFrom-Json
   Assert-RegisteredDirectory $j.directory
-  $previous=if($j.previous -and $j.previous.directory -ne $j.directory){$j.previous.directory}elseif($j.previous){$j.previous.previous}else{$null}
-  $next=@{directory=$j.directory;version=$j.version;generation=(Split-Path $j.directory -Leaf);previous=$previous;transaction=$j.id}
+  $next=@{directory=$j.directory;version=$j.version;generation=(Split-Path $j.directory -Leaf);previous=$null;transaction=$j.id}
+  # Atomic publication is the commit point; subsequent housekeeping is best effort.
   Save-Json $next $NativeTigerRecord
-  Set-GuiEntries ([pscustomobject]$next)
-  Move-Item $journal (Join-Path $InstallRoot ('committed-'+$j.id+'.json')) -Force
-  # Cleanup is best effort after commit; never roll back a committed version for a locked or damaged old file.
-  foreach($old in Get-ChildItem (Join-Path $InstallRoot 'versions') -Directory -ErrorAction SilentlyContinue){
-   if($old.FullName -ne $j.directory -and $old.FullName -ne $previous -and $old.Name -match '^[a-f0-9]{16}$' -and (Test-Path (Join-Path $old.FullName 'manifest.json'))){try{Remove-Version $old.FullName}catch{Write-SetupLog ('Old version cleanup deferred/retained: '+$old.FullName+' :: '+$_.Exception.Message)}}
-  }
+  try{Set-GuiEntries ([pscustomobject]$next)}catch{Write-SetupLog ('Committed; GUI metadata needs repair: '+$_.Exception.Message)}
+  try{Move-Item $journal (Join-Path $InstallRoot ('committed-'+$j.id+'.json')) -Force}catch{Write-SetupLog ('Committed; journal archive needs repair: '+$_.Exception.Message)}
+  try{Invoke-RetiredVersionCleanup $j.directory}catch{Write-SetupLog ('Committed; cleanup needs retry: '+$_.Exception.Message)}
+  if($script:restart){exit 3010}
  }elseif($Action -in @('UninstallCheck','Uninstall')){
   # Metadata damage is not a reason to trap the user. Foreign registration is still fatal.
   Assert-NoForeignMachineState $record
@@ -278,10 +279,11 @@ try {
    $script:restart=$false
    # File cleanup is best effort. Registration removal is the uninstall commit point.
    foreach($dir in Get-ChildItem (Join-Path $InstallRoot 'versions') -Directory -ErrorAction SilentlyContinue){
-    if($dir.Name -match '^[a-f0-9]{16}$' -and (Test-Path (Join-Path $dir.FullName 'manifest.json'))){
+    if($dir.Name -match '^(?:[a-f0-9]{16}|[a-f0-9]{32})$' -and ((Test-Path (Join-Path $dir.FullName 'manifest.json')) -or (Test-Path (Get-RetirementPath $dir.FullName)))){
      try{Remove-Version $dir.FullName -KeepControlFiles:($dir.FullName -eq $backendDirectory)}catch{Write-SetupLog ('Program files retained for retry/reboot: '+$dir.FullName+' :: '+$_.Exception.Message)}
     }
    }
+   try{Remove-CompletedRetirementRecords}catch{Write-SetupLog ('Retirement inventory cleanup needs retry: '+$_.Exception.Message)}
    if(Test-Path $NativeTigerRecord){Remove-Item $NativeTigerRecord -Force}
    if($script:restart){exit 3010}
   }

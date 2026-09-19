@@ -1,9 +1,6 @@
 #ifndef PackageDir
  #error PackageDir is required
 #endif
-#ifndef Generation
- #error Generation is required
-#endif
 #ifndef ProductVersion
  #define ProductVersion "2026.9.10.4"
 #endif
@@ -29,8 +26,11 @@ WizardSmallImageFile=..\..\assets\Tigirl-wizard-small.bmp
 UninstallDisplayIcon={app}\Tigirl.Maintenance.exe
 OutputDir={#OutputPath}
 OutputBaseFilename=虎娘-{#ProductVersion}-x64-x86-安装程序
-Compression=lzma2
+; Highest standard preset; leave payload extraction and installation unchanged.
+Compression=lzma2/ultra64
 SolidCompression=yes
+; Let 32-bit ISCC use the native compressor process for its larger dictionary.
+LZMAUseSeparateProcess=yes
 DiskSpanning=no
 CloseApplications=no
 RestartApplications=no
@@ -53,28 +53,51 @@ DialogFontName=Microsoft YaHei UI
 DialogFontSize=9
 WelcomeFontName=Microsoft YaHei UI
 [Files]
-; One embedded payload. Extract for preflight, then let Inno copy/track these exact files.
+; Full embedded payload. Version cleanup is exclusively inventory-driven.
 Source: "{#PackageDir}\*"; DestDir: "{tmp}\payload"; Flags: dontcopy recursesubdirs createallsubdirs
-Source: "{tmp}\payload\*"; DestDir: "{app}\versions\{#Generation}"; Flags: external recursesubdirs createallsubdirs onlyifdoesntexist uninsrestartdelete
+Source: "{tmp}\payload\*"; DestDir: "{code:VersionDirectory}"; Flags: external recursesubdirs createallsubdirs uninsneveruninstall
 Source: "{#PackageDir}\setup\Tigirl.Maintenance.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
+; Stable small uninstall backend: it does not depend on a retiring runtime directory.
+Source: "{#PackageDir}\common.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
+Source: "{#PackageDir}\data.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
+Source: "{#PackageDir}\retirement.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
+Source: "{#PackageDir}\setup\deploy.ps1"; DestDir: "{app}\maintenance\setup"; Flags: ignoreversion uninsrestartdelete
 [Icons]
-Name: "{commonprograms}\虎娘\输入设置"; Filename: "{app}\versions\{#Generation}\x64\Tigirl.exe"
+Name: "{commonprograms}\虎娘\输入设置"; Filename: "{code:VersionDirectory}\x64\Tigirl.exe"
 [Run]
-Filename: "{app}\versions\{#Generation}\x64\Tigirl.exe"; Description: "打开输入设置"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: CanOpenSettings
+Filename: "{code:VersionDirectory}\x64\Tigirl.exe"; Description: "打开输入设置"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: CanOpenSettings
 [UninstallDelete]
 Type: files; Name: "{app}\setup-transaction.id"
 Type: files; Name: "{app}\committed-*.json"
 Type: files; Name: "{app}\recovered-*.json"
 Type: files; Name: "{app}\previous-*.json"
 Type: dirifempty; Name: "{app}\versions"
+Type: dirifempty; Name: "{app}\retired"
+Type: dirifempty; Name: "{app}\preserved"
 Type: dirifempty; Name: "{app}"
 [Code]
+type
+  TInstallationGuid = record
+    D1: Cardinal;
+    D2, D3: Word;
+    D4: array[0..7] of Byte;
+  end;
 var
   Prepared, Applied, Committed, Failed, Deferred, UserInitFailed, RestartCleanup: Boolean;
-  TxId: String;
+  TxId, InstallGeneration: String;
   Info: TOutputMsgWizardPage;
   Progress: TOutputProgressWizardPage;
   LogButton: TNewButton;
+function CoCreateGuid(var Guid: TInstallationGuid): Integer;
+  external 'CoCreateGuid@ole32.dll stdcall setuponly';
+function NewInstallGeneration: String;
+var G: TInstallationGuid;
+begin
+  if CoCreateGuid(G) <> 0 then RaiseException('无法生成安装编号。');
+  Result:=LowerCase(Format('%.8x%.4x%.4x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x', [G.D1,G.D2,G.D3,G.D4[0],G.D4[1],G.D4[2],G.D4[3],G.D4[4],G.D4[5],G.D4[6],G.D4[7]]));
+end;
+function VersionDirectory(Param: String): String;
+begin Result:=ExpandConstant('{app}\versions\')+InstallGeneration; end;
 function CanOpenSettings: Boolean;
 begin Result:=Committed and not Failed and not Deferred and not UserInitFailed; end;
 function InstallDirectory(Param: String): String;
@@ -90,10 +113,11 @@ begin Result := StableLogDirectory+'\setup.log'; end;
 function Deploy(Action, ScriptRoot: String): Boolean;
 var Code: Integer; Params: String;
 begin
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ScriptRoot+'\setup\deploy.ps1" -Action '+Action+' -InstallRoot "'+ExpandConstant('{app}')+'" -Generation {#Generation} -Payload "'+ExpandConstant('{tmp}\payload')+'"';
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ScriptRoot+'\setup\deploy.ps1" -Action '+Action+' -InstallRoot "'+ExpandConstant('{app}')+'" -Payload "'+ExpandConstant('{tmp}\payload')+'"';
+  if InstallGeneration<>'' then Params:=Params+' -Generation '+InstallGeneration;
   Result := Exec(PowerShell, Params, '', SW_HIDE, ewWaitUntilTerminated, Code);
   Log('Deploy '+Action+': '+IntToStr(Code));
-  if (Code=3010) and (Action='Uninstall') then begin RestartCleanup:=True; Code:=0; end;
+  if Code=3010 then begin RestartCleanup:=True; Code:=0; end;
   Result := Result and (Code=0);
 end;
 function UserStep(Action: String): Integer;
@@ -101,13 +125,14 @@ var Params: String; Code: Integer;
 begin
   { This hidden original-user step must never wait for a secondary modal UI. }
   { Conflicting user files are therefore preserved during graphical setup. }
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\versions\{#Generation}\initialize.ps1')+'" -Quiet -RequireStandardUser -NoDialogs -SkipConflicts -Transaction "'+TxId+'" -TransactionAction '+Action;
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{code:VersionDirectory}\initialize.ps1')+'" -Quiet -RequireStandardUser -NoDialogs -SkipConflicts -Transaction "'+TxId+'" -TransactionAction '+Action;
   if not ExecAsOriginalUser(PowerShell,Params,'',SW_HIDE,ewWaitUntilTerminated,Code) then Code:=1;
   Result:=Code;
 end;
 function InitializeSetup: Boolean;
 begin
   Result := not IsArm64;
+  if Result then InstallGeneration:=NewInstallGeneration;
   if not Result then SuppressibleMsgBox('此安装程序仅支持 Intel/AMD x64 Windows。ARM64 系统请使用对应版本。',mbError,MB_OK,IDOK);
 end;
 procedure OpenLog(Sender: TObject);
@@ -129,7 +154,7 @@ begin
   Info:=CreateOutputMsgPage(wpWelcome,'安装说明','将安装完整的虎娘输入法',
     '支持 x64 和 x86 应用。'+#13#10+#13#10+
     '程序安装到 Program Files，码表、设置和个人词条保存在当前用户的 %LOCALAPPDATA%\Tigirl。'+#13#10+#13#10+
-    '已有设置将保留。升级时如默认码表与现有同名文件内容不同，将保留现有文件，不阻塞安装。'+#13#10+#13#10+
+    '已有设置将保留。未修改的默认码表会更新；用户修改或来源未知时保留现有文件，不阻塞安装。'+#13#10+#13#10+
     '安装完成后请重新打开需要输入的程序。');
   Progress:=CreateOutputProgressPage('准备安装','正在校验安装文件，请稍候。');
   LogButton:=TNewButton.Create(WizardForm);LogButton.Parent:=WizardForm;LogButton.Caption:='打开日志';
@@ -163,14 +188,14 @@ begin
   if CurStep=ssPostInstall then begin
     try
       WizardForm.StatusLabel.Caption:='正在切换到新版 x64 / x86 输入法……';
-      if not Deploy('Apply',ExpandConstant('{app}\versions\{#Generation}')) then RaiseException('输入法注册失败。');
+      if not Deploy('Apply',ExpandConstant('{code:VersionDirectory}')) then RaiseException('输入法注册失败。');
       Applied:=True;
       { Backend writes a plain transaction-id file for the original-user handoff. }
       if not LoadStringFromFile(ExpandConstant('{app}\setup-transaction.id'),Text) then RaiseException('无法读取安装事务。');
       TxId:=Trim(String(Text));
       { Machine registration is the commit point. User data initialization must never roll it back. }
       WizardForm.StatusLabel.Caption:='正在完成程序更新……';
-      if not Deploy('Commit',ExpandConstant('{app}\versions\{#Generation}')) then RaiseException('安装提交失败。');
+      if not Deploy('Commit',ExpandConstant('{code:VersionDirectory}')) then RaiseException('安装提交失败。');
       Committed:=True;
       WizardForm.StatusLabel.Caption:='正在检查码表冲突并编译缓存……';
       Code:=UserStep('Initialize');
@@ -198,21 +223,24 @@ begin
     end else if Deferred then
       WizardForm.FinishedLabel.Caption:='程序已安装并切换到新版。请用日常使用的 Windows 账号重新登录，完成码表初始化。'
     else WizardForm.FinishedLabel.Caption:='虎娘已安装。请重开微信、Word 等正在使用的程序。'+#13#10+'可以从开始菜单“虎娘 → 输入设置”调整选项。';
+    if RestartCleanup and not Failed then WizardForm.FinishedLabel.Caption:=WizardForm.FinishedLabel.Caption+#13#10+#13#10+'旧版文件将在重启后清理；无法登记的文件已记录日志，下次维护时重试。';
   end;
 end;
+function NeedRestart: Boolean;
+begin Result:=RestartCleanup; end;
 procedure DeinitializeSetup;
 begin if Prepared and not Committed then Recover; end;
 function GetCustomSetupExitCode: Integer;
 begin if Failed then Result:=1 else Result:=0; end;
 function InitializeUninstall: Boolean;
 begin
-  Result:=Deploy('UninstallCheck',ExpandConstant('{app}\versions\{#Generation}'));
+  Result:=Deploy('UninstallCheck',ExpandConstant('{app}\maintenance'));
   if not Result then SuppressibleMsgBox('卸载安全检查发现输入法注册指向虎娘安装目录之外的未知程序，或卸载后端无法运行。为避免破坏其他软件，已停止卸载。请查看日志：'+StableLogPath,mbError,MB_OK,IDOK);
 end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep=usUninstall then
-    if not Deploy('Uninstall',ExpandConstant('{app}\versions\{#Generation}')) then RaiseException('输入法注册未能完全撤销。程序文件尚未作为成功卸载处理。请查看日志：'+StableLogPath);
+    if not Deploy('Uninstall',ExpandConstant('{app}\maintenance')) then RaiseException('输入法注册未能完全撤销。程序文件尚未作为成功卸载处理。请查看日志：'+StableLogPath);
 end;
 function UninstallNeedRestart: Boolean;
 begin Result:=RestartCleanup; end;
