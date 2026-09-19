@@ -69,8 +69,11 @@ struct Bucket {
         // Keep a legal learned path rather than another segmentation of the
         // same text which loses the remembered raw/text boundary alignment.
         bool learned=item.learningScore>0 || old.learningScore>0 || item.learningPotential>0 || old.learningPotential>0;
-        if((learned && item.score+item.learningPotential>old.score+old.learningPotential) ||
-           (!learned && (item.rank<old.rank || (item.rank==old.rank && item.score>old.score))))old=std::move(item);
+        const bool itemDirect=(item.source&SentenceSourceDirect)!=0,oldDirect=(old.source&SentenceSourceDirect)!=0;
+        const bool replace=itemDirect!=oldDirect?itemDirect:
+            ((learned && item.score+item.learningPotential>old.score+old.learningPotential) ||
+             (!learned && (item.rank<old.rank || (item.rank==old.rank && item.score>old.score))));
+        if(replace)old=std::move(item);
         old.mass=combined;old.source=source;old.directRank=directRank;
     }
     void limit(int width,bool scoreFirst) {
