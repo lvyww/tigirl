@@ -19,9 +19,8 @@ struct SentencePathBoundary {
     double codeScore=0; // Cumulative final-ranking-only shape evidence.
     bool protectsRareCharacter=false;
     int codeLength=0;
-    // When this boundary closes a learnt span, retain its exact origin so a
-    // later explicit top1 commit can reinforce that preference without
-    // guessing text/code segmentation.
+    // Retain the learned-span origin in published/review snapshots for
+    // structural compatibility. Normal top1 commits no longer reinforce it.
     double learningReward=0;
     int learningRawStart=0,learningTextStart=0;
 };

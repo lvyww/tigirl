@@ -14,9 +14,8 @@ constexpr std::u16string_view bos=u"\x02",eos=u"\x03";
 constexpr double supplementEarlyScale=.05,supplementEarlyCap=.75;
 constexpr double learningEarlyScale=.075,learningEarlyCap=.75,personalizedEarlyCap=.80;
 inline double learningMaturity(double score) {
-    if(score<=9)return 0;
-    const double weight=std::exp((score-9)/2);
-    return std::clamp((weight-1)/2,0.0,1.0);
+    // Exact-context manual-correction levels are 9, 11, 13... .
+    return std::clamp((score-9)/4,0.0,1.0);
 }
 inline double learningEarlyContribution(double score) {
     return std::min(learningEarlyCap,std::max(0.0,score)*learningMaturity(score)*learningEarlyScale);
