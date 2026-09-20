@@ -1,5 +1,6 @@
 #pragma once
 #include "SentenceDecoder.h"
+#include <functional>
 namespace tiger {
 struct SentenceAutoCommitOptions {
     int requiredEvidence=3,requiredStrong=2,minimumRetained=3;
@@ -9,6 +10,7 @@ struct SentenceAutoCommitInput {
     bool enabled=false,suspended=false,matchingLexicon=true;
     std::u16string_view raw,committedText;
     int committedRaw=0,lastAutoCommitRaw=0,configuredRetained=0;
+    std::function<int(std::u16string_view,int,int,int)> competingBoundaryEnd;
 };
 struct SentencePrefixCommit {std::u16string text;int rawLength=0;};
 // Copyable policy state for Engine previews. A returned decision consumes its

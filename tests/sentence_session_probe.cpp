@@ -86,6 +86,38 @@ int wmain() {
     a.start(u"aaaaa",9);a.apply(*a.request(),autoFixture(a.raw()));a.tryAutoCommit(true,8);
     a.append(u'a');a.apply(*a.request(),autoFixture(a.raw()));check(!a.tryAutoCommit(true,8),"Configured retained raw ignored");
     check(!a.tryAutoCommit(false),"Disabled policy committed a prefix");
+
+    a.start(u"aaaaa",9);a.apply(*a.request(),autoFixture(a.raw()));a.tryAutoCommit(true);
+    a.append(u'a');a.apply(*a.request(),autoFixture(a.raw()));
+    auto unprotected=a;
+    check(unprotected.tryAutoCommit(true)==std::optional<std::u16string>(u"中"),"Baseline retained raw no longer matures");
+    SentencePathQueries crossing;
+    crossing.competingBoundaryEnd=[](std::u16string_view raw,int committed,int proposed,int target) {
+        check(raw==u"aaaaaa" && committed==0 && proposed==2 && target==1,
+            "Cross-boundary query lost aligned coordinates");
+        return proposed+2;
+    };
+    check(!a.tryAutoCommit(true,0,crossing),"Cross-boundary split did not extend retained lookahead");
+    a.append(u'a');a.apply(*a.request(),autoFixture(a.raw()));
+    crossing.competingBoundaryEnd=[](std::u16string_view,int,int proposed,int target){
+        check(target==1,"Cross-boundary release lost target element count");return proposed+2;};
+    check(a.tryAutoCommit(true,0,crossing)==std::optional<std::u16string>(u"中"),
+        "Cross-boundary split did not release after three keys beyond competing boundary");
+
+    a.start(u"aaaaa",12);a.apply(*a.request(),autoFixture(a.raw()));
+    check(!a.tryAutoCommit(true),"Low-confidence reset fixture first strong committed");
+    a.append(u'a');auto low=autoFixture(a.raw());
+    low.earlyCommitEvidence.neutralLowConfidence=true;
+    low.earlyCommitEvidence.prefixes.front().share=.5;
+    low.earlyCommitEvidence.prefixes.front().baseShare=.5;
+    a.apply(*a.request(),std::move(low));
+    check(!a.tryAutoCommit(true),"Low-confidence gap committed stale tracker");
+    a.append(u'a');a.apply(*a.request(),autoFixture(a.raw()));
+    check(!a.tryAutoCommit(true),"First fresh strong after low-confidence gap reused stale maturity");
+    a.append(u'a');a.apply(*a.request(),autoFixture(a.raw()));
+    check(a.tryAutoCommit(true)==std::optional<std::u16string>(u"中"),
+        "Second fresh strong after low-confidence gap did not mature");
+
     bool full=false,proper=false,alternative=false;int fullCalls=0,uniqueCalls=0;
     SentencePathQueries queries;
     queries.complete=[&](std::u16string_view raw,std::u16string_view prefix,std::optional<std::u16string_view> excluded,bool grouped,const SentenceLockedPrefix* locked){

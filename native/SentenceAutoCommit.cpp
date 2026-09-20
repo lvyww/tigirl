@@ -59,7 +59,9 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::evaluate(const SentenceA
                 if(stem && stem<t.text.size() && p.share>self->share){contradicted=true;break;}
             }
             if(contradicted || ++t.gap>3)continue;
-            t.share=self->share;next.push_back(std::move(t));
+            t.share=self->share;
+            if(evidence.neutralLowConfidence){t.evidence=0;t.strong=0;}
+            next.push_back(std::move(t));
         }
     } else {
         for(const auto& p:qualifying) {
@@ -77,8 +79,15 @@ std::optional<SentencePrefixCommit> SentenceAutoCommit::mature(const SentenceAut
     const Tracker* best=nullptr;std::size_t bestLength=0;
     const int retained=in.configuredRetained>0?std::max(options_.minimumRetained,in.configuredRetained):options_.minimumRetained;
     for(const auto& t:trackers_) {
+        const auto committedElements=wordTextElements(in.committedText).size();
+        const auto totalElements=wordTextElements(t.text).size();
+        const int targetElements=totalElements>committedElements?
+            static_cast<int>(totalElements-committedElements):0;
+        int protectedBoundary=t.rawLength;
+        if(in.competingBoundaryEnd)protectedBoundary=std::max(
+            protectedBoundary,in.competingBoundaryEnd(raw,in.committedRaw,t.rawLength,targetElements));
         if((t.evidence<options_.requiredEvidence && t.strong<options_.requiredStrong) || t.rawLength<=in.committedRaw ||
-           t.rawLength>static_cast<int>(raw.size()) || static_cast<int>(raw.size())-t.rawLength<retained ||
+           t.rawLength>static_cast<int>(raw.size()) || static_cast<int>(raw.size())-protectedBoundary<retained ||
            t.text.size()<=in.committedText.size() || !starts(t.text,in.committedText) ||
            (visibleTop && !starts(*visibleTop,t.text)))continue;
         const auto length=wordTextElements(t.text).size();

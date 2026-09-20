@@ -106,6 +106,10 @@ static void correctness() {
      SentenceLearningEvent e;e.id="c5";e.mode=u"m";e.code=u"dd";e.text=u"丁";e.context=u"乙丙";e.time=1700000000;d.setLearning(SentenceLearningSnapshot::build({e},e.time),u"m");
      d.decode(u"aabbcc");check(d.decode(u"aabbccdd",20,true).learningAffected,"C5 learned suffix reached");auto a=d.decode(u"aabbcc",20,true);
      check(!a.learningAffected && equal(a,d.decodeFull(u"aabbcc",20,true)),"C5 learning flags rolled back");}
+    {auto l=lex({{u"nv",{u"有"}},{u"nvt",{u"郁"}},{u"tah",{u"衅"}},{u"ahx",{u"闷"}}});SentenceDecoder d(l,{},options());
+     check(d.competingBoundaryEnd(u"jreynvtah",4,6,1)==7,"C6 nv boundary must protect aligned nvt split");
+     check(d.competingBoundaryEnd(u"jreynvtahx",4,7,1)==7,"C6 second element must not delay one-element boundary");
+     check(d.competingBoundaryEnd(u"jreynvtahx",4,9,2)==10,"C6 two-element paths must align at nvt|ahx");}
 }
 static void rankingPriors() {
     auto model=std::make_shared<FlatModel>();

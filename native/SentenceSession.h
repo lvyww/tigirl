@@ -8,6 +8,7 @@ namespace tiger {
 struct SentencePathQueries {
     std::function<bool(std::u16string_view,std::u16string_view,std::optional<std::u16string_view>,bool,const SentenceLockedPrefix*)> complete;
     std::function<bool(std::u16string_view)> properPrefix;
+    std::function<int(std::u16string_view,int,int,int)> competingBoundaryEnd;
 };
 // Value-type composition state, safe to copy for TSF OnTestKeyDown. Scheduling,
 // decoding and document edits are performed by the owning adapter, not here.
@@ -43,7 +44,8 @@ public:
     std::optional<std::u16string> commitPrefix(std::u16string_view text,int rawLength);
     // Evaluate current or immediately previous same-resource evidence and
     // atomically commit its approved boundary, retaining the full raw context.
-    std::optional<std::u16string> tryAutoCommit(bool enabled,int minimumRetained=0);
+    std::optional<std::u16string> tryAutoCommit(bool enabled,int minimumRetained=0,
+        const SentencePathQueries& queries={});
     std::u16string displayCode() const;
     std::u16string liveRaw() const;
     std::u16string candidateText(int index) const;

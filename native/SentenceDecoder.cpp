@@ -318,6 +318,32 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
 bool SentenceDecoder::isProperCodePrefix(std::u16string_view raw) const {
     return lexicon_->isProperCodePrefix(normalizeRawCode(raw));
 }
+int SentenceDecoder::competingBoundaryEnd(std::u16string_view input,int committedRaw,int proposedRaw,int targetTextElements) const {
+    const auto raw=normalizeRawCode(input);
+    if(proposedRaw<=committedRaw || committedRaw<0 || proposedRaw>static_cast<int>(raw.size()) || targetTextElements<1)return proposedRaw;
+    std::vector<std::vector<bool>> reachable(raw.size()+1,
+        std::vector<bool>(static_cast<std::size_t>(targetTextElements)+1,false));
+    reachable[static_cast<std::size_t>(committedRaw)][0]=true;
+    int furthest=proposedRaw;
+    for(int start=committedRaw;start<static_cast<int>(raw.size());++start) {
+        for(int count=0;count<targetTextElements;++count) {
+            if(!reachable[static_cast<std::size_t>(start)][static_cast<std::size_t>(count)])continue;
+            for(int length:lexicon_->codeLengths()) {
+                const int finish=start+length;
+                if(finish>static_cast<int>(raw.size()))continue;
+                auto candidates=lexicon_->candidateView(std::u16string_view(raw).substr(
+                    static_cast<std::size_t>(start),static_cast<std::size_t>(length)));
+                for(const auto& candidate:*candidates) {
+                    const int next=count+static_cast<int>(candidate.textElements.size());
+                    if(next==targetTextElements)furthest=std::max(furthest,finish);
+                    else if(next<targetTextElements)
+                        reachable[static_cast<std::size_t>(finish)][static_cast<std::size_t>(next)]=true;
+                }
+            }
+        }
+    }
+    return furthest;
+}
 bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16string_view required,
     std::optional<std::u16string_view> excluded,bool groupEligibleOnly,const SentenceLockedPrefix* lockedPrefix) const {
     auto raw=normalizeRawCode(input);

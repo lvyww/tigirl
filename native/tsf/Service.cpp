@@ -430,6 +430,10 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
                 return decoder->hasCompleteCandidate(raw,prefix,excluded,grouped,locked);
             };
             sentenceQueries.properPrefix=[decoder](std::u16string_view raw){return decoder->isProperCodePrefix(raw);};
+            sentenceQueries.competingBoundaryEnd=[decoder](
+                std::u16string_view raw,int committedRaw,int proposedRaw,int targetElements) {
+                return decoder->competingBoundaryEnd(raw,committedRaw,proposedRaw,targetElements);
+            };
         }
         auto result=next.process(key,sentenceQueries);
         if(!test && result.awaitSentenceDecode) {
