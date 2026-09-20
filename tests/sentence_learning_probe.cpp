@@ -43,32 +43,32 @@ static void pureTests() {
     check(sentenceLearningDiff(u"aa",u"甲",u"乙",{{1,1}},{{2,1}},0).empty(),"incomplete boundary rejected");
     auto e=event(u"aabb",u"虎娘",u"设置");auto s=SentenceLearningSnapshot::build({e},e.time);
     check(s->score(e.mode,e.code,e.text,e.context)==9,"first correction equals supplement weight 1000");
-    check(s->score(e.mode,e.code,e.text,u"其他")==0,"context isolation");
+    check(s->score(e.mode,e.code,e.text,u"其他")==6,"first correction cross-context preference");
     check(s->score(u"other-mode",e.code,e.text,e.context)==0,"mode isolation");
     check(s->prefixScore(e.mode,u"aa",u"虎",e.context)==9,"partial path hint");
     check(s->prefixScore(e.mode,u"aa",u"狼",e.context)==0,"wrong prefix no hint");
-    auto decay=SentenceLearningSnapshot::build({e},e.time+30*86400);check(std::abs(decay->score(e.mode,e.code,e.text,e.context)-(9+2*std::log(0.5)))<1e-8,"30-day weight decay");
+    auto persistent=SentenceLearningSnapshot::build({e},e.time+3650LL*86400);check(persistent->score(e.mode,e.code,e.text,e.context)==9,"learning has no time decay");
     auto second=e;second.id=learningId();auto third=e;third.id=learningId();third.context=u"测试";
     auto general=SentenceLearningSnapshot::build({e,second,third},e.time);
-    check(general->score(e.mode,e.code,e.text,u"其他")==2,"three corrections two contexts generalize weakly");
+    check(general->score(e.mode,e.code,e.text,u"其他")==10,"three explicit corrections reach cross-context level three");
     auto single1=event(u"aa",u"乙",u"前甲"),single2=single1,single3=single1;single2.id=learningId();single3.id=learningId();single3.context=u"后甲";
     auto singles=SentenceLearningSnapshot::build({single1,single2,single3},single1.time);
-    check(singles->score(single1.mode,u"aa",u"乙",u"别处")==0,"single character never generalized");
+    check(singles->score(single1.mode,u"aa",u"乙",u"别处")==10,"single-character fragments use explicit correction levels");
     auto alternative=e;alternative.id=learningId();alternative.text=u"虎爪";
     auto competition=SentenceLearningSnapshot::build({e,second,alternative},e.time);
     check(competition->score(e.mode,e.code,alternative.text,e.context)>competition->score(e.mode,e.code,e.text,e.context),"new correction beats older habit");
     std::vector<SentenceLearningEvent> repeated(100,e);auto cap=SentenceLearningSnapshot::build(repeated,e.time);
-    check(cap->score(e.mode,e.code,e.text,e.context)==16,"score cap");
+    check(cap->score(e.mode,e.code,e.text,e.context)==27 && cap->score(e.mode,e.code,e.text,u"其他")==24,"ten-level exact/general caps");
     for(int n=1;n<=40;++n) {
         auto learned=SentenceLearningSnapshot::build(std::vector<SentenceLearningEvent>(n,e),e.time);
-        const double expected=std::min(16.0,9+2*std::log(static_cast<double>(n)));
-        check(std::abs(learned->score(e.mode,e.code,e.text,e.context)-expected)<1e-8,"repeated correction logarithmic reward");
+        const int level=std::min(10,n);const double expected=7+2*level;
+        check(std::abs(learned->score(e.mode,e.code,e.text,e.context)-expected)<1e-8,"repeated explicit corrections advance two points per level");
     }
     auto twice=SentenceLearningSnapshot::build({e,second},e.time);
     check(s->score(e.mode,e.code,e.text,e.context)<10.083 && twice->score(e.mode,e.code,e.text,e.context)>10.083,"two corrections overcome a gap above the old ten-point cap");
-    check(std::abs(competition->score(e.mode,e.code,e.text,e.context)-(9+2*std::log(0.5)))<1e-8,"competing correction quarters accumulated weight");
-    auto expired=SentenceLearningSnapshot::build({e},e.time+365*86400);
-    check(expired->score(e.mode,e.code,e.text,e.context)==0,"long-term decay floors reward at zero");
+    check(competition->score(e.mode,e.code,e.text,e.context)==0,"competing manual correction can demote old local preference");
+    auto old=SentenceLearningSnapshot::build({e},e.time+3650LL*86400);
+    check(old->score(e.mode,e.code,e.text,e.context)==9,"long-term idle time preserves reward");
     for(auto name:{u".tigirl-learning-v1.log",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u".tigirl-learning-v1.log.lock"})
         check(isLearningFile(name),"reserved basename including fake lexicon extensions");
     check(!isLearningFile(u"正常码表.txt") && !isLearningFile(u"tiger.txt"),"normal dictionaries retained");
@@ -108,6 +108,8 @@ static void sessionTests() {
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.moveSelection(1,5,true);s.changeResources(2);
     apply(s,fixture(u"aa",{u"甲",u"乙"}));s.commitCandidate(1);check(s.takeLearning().empty(),"resource switch clears pending");
     auto learned=fixture(u"aa",{u"乙",u"甲"});learned.learningAffected=true;
+    s.start(u"aa",2);apply(s,learned);check(s.commitCandidate(0)==std::optional<std::u16string>(u"乙"),"learned top normal commit");
+    check(s.takeLearning().empty(),"learned top normal commit never reinforces");
     s.start(u"aa",2);apply(s,learned);int queries=0;SentencePathQueries q;
     q.complete=[&](auto,auto,auto,auto,auto){queries++;return false;};q.properPrefix=[&](auto){queries++;return false;};
     check(!s.appendAutomatic(u'b',true,0,q) && queries==0,"learning cannot prove empty code or probability auto commit");
