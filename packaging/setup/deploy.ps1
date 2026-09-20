@@ -62,9 +62,9 @@ function Get-ManagedToolDirectory([string]$Tool){
  if(!$Tool){return $null}
  try{$full=[IO.Path]::GetFullPath($Tool)}catch{return $null}
  if((Split-Path $full -Leaf) -ne 'Tigirl.exe'){return $null}
- $archDir=Split-Path $full -Parent
- if((Split-Path $archDir -Leaf) -ne 'x64'){return $null}
- $directory=Split-Path $archDir -Parent
+ $toolDir=Split-Path $full -Parent
+ if((Split-Path $toolDir -Leaf) -notin @('shared','x64')){return $null}
+ $directory=Split-Path $toolDir -Parent
  try{Assert-VersionPath $directory}catch{return $null}
  return $directory
 }
@@ -227,12 +227,6 @@ try {
  }elseif($Action -eq 'Apply'){
   $j=Get-Content $journal -Raw|ConvertFrom-Json
   Assert-Package $j.directory|Out-Null
-  foreach($file in Get-ChildItem "$($j.directory)\x64" -File -Recurse){
-   $relative=$file.FullName.Substring(("$($j.directory)\x64\").Length);if($relative -eq 'Tigirl.dll'){continue}
-   $target=Join-Path "$($j.directory)\x86" $relative
-   New-Item (Split-Path $target) -ItemType Directory -Force|Out-Null
-   if(!(Test-Path $target)){New-Item $target -ItemType HardLink -Target $file.FullName|Out-Null}
-  }
   $j.state='unregistering';Save-Json $j $journal
   if((Get-ComPath 'Registry64') -or (Get-ComPath 'Registry32')){
    Assert-NoForeignMachineState $j.previous

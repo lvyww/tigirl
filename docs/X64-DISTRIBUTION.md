@@ -14,7 +14,7 @@
 
 解压双击 `install.cmd`。64 位 PowerShell 完成检查并启动 UAC 子进程，仅子进程执行机器安装。父进程保留原使用者身份，完成其数据初始化和 `InstallLayoutOrTip` 启用。其他账号使用 Active Setup 在桌面登录时初始化。
 
-机器文件位于 `%ProgramFiles%/Tigirl/versions/<manifest哈希前缀>`，安装记录位于 `%ProgramFiles%/Tigirl/install.json`。x64 使用 System32/regsvr32，x86 使用 SysWOW64/regsvr32，两者共用原 CLSID 和 TSF Profile。x86 目录的工具、模型、字体与基础词库通过硬链接复用 x64 目录。
+机器文件位于 `%ProgramFiles%/Tigirl/versions/<manifest哈希前缀>`，安装记录位于 `%ProgramFiles%/Tigirl/install.json`。x64 使用 System32/regsvr32，x86 使用 SysWOW64/regsvr32，两者共用原 CLSID 和 TSF Profile。`x64` 与 `x86` 目录只保存各自的 TSF DLL；模型、基础词库、字体和桌面工具统一位于同版本的 `shared` 目录，两个架构直接读取同一份资源。
 
 安装器拒绝未知来源的同 CLSID 注册及协议冲突。机器安装失败恢复之前的注册；用户初始化失败恢复数据后尝试回滚机器注册，此时 Windows 可能再次要求 UAC。卸载先删除 x86 COM 注册，再由 x64 DLL 注销共享 Profile，保留用户数据和程序版本目录。`rollback.ps1` 切换到上一程序版本，不回退个人词条。
 

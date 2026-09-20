@@ -106,7 +106,12 @@ static void verifyDictionary(HMODULE module,std::vector<PSAPI_WORKING_SET_EX_INF
         return;
     }
     wchar_t path[32768]; require(GetModuleFileNameW(module,path,32768)!=0,"Cannot locate tested module");
-    verifyMappedDictionary(std::filesystem::path(path).parent_path()/L"tiger-v2.tcd",pages);
+    auto directory=std::filesystem::path(path).parent_path();
+    const auto leaf=directory.filename().wstring();
+    if((_wcsicmp(leaf.c_str(),L"x64")==0 || _wcsicmp(leaf.c_str(),L"x86")==0) &&
+       std::filesystem::exists(directory.parent_path()/L"shared"/L"tiger-v2.tcd"))
+        directory=directory.parent_path()/L"shared";
+    verifyMappedDictionary(directory/L"tiger-v2.tcd",pages);
 }
 
 class MenuCapture final : public ITfMenu {

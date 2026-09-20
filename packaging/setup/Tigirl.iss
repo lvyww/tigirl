@@ -63,9 +63,9 @@ Source: "{#PackageDir}\data.ps1"; DestDir: "{app}\maintenance"; Flags: ignorever
 Source: "{#PackageDir}\retirement.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
 Source: "{#PackageDir}\setup\deploy.ps1"; DestDir: "{app}\maintenance\setup"; Flags: ignoreversion uninsrestartdelete
 [Icons]
-Name: "{commonprograms}\虎娘\输入设置"; Filename: "{code:VersionDirectory}\x64\Tigirl.exe"
+Name: "{commonprograms}\虎娘\输入设置"; Filename: "{code:VersionDirectory}\shared\Tigirl.exe"
 [Run]
-Filename: "{code:VersionDirectory}\x64\Tigirl.exe"; Description: "打开输入设置"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: CanOpenSettings
+Filename: "{code:VersionDirectory}\shared\Tigirl.exe"; Description: "打开输入设置"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: CanOpenSettings
 [UninstallDelete]
 Type: files; Name: "{app}\setup-transaction.id"
 Type: files; Name: "{app}\committed-*.json"

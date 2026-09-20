@@ -80,7 +80,7 @@ try {
     Set-NativeTigerAppContainerAccess $root
     Write-InitializeLog 'Permissions complete; compiling dictionaries'
     $compilationStarted=$true
-    $compilerExit=Invoke-InitializerCompiler "$PSScriptRoot\x64\Tigirl.exe"
+    $compilerExit=Invoke-InitializerCompiler "$PSScriptRoot\shared\Tigirl.exe"
     if($compilerExit -ne 0){throw '码表编译失败，已保留原方案。请检查码表格式后重试。'}
     if(!$NoEnable) {
         Write-InitializeLog 'Enabling input profile'

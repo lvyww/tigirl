@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include "ManagementLaunch.h"
+#include "PackageLayout.h"
 #include "../ManagementUri.h"
 #include <filesystem>
 #include <winrt/Windows.Foundation.h>
@@ -30,8 +31,7 @@ HRESULT launchManagement(HINSTANCE module,std::wstring_view action,std::wstring_
             }catch(...){DllRelease();throw;}
             return S_OK;
         }
-        wchar_t path[32768];auto n=GetModuleFileNameW(module,path,32768);if(!n || n>=32768)return E_FAIL;
-        const auto executable=std::filesystem::path(path).parent_path()/L"Tigirl.exe";
+        const auto executable=packageResourceDirectory(module)/L"Tigirl.exe";
         // URI payload has only an allowlisted action and hex-encoded UTF-16.
         auto command=L"\""+executable.wstring()+L"\" --uri \""+uri+L"\"";
         STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION process{};

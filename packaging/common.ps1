@@ -6,6 +6,14 @@ function Get-PackageDll([string]$Directory,[string]$Architecture) {
     return Join-Path $Directory ($Architecture+'\Tigirl.dll')
 }
 function Get-PackageTool([string]$Directory) {
+    $shared=Join-Path $Directory 'shared\Tigirl.exe'
+    $manifest=Join-Path $Directory 'manifest.json'
+    if(Test-Path -LiteralPath $manifest -PathType Leaf){
+        try{
+            $files=@((Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json).files)
+            if(@($files|Where-Object {$_.path -eq 'shared\Tigirl.exe'}).Count){return $shared}
+        }catch{}
+    }
     return Join-Path $Directory 'x64\Tigirl.exe'
 }
 $NativeTigerRecord=Join-Path $NativeTigerInstallRoot 'install.json'

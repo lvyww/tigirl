@@ -9,7 +9,7 @@ foreach($fn in $ast.FindAll({param($node)$node -is [Management.Automation.Langua
 }
 . "$PSScriptRoot\..\packaging\data.ps1"
 function Get-PackageDll($Dir,$Arch){Join-Path $Dir "$Arch\Tigirl.dll"}
-function Get-PackageTool($Dir){Join-Path $Dir 'x64\Tigirl.exe'}
+function Get-PackageTool($Dir){Join-Path $Dir 'shared\Tigirl.exe'}
 function Get-ComPath($View){$script:registry[$View]}
 function Invoke-Registration($Dir,[switch]$Remove){foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){$script:registry[$pair[0]]=if($Remove){$null}else{Get-PackageDll $Dir $pair[1]}}}
 function Set-MachineEntries($Dir,$Version){}

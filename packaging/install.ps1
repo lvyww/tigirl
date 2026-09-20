@@ -43,14 +43,6 @@ try {
         if(Test-Path -LiteralPath $target){if((Get-FileHash -LiteralPath $target).Hash -ne $file.sha256){throw 'Immutable installation collision.'}}
         else{Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file.path) -Destination $target}
     }
-    # One backing file for common read-only data and desktop tools.
-    foreach($file in Get-ChildItem -LiteralPath "$destination\x64" -File -Recurse) {
-        $relative=$file.FullName.Substring(("$destination\x64\").Length)
-        if($relative -eq 'Tigirl.dll'){continue}
-        $target=Join-Path "$destination\x86" $relative
-        New-Item -ItemType Directory -Force (Split-Path $target -Parent)|Out-Null
-        if(!(Test-Path -LiteralPath $target)){New-Item -ItemType HardLink -Path $target -Target $file.FullName|Out-Null}
-    }
     Assert-Package $destination|Out-Null
     $registrationStarted=$false
     try {

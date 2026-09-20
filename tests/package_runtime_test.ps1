@@ -8,11 +8,16 @@ $env:NATIVE_TIGER_USER_ROOT=Join-Path $fixture 'Tigirl'
 $root=$env:NATIVE_TIGER_USER_ROOT
 function Check($Condition,$Message){if(!$Condition){throw $Message}}
 function Tool($Action,$Value=''){
-    $p=Start-Process -FilePath "$Package\x64\Tigirl.exe" -ArgumentList @('--menu-action',$Action,('"'+$Value+'"')) -Wait -PassThru
+    $p=Start-Process -FilePath "$Package\shared\Tigirl.exe" -ArgumentList @('--menu-action',$Action,('"'+$Value+'"')) -Wait -PassThru
     Check ($p.ExitCode -eq 0) "Action failed: $Action"
 }
 function Generation($Name){return [IO.File]::ReadAllText("$root\schemas\$Name\current.txt")}
 try {
+    $archFiles=@(Get-ChildItem "$Package\x64","$Package\x86" -File -Recurse)
+    Check ($archFiles.Count -eq 2 -and @($archFiles|Where-Object Name -ne 'Tigirl.dll').Count -eq 0) 'Architecture directories contain duplicated shared runtime files'
+    foreach($relative in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models\sentence-ngram-mobile.bin','字体\LXGWWenKaiGBScreen.ttf')){
+        Check (Test-Path -LiteralPath (Join-Path "$Package\shared" $relative) -PathType Leaf) "Missing shared runtime file: $relative"
+    }
     & "$Package\initialize.ps1" -Quiet -NoEnable
     Check (Test-Path "$root\码表\虎码字词") 'Missing default sources'
     Check (Test-Path "$root\拼音反查码表") 'Missing pinyin source'
@@ -32,7 +37,7 @@ try {
     $badChange="$root\码表\虎码字词\temporary-test.txt"
     [IO.File]::WriteAllText($badChange,"ab 新内容`r`n",[Text.UTF8Encoding]::new($true))
     try {
-        $failed=Start-Process -FilePath "$Package\x64\Tigirl.exe" -ArgumentList '--initialize' -Wait -PassThru
+        $failed=Start-Process -FilePath "$Package\shared\Tigirl.exe" -ArgumentList '--initialize' -Wait -PassThru
         Check ($failed.ExitCode -ne 0) 'Failed publication was not reported'
         Check ((Generation '虎码字词') -eq $second) 'Failure changed selected generation'
         Check ([IO.File]::ReadAllText("$root\config.txt") -eq $savedConfiguration) 'Failure changed selected scheme'
@@ -54,5 +59,5 @@ try {
     Add-Content -LiteralPath "$root\config.txt" -Value "码表存储位置`tC:\does-not-exist`r`n拼音反查目录`tC:\does-not-exist" -Encoding UTF8
     Tool 'reload'
     Check (Test-Path "$root\installed-data-version.txt") 'Initialization not recorded'
-    [ordered]@{status='passed';version=$manifest.version;package=$Package;checks=@('manifest and both architecture loaders','first-user initialization','default source copy','sentence sidecars','cache reuse','pinyin invalidation','scheme selection','recent selection','new source folder','deleted source fallback','fixed runtime paths','default system Ctrl+Space','failed publication preserves selection');machine_registration_tested=$false;uwp_uri_activation_tested=$false}|ConvertTo-Json -Depth 4
+    [ordered]@{status='passed';version=$manifest.version;package=$Package;checks=@('manifest and both architecture loaders','single-copy shared runtime layout','first-user initialization','default source copy','sentence sidecars','cache reuse','pinyin invalidation','scheme selection','recent selection','new source folder','deleted source fallback','fixed runtime paths','default system Ctrl+Space','failed publication preserves selection');machine_registration_tested=$false;uwp_uri_activation_tested=$false}|ConvertTo-Json -Depth 4
 }finally{Remove-Item Env:NATIVE_TIGER_USER_ROOT -ErrorAction SilentlyContinue;if(Test-Path -LiteralPath $fixture){Remove-Item -LiteralPath $fixture -Recurse -Force}}

@@ -5,6 +5,7 @@ deploy = (ROOT / "packaging" / "setup" / "deploy.ps1").read_text(encoding="utf-8
 iss = (ROOT / "packaging" / "setup" / "Tigirl.iss").read_text(encoding="utf-8-sig")
 retirement = (ROOT / "packaging" / "retirement.ps1").read_text(encoding="utf-8-sig")
 zip_install = (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8-sig")
+package_builder = (ROOT / "package_x64.ps1").read_text(encoding="utf-8-sig")
 initialize = (ROOT / "packaging" / "initialize.ps1").read_text(encoding="utf-8-sig")
 
 
@@ -19,7 +20,7 @@ require("\nSolidCompression=yes\n" in iss, "installer solid compression is disab
 require("\nLZMAUseSeparateProcess=yes\n" in iss, "high-compression builds can exhaust the 32-bit compiler address space")
 require("ExtractTemporaryFiles('{tmp}\\payload\\*')" in iss, "installer no longer fully extracts its payload before preflight")
 
-# Simpler full-payload lifecycle: distinct runtime generations, no shared resources.
+# Simpler full-payload lifecycle: distinct runtime generations; architecture-independent runtime files live once under shared/.
 require("InstallGeneration:=NewInstallGeneration" in iss, "setup no longer generates a per-run directory")
 require("{#Generation}" not in iss, "setup still reuses a package-hash directory")
 require("Get-NewVersionDirectory $Generation" in deploy, "fresh-directory collision guard is bypassed")
@@ -28,6 +29,10 @@ require("Retained committed installation after interruption" in deploy, "committ
 require("Remove-Version $old.FullName -AtReboot" in retirement, "upgrade immediately deletes old runtime files")
 require("uninsneveruninstall" in iss, "Inno can bypass hash-aware runtime-file cleanup")
 require("{app}\\maintenance" in iss, "uninstall backend depends on a retired directory")
+require('"$stage\\shared"' in package_builder, "x64 package builder does not create the shared runtime directory")
+require("New-Item -ItemType HardLink" not in zip_install, "ZIP installer still duplicates x64 resources into x86 via hard links")
+require("New-Item $target -ItemType HardLink" not in deploy, "GUI installer still duplicates x64 resources into x86 via hard links")
+require("shared\\Tigirl.exe" in initialize, "user initialization still launches an architecture-local desktop tool")
 require("Save-DataBaseline $plan $baselinePath" in initialize, "successful data initialization does not publish its baseline")
 require("$paths=@($config,$baselinePath," in initialize, "baseline is outside the user-data rollback journal")
 

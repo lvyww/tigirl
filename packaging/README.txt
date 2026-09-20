@@ -21,7 +21,7 @@
 
 程序：%ProgramFiles%\Tigirl\versions\版本标识
 安装记录：%ProgramFiles%\Tigirl\install.json
-程序数据及字体在不同架构目录之间通过硬链接共享。
+x64 与 x86 目录只保存各自的 TSF DLL；模型、词库、字体及桌面工具只在 shared 目录保存一份。
 UWP 的设置和词条操作需要 Tigirl 用户数据目录的 AppContainer 修改权限及低完整性标签；安装器会设置。
 UWP 菜单通过 nativetiger URI 启动按需工具；Windows 可能显示打开应用的确认提示。没有常驻 Core。
 

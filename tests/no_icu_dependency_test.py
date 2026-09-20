@@ -8,8 +8,8 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument('package', type=Path)
 args = parser.parse_args()
-files = ['x64/Tigirl.dll', 'x86/Tigirl.dll', 'x64/Tigirl.exe',
-         'x64/Tigirl.Import.exe', 'x64/Tigirl.Reminder.exe']
+files = ['x64/Tigirl.dll', 'x86/Tigirl.dll', 'shared/Tigirl.exe',
+         'shared/Tigirl.Import.exe', 'shared/Tigirl.Reminder.exe']
 result = {}
 for name in files:
     output = subprocess.check_output(['objdump', '-p', str(args.package / name)], text=True)

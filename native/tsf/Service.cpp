@@ -5,6 +5,7 @@
 #include "../../SampleIME/EnumDisplayAttributeInfo.h"
 #include "Service.h"
 #include "ManagementLaunch.h"
+#include "PackageLayout.h"
 #include "CandidateUI.h"
 #include "CandidateDpi.h"
 #include "AddWordUI.h"
@@ -112,12 +113,10 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
     if(active_) return E_UNEXPECTED;
     const wchar_t* stage=L"Load dictionary";
     try {
-        wchar_t path[32768];
-        auto length=GetModuleFileNameW(Global::dllInstanceHandle,path,32768);
-        if(!length || length>=32768) throw std::runtime_error("Cannot locate native dictionary");
-        dictionaryPath_=std::filesystem::path(path).parent_path()/L"tiger-v2.tcd";
+        const auto resources=packageResourceDirectory(Global::dllInstanceHandle);
+        dictionaryPath_=resources/L"tiger-v2.tcd";
         auto dictionary=Dictionary::Open(dictionaryPath_);
-        fontDirectory_=std::filesystem::path(path).parent_path()/L"字体";
+        fontDirectory_=resources/L"字体";
         lexicon_=std::make_shared<Lexicon>(dictionary);
         secure_=(flags&TF_TMAE_SECUREMODE)!=0;
         stage=L"Resolve user data directory";

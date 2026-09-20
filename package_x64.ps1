@@ -9,7 +9,7 @@ if($Version -notmatch '^\d+\.\d+\.\d+\.\d+$'){throw 'Version must contain four n
 if(!$SkipBuild){& "$PSScriptRoot\build_x64.ps1" -SentenceModelPath $SentenceModelPath;if($LASTEXITCODE){throw 'Release build failed.'}}
 $stage="$PSScriptRoot\build\packages\Tigirl-$Version-x64"
 if(Test-Path -LiteralPath $stage){throw "Package already exists; use a new version or remove the old staging directory: $stage"}
-New-Item -ItemType Directory -Force "$stage\x64","$stage\x86","$stage\DefaultData"|Out-Null
+New-Item -ItemType Directory -Force "$stage\x64","$stage\x86","$stage\shared","$stage\DefaultData"|Out-Null
 foreach($file in Get-ChildItem -LiteralPath "$PSScriptRoot\packaging" -File){Copy-Item -LiteralPath $file.FullName -Destination $stage}
 New-Item -ItemType Directory -Force "$stage\setup"|Out-Null
 foreach($file in @('deploy.ps1')){Copy-Item -LiteralPath "$PSScriptRoot\packaging\setup\$file" -Destination "$stage\setup"}
@@ -17,8 +17,9 @@ foreach($file in @('deploy.ps1')){Copy-Item -LiteralPath "$PSScriptRoot\packagin
 if($LASTEXITCODE){throw 'Maintenance build failed.'}
 Copy-Item -LiteralPath "$PSScriptRoot\assets\Tigirl.ico" -Destination $stage
 Copy-Item -LiteralPath "$PSScriptRoot\appcontainer_data.ps1" -Destination $stage
-foreach($file in @('Tigirl.dll','Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models','字体')){Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\$file" -Destination "$stage\x64" -Recurse}
+Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\Tigirl.dll" -Destination "$stage\x64"
 Copy-Item -LiteralPath "$PSScriptRoot\build\Win32\Release\Tigirl.dll" -Destination "$stage\x86"
+foreach($file in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models','字体')){Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\$file" -Destination "$stage\shared" -Recurse}
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\x64\architecture_load_probe.exe" -Destination "$stage\verify_x64.exe"
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\Win32\architecture_load_probe.exe" -Destination "$stage\verify_x86.exe"
 New-Item -ItemType Directory -Force "$stage\DefaultData\码表"|Out-Null
@@ -27,9 +28,9 @@ Copy-Item -LiteralPath "$DataSource\拼音反查码表" -Destination "$stage\Def
 # First-install settings only; existing personal configuration is never merged.
 "Ctrl+空格切换中英文`t否`r`n当前码表`t虎码字词`r`n"|Set-Content -LiteralPath "$stage\default-config.txt" -Encoding UTF8
 # Generate the bundled fallback and its sentence sidecars from clean sources.
-& "$stage\x64\Tigirl.Import.exe" "$stage\DefaultData\码表\虎码字词" "$stage\DefaultData\拼音反查码表" "$stage\x64\fallback.tcd" 'zh-CN'
+& "$stage\shared\Tigirl.Import.exe" "$stage\DefaultData\码表\虎码字词" "$stage\DefaultData\拼音反查码表" "$stage\shared\fallback.tcd" 'zh-CN'
 if($LASTEXITCODE){throw 'Default dictionary generation failed.'}
-foreach($suffix in @('','.sentence.tcd','.supplement.tcd')){Move-Item -LiteralPath "$stage\x64\fallback.tcd$suffix" -Destination "$stage\x64\tiger-v2.tcd$suffix" -Force}
+foreach($suffix in @('','.sentence.tcd','.supplement.tcd')){Move-Item -LiteralPath "$stage\shared\fallback.tcd$suffix" -Destination "$stage\shared\tiger-v2.tcd$suffix" -Force}
 $files=@(Get-ChildItem -LiteralPath $stage -Recurse -File|Sort-Object FullName|ForEach-Object{
     [ordered]@{path=$_.FullName.Substring($stage.Length+1);bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
 })
