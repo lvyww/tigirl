@@ -441,9 +441,9 @@ void Engine::enableSentenceInput(bool enabled,std::uint64_t revision,bool automa
         else {sentence_.changeResources(revision);syncSentenceRaw();}
     }
 }
-KeyResult Engine::autoCommitSentence() {
+KeyResult Engine::autoCommitSentence(const SentencePathQueries& queries) {
     if(mode_!=Mode::Sentence)return {};
-    auto commit=sentence_.tryAutoCommit(sentenceAutomatic_,sentenceRetainedRaw_);
+    auto commit=sentence_.tryAutoCommit(sentenceAutomatic_,sentenceRetainedRaw_,queries);
     if(!commit)return {};
     syncSentenceRaw();KeyResult result{true,false,std::move(*commit)};result.learning=sentence_.takeLearning();return result;
 }

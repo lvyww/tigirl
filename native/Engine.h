@@ -91,7 +91,7 @@ public:
     std::vector<UserChange> takeUserChanges();
     KeyResult process(const KeyEvent& event,const SentencePathQueries& queries={});
     void enableSentenceInput(bool enabled,std::uint64_t resourceRevision,bool automatic=false,int retainedRaw=0);
-    KeyResult autoCommitSentence();
+    KeyResult autoCommitSentence(const SentencePathQueries& queries={});
     std::optional<SentenceDecodeTicket> sentenceRequest() const;
     bool sentenceDecodePending() const { return mode_==Mode::Sentence && !sentence_.current(); }
     bool applySentenceResult(const SentenceDecodeTicket& ticket,SentenceDecodeResult result);

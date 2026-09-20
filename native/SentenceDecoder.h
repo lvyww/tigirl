@@ -121,6 +121,7 @@ public:
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
         std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
     bool isProperCodePrefix(std::u16string_view raw) const;
+    int competingBoundaryEnd(std::u16string_view raw,int committedRaw,int proposedRaw,int targetTextElements) const;
     SentenceDecodeResult decodeFull(std::u16string_view raw,int candidateLimit=20,
         bool includeEarlyCommitEvidence=false,std::u16string_view requiredTextPrefix={}) const;
     static std::u16string normalizeRawCode(std::u16string_view raw);

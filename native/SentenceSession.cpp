@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cmath>
 #include "Unicode.h"
+#include "Grapheme.h"
 namespace tiger {
 namespace {
 std::atomic<std::uint64_t> nextIdentity{1};
@@ -127,12 +128,14 @@ std::u16string SentenceSession::applyPrefix(std::u16string_view text,int rawLeng
     auto& list=filtered->candidates;list.erase(std::remove_if(list.begin(),list.end(),[&](const SentenceCandidate& c){return !starts(c.text,committed_);}),list.end());
     result_=std::move(filtered);selected_=0;return commit;
 }
-std::optional<std::u16string> SentenceSession::tryAutoCommit(bool enabled,int minimumRetained) {
+std::optional<std::u16string> SentenceSession::tryAutoCommit(bool enabled,int minimumRetained,
+    const SentencePathQueries& queries) {
     if(result_->learningAffected && result_->earlyCommitEvidence.confidenceTruncated){resetAutomaticState();return {};}
     SentenceAutoCommitInput input;
     input.enabled=enabled;input.suspended=suspended_;input.matchingLexicon=hasResult_ && resultResources_==resources_;
     input.raw=raw_;input.committedText=committed_;input.committedRaw=committedRaw_;
     input.lastAutoCommitRaw=lastAutoCommitRaw_;input.configuredRetained=minimumRetained;
+    input.competingBoundaryEnd=queries.competingBoundaryEnd;
     auto decision=autoCommit_.evaluate(input,*result_);if(!decision)return {};
     const bool wasCurrent=current();
     auto commit=applyPrefix(decision->text,decision->rawLength);
@@ -210,20 +213,29 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
             if(pending.committed!=committed_ || pending.baseRawLength<0 ||
                pending.baseRawLength>=static_cast<int>(raw_.size()) || pending.lastSegmentStart<0 ||
                pending.lastSegmentStart>=static_cast<int>(raw_.size()))resetEmptyCodePending();
-            else if(!queries.properPrefix(std::u16string_view(raw_).substr(pending.lastSegmentStart)) &&
-                    (minimumRetained<=0 || static_cast<int>(raw_.size())-pending.baseRawLength>=minimumRetained)) {
-                if(pending.uniqueness && queries.complete(std::u16string_view(raw_).substr(0,pending.baseRawLength),
-                    pending.committed,pending.text,true,activeLock().get()))resetEmptyCodePending();
-                else {
-                    auto commit=applyPrefix(pending.text,pending.baseRawLength);
-                    lastAutoCommitRaw_=pending.baseRawLength;continuation_=true;suspended_=false;
-                    resetAutomaticState();++generation_;
-                    return commit;
+            else {
+                const int targetElements=static_cast<int>(
+                    wordTextElements(std::u16string_view(pending.text).substr(pending.committed.size())).size());
+                int protectedBoundary=pending.baseRawLength;
+                if(queries.competingBoundaryEnd)protectedBoundary=std::max(
+                    protectedBoundary,queries.competingBoundaryEnd(
+                        raw_,committedRaw_,pending.baseRawLength,targetElements));
+                if(!queries.properPrefix(std::u16string_view(raw_).substr(pending.lastSegmentStart)) &&
+                   (minimumRetained<=0 || static_cast<int>(raw_.size())-protectedBoundary>=minimumRetained)) {
+                    if(pending.uniqueness && queries.complete(
+                        std::u16string_view(raw_).substr(0,pending.baseRawLength),
+                        pending.committed,pending.text,true,activeLock().get()))resetEmptyCodePending();
+                    else {
+                        auto commit=applyPrefix(pending.text,pending.baseRawLength);
+                        lastAutoCommitRaw_=pending.baseRawLength;continuation_=true;suspended_=false;
+                        resetAutomaticState();++generation_;
+                        return commit;
+                    }
                 }
             }
         }
     }
-    return tryAutoCommit(enabled,minimumRetained);
+    return tryAutoCommit(enabled,minimumRetained,queries);
 }
 std::vector<SentenceLearningEvent> SentenceSession::takeLearning() {
     auto result=std::move(readyLearning_);readyLearning_.clear();return result;
