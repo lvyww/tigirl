@@ -23,10 +23,10 @@ with tempfile.TemporaryDirectory(prefix='schema-generation-',dir=BUILD) as tempo
   for old,data in generations:assert old.read_bytes()==data
  assert generations[0][1]!=generations[1][1]
  selected=(schema/'current.txt').read_bytes();before=(user/'config.txt').read_bytes()
- (schema/'user.tcu').write_bytes(b'broken journal')
+ (user/'码表'/schema.name/'用户调整.txt').write_bytes(b'broken journal')
  assert publish('--update').returncode!=0
  assert (schema/'current.txt').read_bytes()==selected and (user/'config.txt').read_bytes()==before
- (schema/'user.tcu').unlink()
+ (user/'码表'/schema.name/'用户调整.txt').unlink()
  for invalid in ['../escape','a'*31,'A'*32,'a'*32]:
   (schema/'current.txt').write_text('generation\t'+invalid+'\n',encoding='utf-8')
   assert select().returncode!=0
@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='schema-generation-',dir=BUILD) as tempo
  for target in ['../escape','b'*32,'c'*32]:
   assert restore(target).returncode!=0
   assert (schema/'current.txt').read_bytes()==saved_descriptor
- (schema/'user.tcu').write_bytes(b'broken journal')
+ (user/'码表'/schema.name/'用户调整.txt').write_bytes(b'broken journal')
  assert restore(generations[1][0].parent.name).returncode!=0
  assert (schema/'current.txt').read_bytes()==saved_descriptor
  report=dict(restores=2,failed_restores_preserved=4,validated_version_listing=True,updates=2,legacy_preserved=True,old_generations_preserved=True,failed_journal_update_preserves_selection=True,invalid_descriptors_rejected=4,selector_resolves_generation=True,import_sha256=hashlib.sha256(IMPORT.read_bytes()).hexdigest(),selector_sha256=hashlib.sha256(SELECT.read_bytes()).hexdigest())

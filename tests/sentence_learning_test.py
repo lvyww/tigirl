@@ -23,7 +23,7 @@ def main():
         output=[f'/Fe:{exe}'] if msvc else ['-o',str(exe)]
         subprocess.run([cxx,*flags,*(str(ROOT/s) for s in sources),*output],cwd=work,check=True,timeout=240)
         subprocess.run([str(exe),'test',str(work/'unit')],cwd=work,check=True,timeout=90)
-        log=work/'.tigirl-learning-v1.log'
+        log=work/'.tigirl-learning.tsv'
         # ASan per-process VA reservations are large; ordinary mode tests all 16
         # simultaneously. Sanitized mode still verifies independent processes.
         processes=[subprocess.Popen([str(exe),'worker',str(log),f'process-{i}','20'],cwd=work) for i in range(16)]

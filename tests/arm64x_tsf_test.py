@@ -36,7 +36,7 @@ for platform, architecture, machine in [('ARM64', 'arm64', 0xaa64), ('x64', 'amd
         report = json.loads(result.stdout)
         probe = ROOT / 'build/tests/ARM64/user_store_probe.exe'
         rows = subprocess.check_output([str(probe), win(DLL.parent / 'tiger-v2.tcd'),
-                                        win(root / 'user/tiger-words.tcu'), 'dump', 'ab'], text=True)
+                                        win(root / '码表/虎码字词/用户调整.txt'), 'dump', 'ab'], text=True)
         assert bytes.fromhex(rows.splitlines()[0]).decode('utf-16-be') == '疒', platform
         (root / '.tsf-management-test').touch()
         config_before = (root / 'config.txt').read_bytes()

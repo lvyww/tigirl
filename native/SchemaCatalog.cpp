@@ -57,7 +57,7 @@ std::filesystem::path activeSchemaDictionaryPath(const std::filesystem::path& ro
 }
 std::filesystem::path schemaJournalPath(const std::filesystem::path& root,std::u16string_view name) {
     if(!validSchemaName(name))throw std::runtime_error("Invalid schema name");
-    return name==u"虎码字词"?root/L"user"/L"tiger-words.tcu":root/L"schemas"/std::filesystem::path(name)/L"user.tcu";
+    return root/L"码表"/std::filesystem::path(name)/L"用户调整.txt";
 }
 std::vector<std::u16string> schemaNames(const std::filesystem::path& userRoot) {
     std::vector<std::u16string> names;

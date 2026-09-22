@@ -1,4 +1,4 @@
-﻿param([switch]$ActivationOnly, [switch]$Generation)
+param([switch]$ActivationOnly, [switch]$Generation)
 if ($Generation -and !$ActivationOnly) { throw "-Generation currently requires -ActivationOnly" }
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -12,9 +12,9 @@ try {
     $dictionary = Join-Path $root 'build\ARM64\Release\tiger-v2.tcd'
     Copy-Item -LiteralPath $dictionary -Destination (Join-Path $schema 'tiger-v2.tcd')
     $probe = Join-Path $root 'build\tests\ARM64\user_store_probe.exe'
-    & $probe $dictionary (Join-Path $isolated 'user\tiger-words.tcu') write qqqqqq '内置' 1 | Out-Null
+    & $probe $dictionary (Join-Path $isolated '码表\虎码字词\用户调整.txt') write qqqqqq '内置' 1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Cannot seed built-in schema journal' }
-    & $probe (Join-Path $schema 'tiger-v2.tcd') (Join-Path $schema 'user.tcu') write qqqqqq '方案' 1 | Out-Null
+    & $probe (Join-Path $schema 'tiger-v2.tcd') (Join-Path $isolated '码表\SchemaTest\用户调整.txt') write qqqqqq '方案' 1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Cannot seed alternate schema journal' }
     if ($Generation) {
         $generationId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

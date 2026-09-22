@@ -1110,7 +1110,7 @@ int wmain(int argc,wchar_t** argv) {
                 wchar_t self[32768]{};require(GetModuleFileNameW(nullptr,self,32768)>0,"Cannot locate journal writer");
                 const auto writer=std::filesystem::path(self).parent_path()/L"user_store_probe.exe";
                 auto dictionary=root/L"schemas"/L"SchemaTest"/L"tiger-v2.tcd";
-                const auto journal=root/L"schemas"/L"SchemaTest"/L"user.tcu";
+                const auto journal=root/L"码表"/L"SchemaTest"/L"用户调整.txt";
                 std::wstring command=L"\""+writer.wstring()+L"\" \""+dictionary.wstring()+L"\" \""+journal.wstring()+L"\" write ab live 1";
                 STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION child{};
                 require(CreateProcessW(writer.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&child)!=FALSE,"Cannot start independent journal writer");
@@ -1703,7 +1703,7 @@ int wmain(int argc,wchar_t** argv) {
             tap(first,'A'); tap(first,'B');
             wchar_t userRoot[32768]{};
             require(GetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",userRoot,32768)>0,"Failure test requires isolated user data");
-            const auto journal=std::filesystem::path(userRoot)/L"user"/L"tiger-words.tcu";
+            const auto journal=std::filesystem::path(userRoot)/L"码表"/L"虎码字词"/L"用户调整.txt";
             HANDLE blocked=CreateFileW(journal.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
             require(blocked!=INVALID_HANDLE_VALUE,"Cannot deny journal writes for failure test");
             BYTE failedCtrl[256]{}; failedCtrl[VK_CONTROL]=failedCtrl[VK_LCONTROL]=0x80;

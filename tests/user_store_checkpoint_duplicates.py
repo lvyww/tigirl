@@ -43,10 +43,7 @@ with tempfile.TemporaryDirectory(prefix='checkpoint-duplicates-', dir=ROOT/'buil
     assert run('dump').splitlines() == before and journal.read_bytes() == original
     # Add a long redundant history on another code. The duplicate ab key must
     # retain its own history without preventing this independent compaction.
-    code = 'independent'.encode('utf-16-le')
-    value = 'word'.encode('utf-16-le')
-    payload = struct.pack('<III', 0, len(code)//2, len(value)//2)+code+value
-    record = struct.pack('<II', len(payload), zlib.crc32(payload))+payload
+    record = '{添加}independent\tword\n'.encode('utf-8')
     journal.write_bytes(original+record*1000)
     expanded = journal.read_bytes()
     mixed = bytes.fromhex(run('checkpoint').decode())

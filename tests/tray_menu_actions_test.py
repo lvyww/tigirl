@@ -26,7 +26,7 @@ def dictionary():
  if descriptor.exists():return descriptor.parent/'generations'/descriptor.read_text(encoding='utf-8-sig').strip().split('\t')[1]/'tiger-v2.tcd'
  return root/'schemas/测试方案/tiger-v2.tcd'
 first=dictionary()
-journal=root/'schemas/测试方案/user.tcu'
+journal=root/'码表/测试方案/用户调整.txt'
 r=run_windows([BUILD/'tests/ARM64/user_store_probe.exe',win(first),win(journal),'write','zz','menu-word-',1],capture_output=True,text=True,timeout=30);assert r.returncode==0,r.stderr
 saved=journal.read_bytes()
 (source/'词条.txt').write_text('ab 更新词 次词\n',encoding='utf-8')

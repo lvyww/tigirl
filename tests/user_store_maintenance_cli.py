@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='maintenance-cli-', dir=ROOT/'build') as
     config = root/'config.txt'
     config_bytes = '当前码表\t虎码字词\n最大码长\t4\n'.encode('utf-8-sig')
     config.write_bytes(config_bytes)
-    journal = root/'user/tiger-words.tcu'
+    journal = root/'码表/虎码字词/用户调整.txt'
     schema = '虎码字词'
     protected = []
     if args.imported:
@@ -46,18 +46,18 @@ with tempfile.TemporaryDirectory(prefix='maintenance-cli-', dir=ROOT/'build') as
         shutil.copyfile(ROOT/'data/tiger-v2.tcd', generation/'tiger-v2.tcd')
         (directory/'current.txt').write_text('generation\t'+'a'*32+'\n', encoding='utf-8-sig')
         (directory/'tiger-v2.tcd').write_bytes(b'Unused legacy generation must not be loaded')
-        journal.write_bytes(b'TIGERU01')
+        journal.parent.mkdir(parents=True,exist_ok=True)
+        journal.write_bytes(b'')
         protected.append(journal)
-        journal = directory/'user.tcu'
-        other = root/'schemas/Unselected/user.tcu'
-        other.parent.mkdir()
-        other.write_bytes(b'TIGERU01')
+        journal = root/'码表'/schema/'用户调整.txt'
+        other = root/'码表/Unselected/用户调整.txt'
+        other.parent.mkdir(parents=True)
+        other.write_bytes(b'')
         protected.extend([other, directory/'current.txt', directory/'tiger-v2.tcd'])
     protected_before = {path: path.read_bytes() for path in protected}
-    code, text = 'fixture'.encode('utf-16-le'), 'word'.encode('utf-16-le')
-    payload = struct.pack('<III', 0, len(code)//2, len(text)//2)+code+text
-    record = struct.pack('<II', len(payload), zlib.crc32(payload))+payload
-    original = b'TIGERU01'+record*1000
+    record = '{添加}fixture\tword\n'.encode('utf-8')
+    original = record*1000
+    journal.parent.mkdir(parents=True,exist_ok=True)
     journal.write_bytes(original)
 
     def run(operation, *extra):
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='maintenance-cli-', dir=ROOT/'build') as
 
     assert run('--compact-user')['changed']
     compacted = journal.read_bytes()
-    assert compacted == b'TIGERU01'+record
+    assert compacted.endswith(record) and compacted.count(record)==1
     backups = list(journal.parent.glob(journal.name+'.compact-*.old'))
     assert len(backups) == 1 and backups[0].read_bytes() == original
     assert not run('--compact-user')['changed']

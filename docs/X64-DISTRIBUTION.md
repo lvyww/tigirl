@@ -20,7 +20,7 @@
 
 ## 数据与方案
 
-用户根目录固定为 `%LOCALAPPDATA%/Tigirl`。`码表/<方案名>` 中的 txt、dict.yaml 是源码表，`拼音反查码表` 是共享拼音来源。拼音在编译时编入每个方案的 tcd。`schemas` 是内部不可变版本和用户 journal；`cache/sentence` 是整句派生缓存。
+用户根目录固定为 `%LOCALAPPDATA%/Tigirl`。`码表/<方案名>` 中的 txt、dict.yaml 是源码表，`拼音反查码表` 是共享拼音来源。拼音在编译时编入每个方案的 tcd。`码表/<方案名>/用户调整.txt` 保存可编辑的加词／调序，`.tigirl-learning.tsv` 保存可编辑的自学习；`schemas` 仅保存编译版本与指针、指纹；`cache/sentence` 是整句派生缓存。
 
 独立方案管理窗口已移除；`Tigirl.exe` 仅负责输入设置和按需操作（旧名 `schema_manager.exe`）。菜单枚举源码表直属有效目录，切换、重载、最近方案切换自动调用导入器 `--ensure`。新增文件夹无需手动导入；删除当前目录后回退可用方案。没有任何源码表时保留内置虎码字词兜底。
 

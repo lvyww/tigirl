@@ -69,14 +69,14 @@ static void pureTests() {
     check(competition->score(e.mode,e.code,e.text,e.context)==0,"competing manual correction can demote old local preference");
     auto old=SentenceLearningSnapshot::build({e},e.time+3650LL*86400);
     check(old->score(e.mode,e.code,e.text,e.context)==9,"long-term idle time preserves reward");
-    for(auto name:{u".tigirl-learning-v1.log",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u".tigirl-learning-v1.log.lock"})
+    for(auto name:{u"用户调整.txt",u".TIGIRL-USER.tsv.bak.txt",u".tigirl-learning.tsv",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u".tigirl-learning.tsv.lock"})
         check(isLearningFile(name),"reserved basename including fake lexicon extensions");
     check(!isLearningFile(u"正常码表.txt") && !isLearningFile(u"tiger.txt"),"normal dictionaries retained");
 }
 #ifdef _WIN32
 static void fileEnumerationTests(const std::filesystem::path& root) {
     auto dir=root/"enumeration";std::filesystem::create_directories(dir);
-    for(auto name:{u"fixture.txt",u".tigirl-learning-v1.log.bak.txt",u".TIGERCLAW-LEARNING-v1.log.tmp.dict.yaml"}) {
+    for(auto name:{u"fixture.txt",u"用户调整.txt.bak.txt",u".tigirl-learning.tsv.bak.txt",u".TIGERCLAW-LEARNING-v1.log.tmp.dict.yaml"}) {
         std::ofstream out(dir/std::filesystem::path(name));out<<"aa\tword\n";
     }
     auto files=orderedLexiconFiles(dir,"zh-CN");
@@ -118,21 +118,26 @@ static void sessionTests() {
     s.clear();check(s.takeLearning().empty(),"later cancel does not repeat already drained event");
 }
 static void storageTests(const std::filesystem::path& folder) {
-    const auto path=folder/".tigirl-learning-v1.log";SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
+    const auto path=folder/".tigirl-learning.tsv";SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
     auto a=event(),b=event(u"bb",u"国",u"乙");store.confirm({a});check(store.entries().size()==1,"successful confirmation persisted");
     store.confirm({a,a});check(store.entries().size()==1,"idempotent replays");
     SentenceLearningStore other(path);other.refresh();check(other.snapshot()->score(a.mode,a.code,a.text,a.context)>0,"second reader sees published record");
-    {std::ofstream out(path,std::ios::app);out<<"TCL1\tE\tpartial";}
-    store.confirm({b});check(store.entries().size()==2,"torn tail repaired without losing complete events");
-    {std::ofstream out(path,std::ios::app);out<<"corrupt\trow\t123\n";}
-    check(store.entries().size()==2,"bad crc ignored");
+    std::ifstream input(path,std::ios::binary);std::string original((std::istreambuf_iterator<char>(input)),{});input.close();
+    check(original.find(utf8(a.text))!=std::string::npos,"learning text is human readable UTF-8");
+    {std::ofstream out(path,std::ios::binary);out<<"\xef\xbb\xbf# editable records\r\n"<<original.substr(0,original.size()-1);}
+    store.confirm({b});check(store.entries().size()==2,"BOM, comment and no final newline preserved on append");
+    std::ifstream saved(path,std::ios::binary);std::string valid((std::istreambuf_iterator<char>(saved)),{});saved.close();
+    {std::ofstream out(path,std::ios::app);out<<"invalid row\n";}
+    bool rejected=false;try{store.confirm({event()});}catch(...){rejected=true;}
+    check(rejected,"malformed hand edit refused instead of discarded");
+    {std::ofstream out(path,std::ios::binary);out<<valid;}
     check(store.undoLast() && store.entries().size()==1,"undo exact last event");
     store.confirm({b});check(store.entries().size()==1,"undone event cannot replay back");
     store.clear();check(store.entries().empty() && store.snapshot()->empty(),"clear learning only");store.confirm({a});check(store.entries().empty(),"clear tombstones old ids");
     auto bad=event();bad.text=u"{动态}";store.confirm({bad});check(store.entries().empty(),"dynamic records never persisted");
     auto fresh=event();store.confirm({fresh});check(store.entries().size()==1,"new events after clear");
     const auto blocker=folder/"not-a-directory";{std::ofstream out(blocker);out<<"x";}
-    bool failed=false;try{SentenceLearningStore fail(blocker/".tigirl-learning-v1.log");fail.confirm({fresh});}catch(...){failed=true;}
+    bool failed=false;try{SentenceLearningStore fail(blocker/".tigirl-learning.tsv");fail.confirm({fresh});}catch(...){failed=true;}
     check(failed && store.entries().size()==1,"write failure isolated");
 }
 static void decoderTests(const std::filesystem::path& folder) {

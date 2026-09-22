@@ -31,8 +31,8 @@ int wmain(int argc,wchar_t** argv) {
                 {std::ofstream out(temp);out<<"changed";}
                 check(MoveFileExW(temp.c_str(),config.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=FALSE,"Atomic replacement failed");
             } else if(stage==2) {
-                std::filesystem::create_directories(root/L"user");
-                std::ofstream out(root/L"user"/L"tiger-words.tcu",std::ios::app);out<<"journal";
+                std::filesystem::create_directories(root/L"码表"/L"虎码字词");
+                std::ofstream out(root/L"码表"/L"虎码字词"/L"用户调整.txt",std::ios::app);out<<"journal";
             } else if(stage==3) {
                 const auto schema=root/L"schemas"/L"测试方案";
                 std::filesystem::create_directories(schema/L"generations"/L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -44,7 +44,7 @@ int wmain(int argc,wchar_t** argv) {
             else if(stage==6) {
                 for(int i=0;i<128;++i) {std::ofstream out(root/(L"burst-"+std::to_wstring(i)));out<<i;}
             } else if(stage==7) {
-                std::ofstream out(root/L"user"/L"tiger-words.tcu",std::ios::app);out<<"append";
+                std::ofstream out(root/L"码表"/L"虎码字词"/L"用户调整.txt",std::ios::app);out<<"append";
             } else if(stage==8) {
                 // Same path and byte count: last-write invalidation must work.
                 std::ofstream out(root/L"自定义选重键.txt");out<<"1 82";

@@ -47,7 +47,9 @@ inline void snapshotCacheTests(PerformanceChecks& test,const std::filesystem::pa
     std::filesystem::last_write_time(path,std::filesystem::last_write_time(path)+std::chrono::seconds(1));
     store.refresh();test.require(store.snapshot()==initial,"modified empty file changed empty snapshot identity");
     {std::ofstream out(path);out<<"invalid journal\n";}
-    store.refresh();test.require(store.snapshot()==initial,"invalid-only file changed empty snapshot identity");
+    bool rejected=false;try{store.refresh();}catch(...){rejected=true;}
+    test.require(rejected && store.snapshot()==initial,"invalid edit must report error and retain last snapshot");
+    {std::ofstream out(path,std::ios::trunc);}
 
     auto e=sample(u"aabb",u"虎娘",u"设置",learningNow());store.confirm({e});const auto learned=store.snapshot();
     test.require(learned!=initial && !learned->empty(),"first record did not publish a new snapshot");

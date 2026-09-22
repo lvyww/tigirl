@@ -7,8 +7,8 @@ Tigirl.SchemaSelect.exe <用户目录绝对路径> <内置码表绝对路径> --
 Tigirl.SchemaSelect.exe <用户目录绝对路径> <内置码表绝对路径> --recover-user <方案名> <备份绝对路径>
 ```
 
-内置方案名为 `虎码字词`，对应 `user/tiger-words.tcu`；其他已安装方案对应
-`schemas/<方案名>/user.tcu`。命令使用方案当前的码表代，不切换当前方案，也不改配置。
+所有方案（包括 `虎码字词`）统一对应 `码表/<方案名>/用户调整.txt`。
+文件为可编辑 UTF-8 TSV，格式见 `docs/USER_DATA_FILES.md`，不兼容旧二进制日志。命令使用方案当前的码表代，不切换当前方案，也不改配置。
 
 输出 JSON 的 `changed` 表示是否完成替换或恢复。压缩返回 `false` 表示没有可缩减的
 历史或文件正被旧客户端占用；恢复返回 `false` 表示主日志已经存在。错误退出码为 1。

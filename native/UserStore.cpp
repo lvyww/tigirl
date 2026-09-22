@@ -6,6 +6,7 @@
 #include <mutex>
 #include <set>
 #include "Text.h"
+#include "EditableText.h"
 #include <stdexcept>
 #include <system_error>
 #ifdef _WIN32
@@ -21,7 +22,7 @@
 
 namespace tiger {
 namespace {
-constexpr char magic[]="TIGERU01";
+constexpr char header[]=u8"# 用户调整：{添加}/{删除}/{置顶}/{前移}编码<Tab>词条，按行顺序执行\n";
 constexpr std::size_t maxJournal=128*1024*1024, maxRecord=16*1024*1024;
 using Bytes=std::vector<unsigned char>;
 using FileStamp=std::array<std::uint64_t,4>;
@@ -206,42 +207,47 @@ private:
     int handle_=-1;
 #endif
 };
-void put32(Bytes& bytes,std::uint32_t value) {
-    for(unsigned shift=0;shift<32;shift+=8) bytes.push_back(static_cast<unsigned char>(value>>shift));
-}
-std::uint32_t get32(const Bytes& bytes,std::size_t offset) {
-    std::uint32_t value=0;
-    for(unsigned i=0;i<4;++i) value|=static_cast<std::uint32_t>(bytes[offset+i])<<(i*8);
-    return value;
-}
-std::uint32_t checksum(const unsigned char* data,std::size_t size) {
-    std::uint32_t crc=0xffffffffu;
-    for(std::size_t i=0;i<size;++i) {
-        crc^=data[i];
-        for(unsigned bit=0;bit<8;++bit) crc=(crc>>1)^(0xedb88320u&(0u-(crc&1u)));
+std::vector<UserChange> textChanges(const Bytes& bytes) {
+    std::string_view data(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+    if(data.substr(0,3)=="\xef\xbb\xbf")data.remove_prefix(3);
+    std::vector<UserChange> changes;std::size_t row=0;
+    while(!data.empty()) {
+        ++row;auto end=data.find('\n');auto line=data.substr(0,end);
+        if(end==data.npos)data={};else data.remove_prefix(end+1);
+        if(!line.empty() && line.back()=='\r')line.remove_suffix(1);
+        if(line.empty() || line.front()=='#')continue;
+        auto start=line.find_first_not_of(" \t");
+        if(start==line.npos)continue;
+        line.remove_prefix(start);
+        if(line.front()=='#')continue;
+        line=line.substr(0,line.find_last_not_of(" \t")+1);
+        const char* actions[]={u8"{添加}",u8"{删除}",u8"{置顶}",u8"{前移}"};
+        unsigned operation=0;
+        for(;operation<4;++operation) {
+            const std::string_view prefix=actions[operation];
+            if(line.substr(0,prefix.size())==prefix){line.remove_prefix(prefix.size());break;}
+        }
+        if(operation==4)throw std::runtime_error("Invalid user action at row "+std::to_string(row));
+        start=line.find_first_not_of(" \t");
+        if(start!=line.npos)line.remove_prefix(start);
+        auto first=line.find_first_of(" \t");
+        auto second=first==line.npos?line.npos:line.find_first_not_of(" \t",first);
+        if(second==line.npos || line.find_first_of(" \t",second)!=line.npos || line.size()>maxRecord)
+            throw std::runtime_error("Invalid user text row "+std::to_string(row)+": expected {action}code and escaped text");
+        const auto kind=static_cast<ChangeKind>(operation);
+        auto code=editableValue(line.substr(0,first),true),text=editableValue(line.substr(second),true);
+        if(code.empty() || text.empty())throw std::runtime_error("Empty user code/text at row "+std::to_string(row));
+        changes.push_back({kind,std::move(code),std::move(text)});
     }
-    return ~crc;
-}
-void putString(Bytes& bytes,std::u16string_view text) {
-    for(auto ch:text) { bytes.push_back(static_cast<unsigned char>(ch)); bytes.push_back(static_cast<unsigned char>(ch>>8)); }
-}
-std::u16string getString(const Bytes& bytes,std::size_t offset,std::uint32_t length) {
-    std::u16string text;
-    text.reserve(length);
-    for(std::uint32_t i=0;i<length;++i,offset+=2) text+=static_cast<char16_t>(bytes[offset]|(bytes[offset+1]<<8));
-    return text;
+    return changes;
 }
 void encode(Bytes& records,const UserChange& change) {
-    if(change.code.size()>maxRecord/2 || change.text.size()>maxRecord/2 ||
-        12+(change.code.size()+change.text.size())*2>maxRecord) throw std::invalid_argument("User entry exceeds record limit");
-    Bytes payload;
-    put32(payload,static_cast<std::uint32_t>(change.kind));
-    put32(payload,static_cast<std::uint32_t>(change.code.size()));
-    put32(payload,static_cast<std::uint32_t>(change.text.size()));
-    putString(payload,change.code); putString(payload,change.text);
-    put32(records,static_cast<std::uint32_t>(payload.size()));
-    put32(records,checksum(payload.data(),payload.size()));
-    records.insert(records.end(),payload.begin(),payload.end());
+    const char* actions[]={u8"{添加}",u8"{删除}",u8"{置顶}",u8"{前移}"};
+    const auto kind=static_cast<unsigned>(change.kind);
+    if(kind>=4 || change.code.empty() || change.text.empty())throw std::invalid_argument("Invalid user change");
+    auto row=std::string(actions[kind])+editableField(change.code,true)+"\t"+editableField(change.text,true)+"\n";
+    if(row.size()>maxRecord)throw std::invalid_argument("User entry exceeds record limit");
+    records.insert(records.end(),row.begin(),row.end());
 }
 }
 struct UserStore::Cache {
@@ -251,24 +257,11 @@ struct UserStore::Cache {
 };
 std::shared_ptr<Lexicon> UserStore::decode(const Bytes& bytes,std::shared_ptr<const Dictionary> dictionary,std::size_t& validLength) {
     auto lexicon=std::make_shared<Lexicon>(std::move(dictionary));
-    validLength=0;
-    if(!bytes.empty() && std::memcmp(bytes.data(),magic,std::min<std::size_t>(bytes.size(),8))) throw std::runtime_error("Invalid user journal header");
-    if(bytes.size()<8) return lexicon;
-    validLength=8;
-    while(bytes.size()-validLength>=8) {
-        const auto length=get32(bytes,validLength);
-        if(length<12 || length>maxRecord) throw std::runtime_error("Invalid user journal record length");
-        if(bytes.size()-validLength-8<length) break; // interrupted final append
-        const auto start=validLength+8;
-        if(checksum(bytes.data()+start,length)!=get32(bytes,validLength+4)) throw std::runtime_error("User journal checksum mismatch");
-        const auto kind=get32(bytes,start), codeLength=get32(bytes,start+4), textLength=get32(bytes,start+8);
-        if(kind>3 || 12+(static_cast<std::uint64_t>(codeLength)+textLength)*2!=length)
-            throw std::runtime_error("Invalid user journal entry");
-        lexicon->applyChange({static_cast<ChangeKind>(kind),getString(bytes,start+12,codeLength),getString(bytes,start+12+static_cast<std::size_t>(codeLength)*2,textLength)});
-        validLength=start+length;
-    }
+    for(const auto& change:textChanges(bytes))lexicon->applyChange(change);
+    validLength=bytes.size();
     return lexicon;
 }
+
 UserStore::UserStore(std::shared_ptr<const Dictionary> dictionary,std::filesystem::path journal)
     :dictionary_(std::move(dictionary)),journal_(std::move(journal)),cache_(std::make_shared<Cache>()) {
     if(!dictionary_ || journal_.empty()) throw std::invalid_argument("UserStore requires dictionary and journal path");
@@ -294,7 +287,7 @@ std::vector<unsigned char> UserStore::makeCheckpoint(Bytes original) const {
     std::size_t validLength=0;
     const auto lexicon=decode(original,dictionary_,validLength);
     original.resize(validLength);
-    Bytes records(magic,magic+8);
+    Bytes records(header,header+sizeof(header)-1);
     std::set<std::u16string> retainedCodes;
     // Base keys already have their place in the source inventory. New keys
     // must be replayed in insertion order: sentence shortest-code ties depend
@@ -328,15 +321,10 @@ std::vector<unsigned char> UserStore::makeCheckpoint(Bytes original) const {
     // Duplicate identities can only be inherited from base keys (Add itself
     // deduplicates); replaying their history here cannot reorder new codes.
     // Preserve records whose duplicate identities cannot be rebuilt via Add.
-    // decode() above has already validated all record lengths and checksums.
+    // decode() above has already validated all text rows.
     if(!retainedCodes.empty()) {
-        for(std::size_t offset=8;offset<validLength;) {
-            const auto length=get32(original,offset);
-            const auto code=getString(original,offset+20,get32(original,offset+12));
-            if(retainedCodes.count(normalizeCode(code)))
-                records.insert(records.end(),original.begin()+offset,original.begin()+offset+8+length);
-            offset+=8+length;
-        }
+        for(const auto& change:textChanges(original))
+            if(retainedCodes.count(normalizeCode(change.code)))encode(records,change);
         if(records.size()>maxJournal)return original;
     }
     std::size_t checkedLength=0;
@@ -360,7 +348,7 @@ bool UserStore::restoreCheckpoint(const std::filesystem::path& backup) const {
     const auto bytes=source.read();
     std::size_t validLength=0;
     decode(bytes,dictionary_,validLength);
-    if(validLength<8 || validLength!=bytes.size())
+    if(validLength!=bytes.size())
         throw std::runtime_error("Checkpoint backup is incomplete");
     wchar_t temporary[MAX_PATH]{};
     if(!GetTempFileNameW(directory.c_str(),L"tcu",0,temporary))systemFailure("Create checkpoint recovery staging");
@@ -419,8 +407,7 @@ bool UserStore::compact() const {
 std::shared_ptr<const Lexicon> UserStore::commit(const std::vector<UserChange>& changes) const {
     std::lock_guard<std::mutex> local(cache_->mutex);
     // Keep this sidecar's identity stable across future journal replacement.
-    // Retain the journal lock as well while older installed clients still use
-    // that lock alone. All new operations acquire sidecar before journal.
+    // All operations acquire the coordination sidecar before the journal.
     LockedFile coordination(coordinationPath(journal_));
     rejectMissingPublishedJournal(journal_);
     LockedFile file(journal_);
@@ -428,7 +415,8 @@ std::shared_ptr<const Lexicon> UserStore::commit(const std::vector<UserChange>& 
     std::size_t validLength=0;
     auto lexicon=decode(bytes,dictionary_,validLength);
     Bytes records;
-    if(!changes.empty() && !validLength) records.insert(records.end(),magic,magic+8);
+    if(!changes.empty() && !validLength) records.insert(records.end(),header,header+sizeof(header)-1);
+    if(!changes.empty() && !bytes.empty() && bytes.back()!='\n')records.push_back('\n');
     for(const auto& change:changes) {
         if(lexicon->applyChange(change))encode(records,change);
     }

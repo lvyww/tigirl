@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='schema-selector-',dir=ROOT/'build') as 
   assert select(name).returncode!=0 and config.read_bytes()==before
  bad=root/'schemas/Corrupt';bad.mkdir();(bad/'tiger-v2.tcd').write_bytes(b'broken')
  assert select('Corrupt').returncode!=0 and config.read_bytes()==before
- (schema/'user.tcu').write_bytes(b'broken journal')
+ (root/'码表'/schema.name/'用户调整.txt').write_bytes(b'broken journal')
  assert select('测试方案ab').returncode!=0 and config.read_bytes()==before
  assert select('虎码字词').returncode==0
  greek=root/'schemas/Σ方案';greek.mkdir();shutil.copyfile(dictionary,greek/'tiger-v2.tcd')

@@ -7,9 +7,11 @@ EXE=ROOT/'build/tests/ARM64/Tigirl.Import.exe'
 def win(path):return subprocess.check_output(['wslpath','-w',str(path)],text=True).strip()
 def invoke(*args):return run_windows([EXE,*args],capture_output=True,text=True,timeout=60)
 def record(kind,code,text):
- c=code.encode('utf-16-le');t=text.encode('utf-16-le')
- p=struct.pack('<III',kind,len(c)//2,len(t)//2)+c+t
- return struct.pack('<II',len(p),zlib.crc32(p))+p
+ from sys import path
+ path.insert(0,str(ROOT/'tools'))
+ from learning_records import escape_text
+ return (['{添加}','{删除}','{置顶}','{前移}'][kind]+escape_text(code).replace(' ',r'\s')+'\t'+escape_text(text).replace(' ',r'\s')+'\n').encode('utf-8')
+
 def section(path,number):
  data=path.read_bytes();assert data[:8]==b'TIGERD02'
  count,offset=struct.unpack_from('<IQ',data,36+(number-1)*16)
@@ -29,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='sentence-publish-',dir=ROOT/'build') as
  original={p:p.read_bytes() for p in [base,Path(str(base)+'.sentence.tcd'),Path(str(base)+'.supplement.tcd')]}
  changes=[(1,'zz','中'),(0,'ee','中'),(2,'aa','人'),
           (0,'yy','别名一\x1e新'),(0,'qq','新'),(0,'yy','别名二\x1e新')]
- journal.write_bytes(b'TIGERU01'+b''.join(record(*c) for c in changes));before=journal.read_bytes()
+ journal.write_bytes(b''.join(record(*c) for c in changes));before=journal.read_bytes()
  first=root/'first.tcd'
  def revision():
   r=invoke('--sentence-revision',win(base),win(journal));assert r.returncode==0,r.stderr
@@ -110,7 +112,7 @@ with tempfile.TemporaryDirectory(prefix='sentence-publish-',dir=ROOT/'build') as
   assert json.loads(r.stdout)['aa']==['4eba','4e2d']
   assert load(initial_revision).returncode!=0 and load('').returncode!=0
  # Corrupt journals must fail before publishing anything or changing the input.
- broken=bytearray(journal.read_bytes());broken[-1]^=1;journal.write_bytes(broken)
+ broken=journal.read_bytes()+b'{invalid}aa\tword\n';journal.write_bytes(broken)
  rejected=root/'rejected.tcd';r=rebuild(rejected)
  assert r.returncode!=0 and not rejected.exists() and journal.read_bytes()==broken
  assert all(p.read_bytes()==v for p,v in original.items())

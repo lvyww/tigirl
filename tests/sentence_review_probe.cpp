@@ -292,14 +292,17 @@ static void mapped() {
     std::cout<<"{\"test\":\"mapped_ngram_supplement\",\"snapshots\":"<<snapshots<<",\"synthetic_model\":true}\n";
 }
 static void journalTests() {
-    auto path=root/"journal"/".tigirl-learning-v1.log";SentenceLearningStore store(path);
+    auto path=root/"journal"/".tigirl-learning.tsv";SentenceLearningStore store(path);
     SentenceLearningEvent good;good.id="same-id";good.time=learningNow();good.mode=u"m";good.code=u"aa";good.text=u"虎娘";
     auto invalid=good;invalid.mode=std::u16string(1,0xd800);
     store.confirm({invalid});check(store.snapshot()->empty(),"P5 malformed persisted mode is not learnt");
     store.confirm({good});check(store.entries().size()==1 && !store.snapshot()->empty(),"P5 invalid record must not reserve an id in the parse cache");
     auto retained=store.snapshot();const double retainedScore=retained->score(u"m",u"aa",u"虎娘",u"");
+    auto validSize=std::filesystem::file_size(path);
     {std::ofstream out(path,std::ios::app|std::ios::binary);out<<"torn-record";}
-    good.id="after-torn";store.confirm({good});check(store.entries().size()==2,"P5 torn tail recovery with cached journal");
+    good.id="after-torn";bool rejected=false;try{store.confirm({good});}catch(...){rejected=true;}
+    check(rejected && std::filesystem::file_size(path)==validSize+11,"P5 invalid text preserved for user repair");
+    std::filesystem::resize_file(path,validSize);store.confirm({good});check(store.entries().size()==2,"P5 user-repaired tail reloads");
     check(retained->score(u"m",u"aa",u"虎娘",u"")==retainedScore,"P5 old published scores stay immutable");
     SentenceLearningStore external(path);auto other=good;other.id="external";other.text=u"虎爪";external.confirm({other});store.refresh();
     check(store.entries().size()==3 && store.snapshot()->score(u"m",u"aa",u"虎爪",u"")>store.snapshot()->score(u"m",u"aa",u"虎娘",u""),"P5 external writer replay");
@@ -311,9 +314,8 @@ static void journalTests() {
     store.clear();
     // Existing tombstones apply before the combined active-window limit. A
     // large append cannot discard an older surviving event prematurely.
-    std::string undo="TCL1\tU\tremove-future\t"+std::to_string(learningNow())+"\tfuture-10000";
-    std::uint32_t crc=0xffffffff;for(unsigned char c:undo){crc^=c;for(int i=0;i<8;++i)crc=(crc>>1)^((crc&1)?0xedb88320:0);}
-    {std::ofstream out(path,std::ios::app|std::ios::binary);out<<undo<<'\t'<<~crc<<'\n';}
+    std::string undo="TCL2\tU\tremove-future\t"+std::to_string(learningNow())+"\tfuture-10000";
+    {std::ofstream out(path,std::ios::app|std::ios::binary);out<<undo<<'\n';}
     for(int i=0;i<10001;++i){large[i].id="future-"+std::to_string(i);large[i].code=i?u"aa":u"zz";}
     store.confirm(large);check(store.snapshot()->score(u"m",u"zz",u"虎娘",u"")>0,"P5 tombstones precede appended active-window trimming");
     store.clear();

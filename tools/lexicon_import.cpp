@@ -87,9 +87,9 @@ int wmain(int argc,wchar_t** argv) {
         const bool schemaMode=ensureMode || updateMode || (argc==7 && std::wstring_view(argv[1])==L"--schema");
         if(argc!=5 && !schemaMode) {std::cerr<<"Usage: lexicon_import <schema-dir> <pinyin-dir> <new-output.tcd> <culture>\n"
             "   or: lexicon_import <--schema|--update> <schema-dir> <pinyin-dir> <user-root> <schema-name> <culture>\n"
-            "   or: lexicon_import --rebuild-sentence <base.tcd> <user.tcu> <new-sentence.tcd> [expected-revision]\n"
-            "   or: lexicon_import --ensure-sentence <base.tcd> <user.tcu> <cache-root> <expected-revision>\n"
-            "   or: lexicon_import --sentence-revision <base.tcd> <user.tcu>\n";return 2;}
+            "   or: lexicon_import --rebuild-sentence <base.tcd> <user.tsv> <new-sentence.tcd> [expected-revision]\n"
+            "   or: lexicon_import --ensure-sentence <base.tcd> <user.tsv> <cache-root> <expected-revision>\n"
+            "   or: lexicon_import --sentence-revision <base.tcd> <user.tsv>\n";return 2;}
         std::string culture;
         for(wchar_t c:std::wstring(argv[schemaMode?6:4])) {if(c>127) throw std::runtime_error("Culture must be an ASCII language tag");culture.push_back(static_cast<char>(c));}
         const std::filesystem::path schema(argv[schemaMode?2:1]),pinyin(argv[schemaMode?3:2]);

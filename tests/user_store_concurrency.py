@@ -65,32 +65,18 @@ with tempfile.TemporaryDirectory(prefix="user-store-", dir=ROOT / "build") as te
     values = dump()
     assert set(values) == expected and len(values) == len(expected), "Concurrent update lost or duplicated"
     pristine = journal.read_bytes()
-    # Interrupt every byte position of a genuine final record, then restart and
-    # append. Earlier durable records must survive each incomplete tail.
-    final_start = 8
-    while True:
-        length = struct.unpack_from("<I", pristine, final_start)[0]
-        end = final_start + 8 + length
-        if end == len(pristine):
-            break
-        final_start = end
-    final = pristine[final_start:]
-    tail_checks = 0
-    for cut in range(1, len(final)):
-        journal.write_bytes(pristine + final[:cut])
-        assert dump() == values, f"Interrupted tail affected snapshot at {cut}"
-        subprocess.run(command("write", "nativeconcurrent", "recovery-", "1"), check=True, stdout=subprocess.DEVNULL)
-        assert set(dump()) == expected | {"recovery-0"}
-        tail_checks += 1
-    corrupt = bytearray(pristine)
-    corrupt[-1] ^= 1
+    journal.write_bytes(pristine.rstrip(b"\n"))
+    assert dump() == values, "Final row without newline lost"
+    subprocess.run(command("write", "nativeconcurrent", "recovery-", "1"), check=True, stdout=subprocess.DEVNULL)
+    assert set(dump()) == expected | {"recovery-0"}
+    corrupt = journal.read_bytes() + b"invalid\trow\n"
     journal.write_bytes(corrupt)
     for _ in executables:
         rejected = subprocess.run(command("write", "nativeconcurrent", "must-not-write-", "1"), capture_output=True)
-        assert rejected.returncode == 1 and b"checksum" in rejected.stderr
-        assert journal.read_bytes() == corrupt, "Corruption was silently overwritten"
+        assert rejected.returncode == 1, rejected.stderr
+        assert journal.read_bytes() == corrupt, "Malformed edit was silently overwritten"
 report = dict(platform="ARM64 + ARM64EC Windows" if mixed else "ARM64 Windows" if windows else "Linux", writers=4, retained_entries=48,
-              interrupted_tail_positions=tail_checks, checksum_corruption_rejected=True)
+              unterminated_final_row_preserved=True, malformed_text_rejected=True)
 report['executable_hashes'] = {str(exe.relative_to(ROOT)): hashlib.sha256(exe.read_bytes()).hexdigest() for exe in executables}
 report['held_sidecar_reader_check'] = not windows
 report['user_store_source_sha256'] = hashlib.sha256((ROOT/'native/UserStore.cpp').read_bytes()).hexdigest()

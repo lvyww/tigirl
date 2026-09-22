@@ -1,5 +1,6 @@
 #pragma once
 #include "SentenceLearning.h"
+#include "EditableText.h"
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -17,8 +18,7 @@
 #include <cerrno>
 #endif
 namespace tiger {
-// V1 append journal. I/O belongs to resource/maintenance workers, never key
-// previews. The same wire format is implemented by TigerClaw's C# store.
+// Editable UTF-8 TSV journal. I/O belongs to resource/maintenance workers, never key previews.
 class SentenceLearningStore {
 public:
     static constexpr std::uintmax_t maximumBytes=16*1024*1024;
@@ -52,26 +52,11 @@ private:
 #endif
         FileLock(const FileLock&)=delete;FileLock& operator=(const FileLock&)=delete;
     };
-    static std::string hex(std::u16string_view text) {
-        static constexpr char digits[]="0123456789abcdef";std::string s;s.reserve(text.size()*4);
-        for(auto c:text)for(int shift=12;shift>=0;shift-=4)s+=digits[(c>>shift)&15];return s;
+    static bool readField(std::string_view value,std::u16string& text) {
+        try{text=editableValue(value);}catch(...){return false;}
+        return text.size()<=512 && (text.empty() || learningCharacters(text)>0);
     }
-    static bool unhex(std::string_view value,std::u16string& text) {
-        if(value.size()%4 || value.size()>2048)return false;text.clear();
-        for(std::size_t i=0;i<value.size();i+=4) {
-            unsigned n=0;for(int j=0;j<4;j++) {
-                char c=value[i+j];unsigned d=c>='0' && c<='9'?c-'0':c>='a' && c<='f'?c-'a'+10:16;
-                if(d==16)return false;n=(n<<4)|d;
-            }text+=static_cast<char16_t>(n);
-        }return text.empty() || learningCharacters(text)>0;
-    }
-    static std::uint32_t checksum(std::string_view s) {
-        std::uint32_t crc=0xffffffff;
-        for(unsigned char c:s){crc^=c;for(int i=0;i<8;i++)crc=(crc>>1)^((crc&1)?0xedb88320:0);}return ~crc;
-    }
-    static std::string seal(std::string s) {
-        return s+'\t'+std::to_string(checksum(s))+'\n';
-    }
+    static std::string seal(std::string s) {return s+'\n';}
     std::string bytes() const {
         if(!std::filesystem::exists(path_))return {};
         auto n=std::filesystem::file_size(path_);if(n>maximumBytes)throw std::runtime_error("Learning journal exceeds 16 MiB; export/clear it with the maintenance tool");
@@ -93,27 +78,28 @@ private:
     }
     static Journal parse(std::string_view data,bool limitWindow=true) {
         Journal state;auto& removed=state.removed;
+        if(data.substr(0,3)=="\xef\xbb\xbf")data.remove_prefix(3);
         while(!data.empty()) {
-            auto end=data.find('\n');if(end==data.npos)break;auto line=data.substr(0,end);data.remove_prefix(end+1);
-            if(line.size()>8192)continue;auto crc=line.rfind('\t');if(crc==line.npos)continue;
-            try{std::size_t n=0;auto value=std::stoul(std::string(line.substr(crc+1)),&n);
-                if(n!=line.size()-crc-1 || value!=checksum(line.substr(0,crc)))continue;
-            }catch(...){continue;}
-            line=line.substr(0,crc);std::vector<std::string_view> fields;
+            auto end=data.find('\n');auto line=data.substr(0,end);
+            if(end==data.npos)data={};else data.remove_prefix(end+1);
+            if(!line.empty() && line.back()=='\r')line.remove_suffix(1);
+            if(line.empty() || line.front()=='#')continue;
+            if(line.size()>8192)throw std::runtime_error("Learning text row too long");
+            std::vector<std::string_view> fields;
             while(true){auto tab=line.find('\t');fields.push_back(line.substr(0,tab));if(tab==line.npos)break;line.remove_prefix(tab+1);}
-            if(fields.size()<4 || fields[0]!="TCL1" || fields[2].empty() || fields[2].size()>128)continue;
+            if(fields.size()<4 || fields[0]!="TCL2" || fields[2].empty() || fields[2].size()>128)throw std::runtime_error("Invalid learning text row");
             std::string id(fields[2]);if(state.seen.count(id))continue;
-            std::int64_t time=0;try{std::size_t n=0;time=std::stoll(std::string(fields[3]),&n);if(n!=fields[3].size() || time<0)continue;}catch(...){continue;}
+            std::int64_t time=0;try{std::size_t n=0;time=std::stoll(std::string(fields[3]),&n);if(n!=fields[3].size() || time<0)throw std::runtime_error("Invalid learning text row");}catch(...){throw std::runtime_error("Invalid learning timestamp");}
             if(fields[1]=="E" && fields.size()==8) {
                 SentenceLearningEvent e;e.id=id;e.time=time;
-                if(!unhex(fields[4],e.mode)||!unhex(fields[5],e.code)||!unhex(fields[6],e.text)||!unhex(fields[7],e.context)||
-                   e.mode.empty()||e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||learningCharacters(e.context)>2)continue;
+                if(!readField(fields[4],e.mode)||!readField(fields[5],e.code)||!readField(fields[6],e.text)||!readField(fields[7],e.context)||
+                   e.mode.empty()||e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||learningCharacters(e.context)>2)throw std::runtime_error("Invalid learning text row");
                 state.seen.insert(id);state.events.push_back(std::move(e));
             }else if(fields[1]=="U" && fields.size()==5 && fields[4].size()<=128) {
                 state.seen.insert(id);removed.insert(std::string(fields[4]));
             }else if(fields[1]=="C" && fields.size()==4) {
                 state.seen.insert(id);state.events.clear();removed.clear();
-            }
+            }else throw std::runtime_error("Invalid learning operation");
         }
         auto& events=state.events;
         events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& e){return removed.count(e.id);}),events.end());
@@ -121,11 +107,11 @@ private:
         return state;
     }
     void appendBytes(std::string data,std::string_view addition,const Journal* appended=nullptr) {
-        // Recover a torn tail under the SAME cross-process lock as the append.
-        if(!data.empty() && data.back()!='\n') {
-            auto end=data.rfind('\n');auto length=end==data.npos?0:end+1;
-            std::filesystem::resize_file(path_,length);data.resize(length);
-        }
+        // Validate before appending, including a final row without a newline.
+        // Keep user edits intact; malformed data must never be silently replaced.
+        if(!appended)journal(data);
+        std::string separated;
+        if(!data.empty() && data.back()!='\n'){separated="\n";separated+=addition;addition=separated;}
         if(data.size()+addition.size()>maximumBytes)throw std::runtime_error("Learning journal full; normal input remains available");
         std::ofstream out(path_,std::ios::binary|std::ios::app);if(!out)throw std::runtime_error("Write learning journal");
         out.write(addition.data(),static_cast<std::streamsize>(addition.size()));out.flush();if(!out)throw std::runtime_error("Flush learning journal");
@@ -183,10 +169,10 @@ public:
         std::filesystem::create_directories(path_.parent_path());
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto original=journal(data);auto state=*original;std::string addition;
         for(const auto& e:events) {
-            if(e.id.empty()||e.id.size()>128||e.id.find_first_of("\t\r\n")!=std::string::npos || state.seen.count(e.id) || e.mode.empty() || e.mode.size()>512 ||
+            if(e.id.empty()||e.id.size()>128||e.id.find_first_of("\t\r\n")!=std::string::npos || state.seen.count(e.id) || e.mode.empty() || e.mode.size()>512 || !learningCharacters(e.mode) || !learningCharacters(e.code) ||
                e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||(!e.context.empty()&&!learningCharacters(e.context))||learningCharacters(e.context)>2)continue;
             state.seen.insert(e.id);
-            addition+=seal("TCL1\tE\t"+e.id+'\t'+std::to_string(e.time)+'\t'+hex(e.mode)+'\t'+hex(e.code)+'\t'+hex(e.text)+'\t'+hex(e.context));
+            addition+=seal("TCL2\tE\t"+e.id+'\t'+std::to_string(e.time)+'\t'+editableField(e.mode)+'\t'+editableField(e.code)+'\t'+editableField(e.text)+'\t'+editableField(e.context));
         }
         if(addition.empty()){publish(state.events);return;}appendBytes(std::move(data),addition,original.get());
     }
@@ -199,12 +185,12 @@ public:
     bool undoLast() {
         std::lock_guard<std::mutex> local(mutex_);if(!std::filesystem::exists(path_))return false;
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto state=parse(data);if(state.events.empty())return false;
-        appendBytes(std::move(data),seal("TCL1\tU\t"+learningId()+'\t'+std::to_string(learningNow())+'\t'+state.events.back().id));return true;
+        appendBytes(std::move(data),seal("TCL2\tU\t"+learningId()+'\t'+std::to_string(learningNow())+'\t'+state.events.back().id));return true;
     }
     void clear() {
         std::lock_guard<std::mutex> local(mutex_);std::filesystem::create_directories(path_.parent_path());
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();
-        appendBytes(std::move(data),seal("TCL1\tC\t"+learningId()+'\t'+std::to_string(learningNow())));
+        appendBytes(std::move(data),seal("TCL2\tC\t"+learningId()+'\t'+std::to_string(learningNow())));
     }
 };
 }

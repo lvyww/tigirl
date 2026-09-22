@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix='tsf-live-readers-', dir=BUILD) as tempo
                 publish(user / 'config.txt', f'当前码表 {name}\n每页候选个数 {size}\n')
             elif stage in (2, 5):
                 dictionary = DLL.parent / 'tiger-v2.tcd' if stage == 2 else schema / 'tiger-v2.tcd'
-                journal = user / 'user/tiger-words.tcu' if stage == 2 else schema / 'user.tcu'
+                journal = user / '码表' / ('虎码字词' if stage == 2 else 'SharedTest') / '用户调整.txt'
                 subprocess.run([str(WRITER), win(dictionary), win(journal), 'write', 'ab', 'live', '1'],
                                check=True, capture_output=True, timeout=10)
             elif stage == 6:

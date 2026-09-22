@@ -1,3 +1,5 @@
+> 当前版本已改用方案内 UTF-8 TSV，见 [用户数据文件](../docs/USER_DATA_FILES.md)。下文为旧二进制格式的历史设计记录，不再适用于当前存储。
+
 # User words and immutable snapshots
 
 `Lexicon` overlays only edited main-table codes on the shared `Dictionary`.

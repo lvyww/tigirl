@@ -21,14 +21,14 @@ with tempfile.TemporaryDirectory(prefix='folder-schema-',dir=BUILD) as temporary
         return user/'schemas/虎码字词/generations'/gen/'tiger-v2.tcd'
     select('虎码字词');first=selected();first_bytes=first.read_bytes()
     assert '当前码表\t虎码字词' in config.read_text(encoding='utf-8-sig')
-    assert (user/'user/tiger-words.tcu').exists() and not (user/'schemas/虎码字词/user.tcu').exists()
-    run('user_store_probe',win(first),win(user/'user/tiger-words.tcu'),'write','ab','kept-word-',2)
-    journal=(user/'user/tiger-words.tcu').read_bytes()
+    assert (user/'码表/虎码字词/用户调整.txt').exists() and not (user/'schemas/虎码字词/user.tcu').exists()
+    run('user_store_probe',win(first),win(user/'码表/虎码字词/用户调整.txt'),'write','ab','kept-word-',2)
+    journal=(user/'码表/虎码字词/用户调整.txt').read_bytes()
     assert json.loads(ensure().stdout)['reused'] and selected()==first
     stamp=table.stat();table.write_text('ab 更新内容\n',encoding='utf-8');os.utime(table,ns=(stamp.st_atime_ns,stamp.st_mtime_ns))
     select('虎码字词');second=selected();assert second!=first and second.read_bytes()!=first_bytes and first.read_bytes()==first_bytes
-    assert (user/'user/tiger-words.tcu').read_bytes()==journal
-    words=run('user_store_probe',win(second),win(user/'user/tiger-words.tcu'),'dump','ab').stdout
+    assert (user/'码表/虎码字词/用户调整.txt').read_bytes()==journal
+    words=run('user_store_probe',win(second),win(user/'码表/虎码字词/用户调整.txt'),'dump','ab').stdout
     assert ''.join(f'{ord(c):04x}' for c in 'kept-word-0') in words
     (pinyin/'拼音.txt').write_text('ce 策\n',encoding='utf-8');ensure();third=selected();assert third!=second
     before=(user/'schemas/虎码字词/current.txt').read_bytes();saved=config.read_bytes()
@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='folder-schema-',dir=BUILD) as temporary
     # New folder appears directly without manual import/name entry.
     other=sources/'普通方案';other.mkdir();(other/'词条.txt').write_text('ab 另一方案\n',encoding='utf-8')
     select('普通方案');assert '当前码表\t普通方案' in config.read_text(encoding='utf-8-sig')
-    assert (user/'schemas/普通方案/user.tcu').exists()
+    assert (user/'码表/普通方案/用户调整.txt').exists()
     select('虎码字词');assert selected()==third
     # Invalid live cache must be rejected by selection, not silently use bundled data.
     third.write_bytes(b'broken');saved=config.read_bytes()

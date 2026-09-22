@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='word-save-failure-', dir=BUILD) as temp
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     report = json.loads(result.stdout)
     restarted = subprocess.check_output([str(PROBE), win(ROOT / 'data/tiger-v2.tcd'),
-                                        win(root / 'user/tiger-words.tcu'), 'dump', 'ab'], text=True)
+                                        win(root / '码表/虎码字词/用户调整.txt'), 'dump', 'ab'], text=True)
     assert bytes.fromhex(restarted.splitlines()[0]).decode('utf-16-be') == '疒'
     report['independent_restart_keeps_retry'] = True
 assert registration() == before, 'Fixture changed installed registration'

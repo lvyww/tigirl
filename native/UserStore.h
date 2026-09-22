@@ -2,19 +2,18 @@
 #include "Lexicon.h"
 
 namespace tiger {
-// One journal path per schema and user. Refresh at activation/focus or a file
+// Editable UTF-8 TSV operations in 码表/<schema>/用户调整.txt. Refresh at activation/focus or a file
 // notification, never for every input key. Commit rebases on the latest journal
 // under an OS file lock, so simultaneous hosts cannot overwrite each other.
 // The stable .lock sidecar is acquired before the journal lock. Never remove
-// the sidecar while a user store can be active. Legacy clients only lock the
-// journal; Windows publication additionally excludes existing legacy handles
-// using sharing modes and defers when one is still open.
+// the sidecar while a user store can be active. Windows publication additionally
+// excludes open journal handles using sharing modes.
 class UserStore final {
 public:
     UserStore(std::shared_ptr<const Dictionary> dictionary, std::filesystem::path journal);
     std::shared_ptr<const Lexicon> refresh() const;
     std::shared_ptr<const Lexicon> commit(const std::vector<UserChange>& changes) const;
-    // Produce a legacy-readable, equivalent journal image under the journal
+    // Produce an equivalent editable text image under the journal
     // lock. Does not replace the live file: callers need a separate publication
     // protocol that also coordinates existing readers and writers.
     std::vector<unsigned char> checkpoint() const;

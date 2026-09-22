@@ -40,7 +40,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     auto source=lexicon_;auto journal=schemaJournalPath(userRoot_,schema_);
     auto helper=dictionaryPath_.parent_path()/L"Tigirl.Import.exe";auto cache=userRoot_/L"cache"/L"sentence";
     auto whitelist=sentenceSettings_.whitelist();
-    auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L".tigirl-learning-v1.log";
+    auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L".tigirl-learning.tsv";
     auto learningMode=std::u16string(u"sentence-v2|dup=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
         u"|optimal="+std::u16string(number.begin(),number.end())+u"|whitelist="+learningConfigurationHash(sentenceSettings_.fullCodeWhitelist);
     const bool learningEnabled=sentenceSettings_.selfLearning;

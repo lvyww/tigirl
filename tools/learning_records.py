@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Maintain a Tigirl/TigerClaw V1 journal without touching code tables (Python 3.10+).
-Examples: python tools/learning_records.py SCHEME/.tigirl-learning-v1.log show
-          python tools/learning_records.py SCHEME/.tigirl-learning-v1.log undo
-          python tools/learning_records.py SCHEME/.tigirl-learning-v1.log clear --yes
+"""Maintain a Tigirl editable TSV journal without touching code tables (Python 3.10+).
+Examples: python tools/learning_records.py SCHEME/.tigirl-learning.tsv show
+          python tools/learning_records.py SCHEME/.tigirl-learning.tsv undo
+          python tools/learning_records.py SCHEME/.tigirl-learning.tsv clear --yes
 Use --help for export/import/compaction. All writers use the product lock file.
 """
 from __future__ import annotations
-import argparse, contextlib, json, os, pathlib, sys, tempfile, time, uuid, zlib
+import argparse, contextlib, json, os, pathlib, sys, tempfile, time, uuid
 LIMIT = 16 * 1024 * 1024
-NAMES = {'.tigirl-learning-v1.log', '.tigerclaw-learning-v1.log'}
+NAMES = {'.tigirl-learning.tsv'}
 
 def checked_path(value: str) -> pathlib.Path:
     path = pathlib.Path(value).absolute()
     if path.name.lower() not in NAMES:
-        raise ValueError('Expected exactly .tigirl-learning-v1.log or .tigerclaw-learning-v1.log; code tables are never accepted')
+        raise ValueError('Expected exactly .tigirl-learning.tsv; code tables are never accepted')
     return path
 
 @contextlib.contextmanager
@@ -52,15 +52,19 @@ def locked(path: pathlib.Path):
         finally: os.close(fd)
 
 def seal(fields: list[str]) -> bytes:
-    body = '\t'.join(fields).encode('ascii')
-    return body + b'\t' + str(zlib.crc32(body)).encode() + b'\n'
+    return ('\t'.join(fields) + '\n').encode('utf-8')
 
-def hex_text(text: str) -> str:
-    return text.encode('utf-16-be', errors='strict').hex()
+def escape_text(text: str) -> str:
+    escapes = {'\\': '\\\\', '\t': '\\t', '\r': '\\r', '\n': '\\n'}
+    return ''.join(escapes.get(c, ('\\u%04x' % ord(c)) if ord(c) < 32 else c) for c in text)
 
-def text_hex(value: str) -> str:
-    if len(value) % 4 or len(value) > 2048: raise ValueError('Invalid UTF-16 field')
-    return bytes.fromhex(value).decode('utf-16-be', errors='strict')
+def unescape_text(value: str) -> str:
+    import re
+    def escape(m):
+        v = m.group(1)
+        return {'t': '\t', 'r': '\r', 'n': '\n', '\\': '\\'}.get(v, chr(int(v[1:], 16)) if v.startswith('u') else '')
+    if re.search(r'\\(?![trn\\]|u[0-9a-fA-F]{4})', value): raise ValueError('Invalid text escape')
+    return re.sub(r'\\(u[0-9a-fA-F]{4}|[trn\\])', escape, value)
 
 def valid_event(e: dict) -> bool:
     try:
@@ -76,26 +80,28 @@ def valid_event(e: dict) -> bool:
 
 def event_line(e: dict) -> bytes:
     if not valid_event(e): raise ValueError('Invalid learning event in import')
-    return seal(['TCL1', 'E', e['id'], str(e['time'])] + [hex_text(e[k]) for k in ('mode', 'code', 'text', 'context')])
+    return seal(['TCL2', 'E', e['id'], str(e['time'])] + [escape_text(e[k]) for k in ('mode', 'code', 'text', 'context')])
 
 def parse(data: bytes) -> tuple[list[dict], set[str]]:
     events, seen, removed = [], set(), set()
-    for line in data.split(b'\n')[:-1]:
+    for line in data.decode('utf-8-sig').split('\n'):
         try:
-            if len(line) > 8192: continue
-            body, crc = line.rsplit(b'\t', 1)
-            if int(crc) != zlib.crc32(body): continue
-            f = body.decode('ascii').split('\t')
-            if len(f) < 4 or f[0] != 'TCL1' or not 0 < len(f[2]) <= 128 or f[2] in seen or not 0 <= int(f[3]) <= 9223372036854775807: continue
+            line = line.removesuffix('\r')
+            if len(line.encode('utf-8')) > 8192: raise ValueError('Learning row too long')
+            if not line or line.startswith('#'): continue
+            f = line.split('\t')
+            if len(f) < 4 or f[0] != 'TCL2' or not 0 < len(f[2]) <= 128 or not 0 <= int(f[3]) <= 9223372036854775807: raise ValueError('Invalid learning row')
+            if f[2] in seen: continue
             if f[1] == 'E' and len(f) == 8:
-                e = dict(zip(('mode', 'code', 'text', 'context'), map(text_hex, f[4:])), id=f[2], time=int(f[3]))
-                if not valid_event(e): continue
+                e = dict(zip(('mode', 'code', 'text', 'context'), map(unescape_text, f[4:])), id=f[2], time=int(f[3]))
+                if not valid_event(e): raise ValueError('Invalid learning event')
                 events.append(e); seen.add(f[2])
             elif f[1] == 'U' and len(f) == 5 and len(f[4]) <= 128:
                 removed.add(f[4]); seen.add(f[2])
             elif f[1] == 'C' and len(f) == 4:
                 events.clear(); removed.clear(); seen.add(f[2])
-        except (ValueError, UnicodeError): continue
+            else: raise ValueError('Invalid learning operation')
+        except (ValueError, UnicodeError) as error: raise ValueError('Invalid learning text row') from error
     return [e for e in events if e['id'] not in removed][-10000:], seen
 
 def read(path: pathlib.Path) -> bytes:
@@ -121,14 +127,14 @@ def compact(events: list[dict], seen: set[str]) -> bytes:
     active = {e['id'] for e in events}
     # Keep retired event IDs as U tombstones: delayed/replayed commits must NOT
     # resurrect after undo, clear or compaction. Target self is inactive already.
-    tombstones = b''.join(seal(['TCL1', 'U', identity, '0', identity]) for identity in sorted(seen - active))
+    tombstones = b''.join(seal(['TCL2', 'U', identity, '0', identity]) for identity in sorted(seen - active))
     return tombstones + b''.join(event_line(e) for e in events)
 
 def maintain(path: pathlib.Path, action: str, source: pathlib.Path | None = None) -> dict:
-    if action in ('show', 'export') and not path.exists(): return {'format': 'TCL1', 'events': [], 'count': 0}
+    if action in ('show', 'export') and not path.exists(): return {'format': 'TCL2', 'events': [], 'count': 0}
     with locked(path):
         data = read(path); events, seen = parse(data)
-        if action in ('show', 'export'): return {'format': 'TCL1', 'events': events, 'count': len(events)}
+        if action in ('show', 'export'): return {'format': 'TCL2', 'events': events, 'count': len(events)}
         if action == 'undo':
             if not events: return {'changed': False, 'count': 0}
             events.pop()
@@ -136,7 +142,7 @@ def maintain(path: pathlib.Path, action: str, source: pathlib.Path | None = None
         elif action == 'import':
             if source is None or source.stat().st_size > LIMIT: raise ValueError('Missing or oversized import')
             payload = json.loads(source.read_text(encoding='utf-8'))
-            if payload.get('format') != 'TCL1' or not isinstance(payload.get('events'), list) or len(payload['events']) > 10000: raise ValueError('Invalid TCL1 export')
+            if payload.get('format') != 'TCL2' or not isinstance(payload.get('events'), list) or len(payload['events']) > 10000: raise ValueError('Invalid TCL2 export')
             for e in payload['events']:
                 if not valid_event(e): raise ValueError('Invalid event; nothing was written')
                 if e['id'] not in seen: events.append(e); seen.add(e['id'])

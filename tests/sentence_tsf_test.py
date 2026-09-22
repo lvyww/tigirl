@@ -27,14 +27,11 @@ for arm64x in ([True] if os.environ.get('SENTENCE_ARM64X_ONLY') else [False]):
     if bundled:
      assert (dll.parent/'Tigirl.Import.exe').read_bytes()==(BUILD/'tests/ARM64/Tigirl.Import.exe').read_bytes(),'Packaged importer is stale'
     else:shutil.copy2(BUILD/'tests/ARM64/Tigirl.Import.exe',dll.parent/'Tigirl.Import.exe')
-    def record(kind,text):
-     c='aa'.encode('utf-16-le');t=text.encode('utf-16-le');payload=struct.pack('<III',kind,len(c)//2,len(t)//2)+c+t
-     return struct.pack('<II',len(payload),zlib.crc32(payload))+payload
-    (user/'schemas/测试整句/user.tcu').write_bytes(b'TIGERU01'+record(1,'错')+record(2,'中'))
+    journal=user/'码表/测试整句/用户调整.txt';journal.parent.mkdir(parents=True,exist_ok=True)
+    journal.write_text('{删除}aa\t错\n{置顶}aa\t中\n',encoding='utf-8')
     (user/'.sentence-journal-test').touch()
-    journal=user/'schemas/测试整句/user.tcu';initial=journal.read_bytes()
-    c='bb'.encode('utf-16-le');t='国'.encode('utf-16-le');payload=struct.pack('<III',1,2,1)+c+t
-    journal.write_bytes(initial+struct.pack('<II',len(payload),zlib.crc32(payload))+payload)
+    initial=journal.read_bytes()
+    journal.write_bytes(initial+'{删除}bb\t国\n'.encode('utf-8'))
     base=user/'schemas/测试整句/tiger-v2.tcd'
     revision=run_windows([BUILD/'tests/ARM64/Tigirl.Import.exe','--sentence-revision',win(base),win(journal)],capture_output=True,text=True,timeout=60)
     assert revision.returncode==0,revision.stderr
