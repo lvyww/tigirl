@@ -8,7 +8,7 @@ def run(args,success=True):
  r=run_windows(args,capture_output=True,text=True,timeout=90)
  assert (r.returncode==0)==success,(args,r.stdout,r.stderr)
  return r
-model=Path('/mnt/c/Users/yc/Desktop/bime_codex_src_20260513/release_arm64/Models/sentence-ngram-v2.bin')
+model=ROOT/'data/Models/sentence-fivegram.klm'
 results={}
 with tempfile.TemporaryDirectory(prefix='sentence-resources-',dir=BUILD) as temp:
  root=Path(temp);schema=root/'测试整句';schema.mkdir();pinyin=root/'无拼音';user=root/'用户';user.mkdir()

@@ -1,0 +1,90 @@
+{
+  "seconds": 110.44466160999991,
+  "combined": {
+    "rows": 20000,
+    "control_correct": 19926,
+    "unified_correct": 19927,
+    "rescued": 1,
+    "regressed": 0,
+    "control_top5": 19968,
+    "control_top20": 19968,
+    "unified_top5": 19968,
+    "unified_top20": 19968
+  },
+  "groups": {
+    "fresh": {
+      "rows": 10000,
+      "control_correct": 9968,
+      "unified_correct": 9969,
+      "rescued": 1,
+      "regressed": 0,
+      "control_top5": 10000,
+      "control_top20": 10000,
+      "unified_top5": 10000,
+      "unified_top20": 10000
+    },
+    "old": {
+      "rows": 10000,
+      "control_correct": 9958,
+      "unified_correct": 9958,
+      "rescued": 0,
+      "regressed": 0,
+      "control_top5": 9968,
+      "control_top20": 9968,
+      "unified_top5": 9968,
+      "unified_top20": 9968
+    }
+  },
+  "control_reference_differences": 0,
+  "changed_top1": 1,
+  "physical_input_tested": false,
+  "files": {
+    "probe": {
+      "bytes": 1625712,
+      "sha256": "bf9f10b4375d858ad0be5584fb85f070f599ec7e6360acece86a1af57a907a4a"
+    },
+    "model": {
+      "bytes": 419929926,
+      "sha256": "580ed90ced0ac72e453e0d647635cec2d3879e2e47ae1a231b96f49b2d34eafa"
+    },
+    "prior": {
+      "bytes": 469886928,
+      "sha256": "c0063898fdff27c1fb00c1c72fa28a6c1b375fade1ec2045d731b9db958bdecc"
+    },
+    "cases": {
+      "bytes": 2046769,
+      "sha256": "d46d90a24bacf8c43d5c9713eb519062a23441b31e1c5fed45beb031e192372a"
+    },
+    "reference": {
+      "bytes": 4043084,
+      "sha256": "9aea84e08cdc59e99476bf14bef01da5f702a95fd88985b5cf650a77656bd95e"
+    }
+  },
+  "date": "2026-09-22",
+  "reference_commit": "e74a3a6",
+  "windows_fivegram_checks_per_platform": {
+    "x64": 1170,
+    "Win32": 1170,
+    "ARM64": 1170,
+    "ARM64EC": 1170
+  },
+  "tsf_loaders_passed": [
+    "x64",
+    "Win32",
+    "ARM64",
+    "ARM64X from ARM64",
+    "ARM64X from x64"
+  ],
+  "appcontainer_read_query_passed": true,
+  "resource_publication_passed": [
+    "ARM64",
+    "x64",
+    "Win32"
+  ],
+  "sources": {
+    "native/SentenceFivegram.cpp": "6749a6d2c7ed3ab670ae54c3d220d982e4a4930d9c52f251342ac6ef12a4753a",
+    "native/SentenceDecoder.cpp": "35628755f33d5498a34ad53f43c11227f05a18d204b05e11a440175aadb4afab",
+    "tests/sentence_fivegram_probe.cpp": "340728240bf98d9645712a6504a8b44d46443b17027e0ee75cc1cf92180b7566",
+    "tests/fivegram_eval.py": "b6ff74c491128cfad04303ba02b7b475f3ce2c75cee335f14a6bf15bbd8cddac"
+  }
+}

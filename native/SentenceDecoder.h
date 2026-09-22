@@ -138,11 +138,13 @@ private:
     std::unique_ptr<Cache> cache_;
     mutable std::mutex decodeMutex_;
     double transition(Lattice& lattice,std::u16string_view previous2,std::u16string_view previous1,std::u16string_view target) const;
+    double step(Lattice&,SentenceLmHistory&,std::u16string_view,std::u16string_view,std::u16string_view) const;
     bool observed(Lattice& lattice,std::u16string_view previous,std::u16string_view target) const;
     double isolation(Lattice& lattice,std::u16string_view text) const;
     double pathIsolation(Lattice& lattice,std::u16string_view text,int boundary) const;
     std::shared_ptr<const SentenceLexicon> lexicon_;
     std::shared_ptr<const SentenceLanguageModel> model_;
+    const SentenceHistoryLanguageModel* historyModel_=nullptr;
     const SentenceNgram* ngram_=nullptr;
     SentenceDecoderOptions options_;
     std::shared_ptr<const MappedSentenceSupplement> supplement_;

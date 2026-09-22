@@ -1,7 +1,7 @@
 ﻿param(
     [string]$Version='2026.9.10.4',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
-    [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-ngram-mobile.bin",
+    [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram.klm",
     [switch]$SkipBuild
 )
 $ErrorActionPreference='Stop'
@@ -19,9 +19,11 @@ Copy-Item -LiteralPath "$PSScriptRoot\assets\Tigirl.ico" -Destination $stage
 Copy-Item -LiteralPath "$PSScriptRoot\appcontainer_data.ps1" -Destination $stage
 Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\Tigirl.dll" -Destination "$stage\x64"
 Copy-Item -LiteralPath "$PSScriptRoot\build\Win32\Release\Tigirl.dll" -Destination "$stage\x86"
-foreach($file in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models','字体')){Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\$file" -Destination "$stage\shared" -Recurse}
+foreach($file in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','字体')){Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\$file" -Destination "$stage\shared" -Recurse}
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\x64\architecture_load_probe.exe" -Destination "$stage\verify_x64.exe"
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\Win32\architecture_load_probe.exe" -Destination "$stage\verify_x86.exe"
+. "$PSScriptRoot\sentence_package.ps1"
+Copy-NativeTigerSentenceModel $SentenceModelPath "$stage\shared"
 New-Item -ItemType Directory -Force "$stage\DefaultData\码表"|Out-Null
 foreach($scheme in @('虎码字词','虎整句')){Copy-Item -LiteralPath "$DataSource\码表\$scheme" -Destination "$stage\DefaultData\码表" -Recurse}
 Copy-Item -LiteralPath "$DataSource\拼音反查码表" -Destination "$stage\DefaultData" -Recurse

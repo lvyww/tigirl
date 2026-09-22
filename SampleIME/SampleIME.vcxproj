@@ -366,7 +366,7 @@
     <ClCompile Include="..\native\Dictionary.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
     <ClCompile Include="..\native\Text.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
     <ClCompile Include="..\native\Lexicon.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
-    <ClCompile Include="..\native\SentenceSession.cpp" />
+    <ClCompile Include="..\native\SentenceSession.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
     <ClCompile Include="..\native\SentenceAutoCommit.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
     <ClCompile Include="..\native\SentenceSettings.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
     <ClCompile Include="..\native\SentenceResources.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
@@ -408,4 +408,5 @@
   </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <Import Project="..\native\Kenlm.props" />
 </Project>

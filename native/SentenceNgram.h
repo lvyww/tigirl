@@ -5,12 +5,25 @@
 #include <memory>
 #include <string_view>
 namespace tiger {
+struct SentenceLmHistory {
+    std::array<std::uint32_t,4> tokens{};
+    std::uint32_t count=0;
+};
 class SentenceLanguageModel {
 public:
     virtual ~SentenceLanguageModel()=default;
     virtual double logProbability(std::u16string_view previous2,std::u16string_view previous1,
         std::u16string_view target,bool includeUnigram=true) const=0;
+    virtual std::shared_ptr<const SentenceLanguageModel> querySession() const {return {};}
+    virtual std::uint64_t mappedBytes() const {return 0;}
+    virtual const void* baseAddress() const {return nullptr;}
     virtual bool hasObservedBigram(std::u16string_view previous,std::u16string_view target) const=0;
+};
+// Sessions belong to one decoder; immutable mapped resources may be shared.
+class SentenceHistoryLanguageModel : public SentenceLanguageModel {
+public:
+    virtual SentenceLmHistory beginHistory() const=0;
+    virtual double step(SentenceLmHistory& history,std::u16string_view target) const=0;
 };
 // Immutable mapped Kneser-Ney reader. TCSKNM01 retains the strict legacy full
 // validation. TCSKNM02 validates its compact header/unigram/sparse indexes at

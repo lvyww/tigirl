@@ -57,7 +57,7 @@ def main():
     settings = '当前码表\t测试整句\n默认中文\t是\n整句自动提前上屏\t否\n高频字仅使用最优码组句\t1500\n开机自动启动\t否\n'
     (stage / 'config.txt').write_text(settings, encoding='utf-8-sig')
     (stage / 'Models').mkdir()
-    os.link(REFERENCE / 'Models/sentence-ngram-v2.bin', stage / 'Models/sentence-ngram-v2.bin')
+    os.link(ROOT / 'data/Models/sentence-fivegram.klm', stage / 'Models/sentence-fivegram.klm')
     keys = []
     for sample in samples:
         for i, code in enumerate(sample + ' '):
@@ -121,7 +121,7 @@ def main():
                   scope='Hidden real TSF edit sessions, original-engine checked output; three repeats, automatic off, warm cache; each timed key includes two preview callbacks plus down/up.',
                   limitations=['No real Word/WeChat application scheduling or physical input.', 'Private bytes include process overhead and allocator retention.', 'Three fixed raw prefixes, not general typing latency.'],
                   source_tables=table_hashes, oracle_sha256=sha(oracle), results=results,
-                  model_sha256=sha(REFERENCE / 'Models/sentence-ngram-v2.bin'),
+                  model_sha256=sha(ROOT / 'data/Models/sentence-fivegram.klm'),
                   input_codes='First encountered single-character code in supplied source table; repeated phrase prefixes of 32/64/128 codes.',
                   sources={name: sha(ROOT / name) for name in ['native/SentenceDecoder.cpp', 'native/tsf/SentenceService.cpp', 'tests/sentence_tsf_fixture.h', 'tests/sentence_tsf_measure_test.py']})
     (BUILD / ('sentence-tsf-measure-' + (args.platform or 'all') + '.json')).write_text(json.dumps(report, indent=2) + '\n')

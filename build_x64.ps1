@@ -1,4 +1,4 @@
-﻿param([string]$SentenceModelPath = "$PSScriptRoot\data\Models\sentence-ngram-mobile.bin")
+﻿param([string]$SentenceModelPath = "$PSScriptRoot\data\Models\sentence-fivegram.klm")
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\sentence_package.ps1"
 # This remains a release-staging entry point. Use build_native.ps1 for compile-only.

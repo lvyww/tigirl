@@ -1,4 +1,4 @@
-﻿param([int]$Readers = 3, [switch]$Mixed, [string]$Dictionary = "", [string]$Model = "")
+﻿param([int]$Readers = 3, [switch]$Mixed, [string]$Dictionary = "", [string]$Model = "", [ValidateSet('ARM64','x64','Win32')][string]$ReaderPlatform = 'ARM64')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $processes = @()
@@ -6,11 +6,11 @@ $platforms = @()
 try {
     for ($i = 0; $i -lt $Readers; $i++) {
         $info = New-Object Diagnostics.ProcessStartInfo
-        $platform = if ($Mixed) { @('ARM64','x64','Win32')[$i % 3] } else { 'ARM64' }
+        $platform = if ($Mixed) { @('ARM64','x64','Win32')[$i % 3] } else { $ReaderPlatform }
         $platforms += $platform
         $info.FileName = "$root\build\tests\$platform\sentence_measure_probe.exe"
         if (!$Dictionary) { $Dictionary = "$root\build\real-sentence-measure\user\schemas\虎整句\tiger-v2.tcd" }
-        if (!$Model) { $Model = "$root\data\Models\sentence-ngram-mobile.bin" }
+        if (!$Model) { $Model = "$root\data\Models\sentence-fivegram.klm" }
         $info.Arguments = '"' + $dictionary + '" "' + $model + '" --memory'
         $info.UseShellExecute = $false
         $info.RedirectStandardInput = $true
@@ -36,7 +36,8 @@ try {
         $index++
         $results += $result
     }
-    $name = if ($Mixed) { 'memory-mixed.json' } else { 'memory-ARM64.json' }
+    $name = if ($Mixed) { 'memory-mixed.json' } else { 'memory-' + $ReaderPlatform + '.json' }
+    New-Item -ItemType Directory -Force "$root\build\real-sentence-measure" | Out-Null
     $results | ConvertTo-Json -Depth 5 | Set-Content "$root\build\real-sentence-measure\$name" -Encoding UTF8
     $results | ConvertTo-Json -Depth 5
 } finally {

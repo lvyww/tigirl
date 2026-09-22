@@ -8,4 +8,6 @@
     <ClCompile Include="..\native\LexiconSerialize.cpp" /><ClCompile Include="..\native\SentenceResources.cpp" /><ClCompile Include="..\native\SentenceImport.cpp" /><ClCompile Include="..\native\LexiconPublish.cpp" /><ClCompile Include="..\native\LexiconDecode.cpp" />
   </ItemGroup>
   <ItemDefinitionGroup><Link><AdditionalDependencies>psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="..\native\Text.cpp" /></ItemGroup>
+  <Import Project="..\native\Kenlm.props" />
 </Project>

@@ -1,8 +1,9 @@
 #define NOMINMAX
 #include <windows.h>
 #include "../native/Dictionary.h"
-#include "../native/SentenceNgram.h"
+#include "../native/SentenceFivegram.h"
 #include <iostream>
+#include <cmath>
 #include <stdexcept>
 
 // Read-only reproduction using an existing AppContainer token. This tests
@@ -27,8 +28,9 @@ int wmain(int argc,wchar_t** argv) {
         (void)std::filesystem::canonical(argv[2],canonicalError);
         auto dictionary=tiger::Dictionary::Open(argv[2]);
         if(!dictionary || tiger::Dictionary::Open(argv[2])!=dictionary)throw std::runtime_error("Dictionary cache failed");
-        auto model=tiger::SentenceNgram::Open(argv[3]);
-        if(!model || tiger::SentenceNgram::Open(argv[3])!=model)throw std::runtime_error("Model cache failed");
+        auto model=tiger::SentenceFivegram::Open(argv[3]);
+        if(!model || tiger::SentenceFivegram::Open(argv[3])!=model)throw std::runtime_error("Model cache failed");
+        auto history=model->beginHistory();if(!std::isfinite(model->step(history,u"中")))throw std::runtime_error("Fivegram query failed");
         bool rejected=false;
         try {tiger::Dictionary::Open(std::filesystem::path(argv[2])/L"missing");}
         catch(const std::exception&){rejected=true;}

@@ -6,7 +6,7 @@ from tsf_architectures import ROOT,variants
 BUILD=ROOT/'build'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 def quote(s):return "'"+str(s).replace("'","''")+"'"
-model=Path('/mnt/c/Users/yc/Desktop/bime_codex_src_20260513/release_arm64/Models/sentence-ngram-v2.bin')
+model=ROOT/'data/Models/sentence-fivegram.klm'
 checks=[]
 bundled=bool(os.environ.get('SENTENCE_BUNDLED_MODEL'))
 model_setting='' if bundled else '整句语言模型\t'+win(model)+'\n'
@@ -53,7 +53,7 @@ for arm64x in ([True] if os.environ.get('SENTENCE_ARM64X_ONLY') else [False]):
    result={'platform':platform,'journal_aware':journal_mode,'dll_sha256':hashlib.sha256(dll.read_bytes()).hexdigest(),'host_sha256':hashlib.sha256(host.read_bytes()).hexdigest(),'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr}
    checks.append(result)
    if bundled:
-    packaged_model=dll.parent/'Models/sentence-ngram-mobile.bin'
+    packaged_model=dll.parent/'Models/sentence-fivegram.klm'
     result['bundled_model_sha256']=hashlib.sha256(packaged_model.read_bytes()).hexdigest()
     assert result['bundled_model_sha256']==hashlib.sha256(model.read_bytes()).hexdigest()
    name='sentence-tsf-x86-validation.json' if os.environ.get('SENTENCE_X86') else 'sentence-tsf-arm64x-validation.json' if arm64x else 'sentence-tsf-validation.json'

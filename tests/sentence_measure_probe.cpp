@@ -21,15 +21,28 @@ void mapping(const void* address,std::uint64_t bytes){
  std::cout<<"{\"bytes\":"<<bytes<<",\"pages\":"<<count<<",\"resident\":"<<resident<<",\"shareable\":"<<shared<<",\"multiple\":"<<multiple<<",\"type\":"<<info.Type<<",\"protect\":"<<info.Protect<<"}";
 }
 void touch(const void* address,std::uint64_t bytes){SYSTEM_INFO info{};GetSystemInfo(&info);auto p=static_cast<const unsigned char*>(address);volatile unsigned char sum=0;for(std::uint64_t i=0;i<bytes;i+=info.dwPageSize)sum=static_cast<unsigned char>(sum^p[i]);}
+
+std::pair<const void*,std::uint64_t> mappedModel(const std::filesystem::path& path){
+ std::pair<const void*,std::uint64_t> best{};std::uintptr_t address=0;MEMORY_BASIC_INFORMATION info{};
+ while(VirtualQuery(reinterpret_cast<void*>(address),&info,sizeof(info))){
+  if(info.State==MEM_COMMIT && info.Type==MEM_MAPPED && info.Protect==PAGE_READONLY){
+   wchar_t name[32768]{};if(GetMappedFileNameW(GetCurrentProcess(),info.BaseAddress,name,32768) &&
+    _wcsicmp(std::filesystem::path(name).filename().c_str(),path.filename().c_str())==0 && info.RegionSize>best.second)best={info.BaseAddress,info.RegionSize};
+  }
+  const auto next=reinterpret_cast<std::uintptr_t>(info.BaseAddress)+info.RegionSize;if(next<=address)break;address=next;
+ }
+ if(!best.first)throw std::runtime_error("No read-only model mapping");return best;
+}
 int wmain(int argc,wchar_t** argv){try{
  if(argc!=4)return 2;std::cout<<std::setprecision(10);const auto baseline=privateBytes();auto start=Clock::now();
  tiger::SentenceSettings settings;tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=settings.allowDuplicateSingleCharacters;
  auto resources=tiger::SentenceResources::Open(argv[1],argv[2],settings.commonCharacterLimit,settings.whitelist(),options);
  double openMs=elapsed(start);const auto loaded=privateBytes();
  if(std::wstring_view(argv[3])==L"--memory"){
-  touch(resources->model()->baseAddress(),resources->model()->mappedBytes());touch(resources->lexicon()->dictionary()->baseAddress(),resources->lexicon()->dictionary()->mappedBytes());
+  const auto modelMapping=mappedModel(argv[2]);
+  touch(modelMapping.first,modelMapping.second);touch(resources->lexicon()->dictionary()->baseAddress(),resources->lexicon()->dictionary()->mappedBytes());
   std::cout<<"ready"<<std::endl;std::cin.get();
-  std::cout<<"{\"pid\":"<<GetCurrentProcessId()<<",\"baseline_private\":"<<baseline<<",\"loaded_private\":"<<loaded<<",\"open_ms\":"<<openMs<<",\"model\":";mapping(resources->model()->baseAddress(),resources->model()->mappedBytes());
+  std::cout<<"{\"pid\":"<<GetCurrentProcessId()<<",\"baseline_private\":"<<baseline<<",\"loaded_private\":"<<loaded<<",\"open_ms\":"<<openMs<<",\"model\":";mapping(modelMapping.first,modelMapping.second);
   std::cout<<",\"lexicon\":";mapping(resources->lexicon()->dictionary()->baseAddress(),resources->lexicon()->dictionary()->mappedBytes());std::cout<<"}"<<std::endl;std::cin.get();return 0;
  }
  if(std::wstring_view(argv[3])!=L"--bench" && std::wstring_view(argv[3])!=L"--contexts")return 2;
@@ -43,6 +56,7 @@ int wmain(int argc,wchar_t** argv){try{
  return 0;
  }
  for(int length:{8,16,32,64,128}){
+  std::cout<<"{\"phase\":\"starting_full\",\"raw_length\":"<<length<<"}"<<std::endl;
   auto decoder=resources->createDecoder();auto before=privateBytes();start=Clock::now();auto result=decoder->decode(raw.substr(0,length),20,true);double ms=elapsed(start);
   std::cout<<"{\"phase\":\"full\",\"raw_length\":"<<length<<",\"ms\":"<<ms<<",\"private_before\":"<<before<<",\"private_after\":"<<privateBytes()<<",\"candidates\":"<<result.candidates.size()<<",\"expanded\":"<<result.expandedStates<<"}"<<std::endl;
  }

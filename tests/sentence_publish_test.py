@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='sentence-publish-',dir=ROOT/'build') as
  assert ensure(initial_revision).returncode!=0 and current.read_bytes()==descriptor
  assert not (cache/initial_revision).exists()
  # Actual readers in all host architectures adopt only the matching snapshot.
- model=Path('/mnt/c/Users/yc/Desktop/bime_codex_src_20260513/release_arm64/Models/sentence-ngram-v2.bin')
+ model=ROOT/'data/Models/sentence-fivegram.klm'
  for platform in ['ARM64','x64','Win32']:
   probe=ROOT/'build/tests'/platform/'sentence_resources_probe.exe'
   def load(expected):return run_windows([probe,win(base),win(model),win(replacement),expected],capture_output=True,text=True,timeout=60)

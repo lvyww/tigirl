@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><TigirlKenlmRoot>$(MSBuildThisFileDirectory)..\third_party\kenlm\</TigirlKenlmRoot></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><AdditionalIncludeDirectories>$(TigirlKenlmRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>KENLM_MAX_ORDER=6;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)SentenceFivegram.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader><PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="$(TigirlKenlmRoot)lm\*.cc;$(TigirlKenlmRoot)util\*.cc;$(TigirlKenlmRoot)util\double-conversion\*.cc" Exclude="$(TigirlKenlmRoot)**\*_test.cc;$(TigirlKenlmRoot)**\*_main.cc">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader><PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions><LanguageStandard>stdcpp14</LanguageStandard><TreatWarningAsError>false</TreatWarningAsError><WarningLevel>Level1</WarningLevel><UndefinePreprocessorDefinitions>UNICODE;_UNICODE;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions><ObjectFileName>$(IntDir)kenlm_%(Filename).obj</ObjectFileName><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemGroup>
+</Project>

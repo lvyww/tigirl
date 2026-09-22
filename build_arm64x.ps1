@@ -1,4 +1,4 @@
-﻿param([string]$SentenceModelPath = "$PSScriptRoot\data\Models\sentence-ngram-mobile.bin")
+﻿param([string]$SentenceModelPath = "$PSScriptRoot\data\Models\sentence-fivegram.klm")
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'sentence_package.ps1')
 Assert-NativeTigerSentenceModel $SentenceModelPath

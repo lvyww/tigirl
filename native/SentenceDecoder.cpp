@@ -46,6 +46,7 @@ struct State {
     // Context tokens refer to immutable mapped lexicon text (or static BOS).
     // The decoder retains that lexicon for the whole lattice lifetime.
     std::u16string_view previous2=bos,previous1=bos;
+    SentenceLmHistory history;
     int supplementState=0,rank=1;
     int boundary=-1;
 };
@@ -169,7 +170,7 @@ struct SentenceDecoder::Lattice {
     bool equalText(const State& a,const State& b) const {
         if(a.textLength!=b.textLength || a.textHash!=b.textHash)return false;if(a.boundary==b.boundary)return true;
         struct Cursor {const Lattice* lattice;int node;std::size_t offset=0;bool next(char16_t& value){
-            while(node>=0){const auto& edge=lattice->boundaries[node].edge;if(!offset)offset=edge.size();if(offset){value=edge[--offset];return true;}node=lattice->boundaries[node].previous;}return false;}};
+            while(node>=0){const auto& edge=lattice->boundaries[node].edge;if(!offset)offset=edge.size();if(offset){value=edge[--offset];if(!offset)node=lattice->boundaries[node].previous;return true;}node=lattice->boundaries[node].previous;}return false;}};
         Cursor left{this,a.boundary},right{this,b.boundary};char16_t x=0,y=0;while(left.next(x)){if(!right.next(y) || x!=y)return false;}return !right.next(y);
     }
     bool lessText(const State& a,const State& b) const {return materialize(a.boundary)<materialize(b.boundary);}
@@ -259,8 +260,9 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
     auto selectorTail=[&](std::u16string_view value){int n=0;for(auto i=value.rbegin();i!=value.rend() && selector(*i);++i)++n;return n;};
     auto fresh=[&] {
         next->lattice=std::make_unique<Lattice>(length);auto& lattice=*next->lattice;
+        if(historyModel_)lattice.states[0].values[0].history=historyModel_->beginHistory();
         if(lockedPrefix) {
-            lattice.states[0]=Bucket{};State seed;seed.textLength=static_cast<int>(lockedPrefix->text.size());seed.textHash=appendTextHash(textHashSeed,lockedPrefix->text);
+            lattice.states[0]=Bucket{};State seed;if(historyModel_)seed.history=historyModel_->beginHistory();seed.textLength=static_cast<int>(lockedPrefix->text.size());seed.textHash=appendTextHash(textHashSeed,lockedPrefix->text);
             std::vector<std::shared_ptr<const SentencePathBoundary>> boundaries;
             for(auto b=lockedPrefix->boundary;b;b=b->previous)boundaries.push_back(b);
             int lockedTextStart=0;std::uint64_t lockedHash=textHashSeed;
@@ -274,7 +276,7 @@ SentenceDecodeResult SentenceDecoder::decode(std::u16string_view input,int limit
             std::size_t offset=0;
             for(const auto& element:wordTextElements(lockedPrefix->text)) {
                 checkCancelled();const auto target=std::u16string_view(lockedPrefix->text).substr(offset,element.size());offset+=element.size();
-                seed.score+=transition(lattice,seed.previous2,seed.previous1,target)+options_.emittedCharacterReward;
+                seed.score+=step(lattice,seed.history,seed.previous2,seed.previous1,target)+options_.emittedCharacterReward;
                 if(supplement_ && !supplement_->empty()) {
                     double reward=0;seed.supplementState=supplement_->advance(seed.supplementState,target,reward);
                     seed.score+=reward;seed.supplementScore+=reward;
@@ -401,6 +403,9 @@ SentenceDecoder::SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
     :lexicon_(std::move(lexicon)),model_(std::move(model)),options_(options),supplement_(std::move(supplement)),
      lexicalPrior_(std::move(lexicalPrior)) {
     if(!lexicon_)throw std::invalid_argument("Sentence decoder needs a lexicon");
+    if(model_)if(auto query=model_->querySession())model_=std::move(query);
+    historyModel_=dynamic_cast<const SentenceHistoryLanguageModel*>(model_.get());
+    if(historyModel_ && !options_.scoreSentenceBoundaries)throw std::invalid_argument("Fivegram requires BOS/EOS scoring");
     ngram_=dynamic_cast<const SentenceNgram*>(model_.get());
     options_.beamWidth=std::max(1,options_.beamWidth);
     options_.rankPenalty=std::max(0.0,options_.rankPenalty);
@@ -417,6 +422,9 @@ std::u16string SentenceDecoder::normalizeRawCode(std::u16string_view raw) {
     std::u16string result;result.reserve(raw.size());
     for(char16_t c:raw)if(!unicode::isWhitespace(c))result+=static_cast<char16_t>(c==0x0130?c:unicode::toLower(c));
     return result;
+}
+double SentenceDecoder::step(Lattice& lattice,SentenceLmHistory& history,std::u16string_view a,std::u16string_view b,std::u16string_view target) const {
+    return historyModel_?historyModel_->step(history,target):transition(lattice,a,b,target);
 }
 double SentenceDecoder::transition(Lattice& lattice,std::u16string_view a,std::u16string_view b,std::u16string_view c) const {
     if(!model_)return 0;
@@ -518,6 +526,7 @@ SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int c
     if(raw.empty() || !std::any_of(raw.begin(),raw.end(),[](char16_t c){return unicode::isLetter(c)!=0;}))return {};
     if(raw.size()>static_cast<std::size_t>(std::numeric_limits<int>::max()-1))throw std::length_error("Sentence raw length");
     Lattice lattice(static_cast<int>(raw.size()));
+    if(historyModel_)lattice.states[0].values[0].history=historyModel_->beginHistory();
     int expanded=expand(raw,lattice,0);
     return emit(raw,lattice,candidateLimit,expanded,includeEarlyCommitEvidence,requiredTextPrefix);
 }
@@ -542,7 +551,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 for(const auto& element:c.textElements) {
                     const auto target=c.text.substr(targetOffset,element.size());
                     targetOffset+=element.size();
-                    next.score+=transition(lattice,next.previous2,next.previous1,target);
+                    next.score+=step(lattice,next.history,next.previous2,next.previous1,target);
                     next.score+=options_.emittedCharacterReward;
                     if(supplement_ && !supplement_->empty()) {
                         double reward=0;next.supplementState=supplement_->advance(next.supplementState,target,reward);
@@ -648,7 +657,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     completed.limit(options_.beamWidth,[&](const State& a,const State& b){return lattice.lessState(a,b,completedScoreFirst);});
     bool scoreFirst=false;
     auto evaluate=[&](const State& state) {
-        auto text=lattice.materialize(state.boundary);const double eosScore=transition(lattice,state.previous2,state.previous1,eos);
+        auto text=lattice.materialize(state.boundary);auto history=state.history;const double eosScore=step(lattice,history,state.previous2,state.previous1,eos);
         double adjustment=eosScore-pathIsolation(lattice,text,state.boundary)+state.codeScore;
         const double confidenceAdjustment=eosScore-isolation(lattice,text);
         SentenceCandidate c;c.text=std::move(text);c.baseScore=state.score-state.learningScore+adjustment;
@@ -670,7 +679,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     // the same EOS and isolation terms as the full candidate path.
     const auto evaluateEvidence=[&](const State& state) {
         SentenceCandidate c;c.text=lattice.materialize(state.boundary);c.boundary=lattice.publishBoundary(state.boundary);
-        const double eosScore=transition(lattice,state.previous2,state.previous1,eos);
+        auto history=state.history;const double eosScore=step(lattice,history,state.previous2,state.previous1,eos);
         c.confidenceScore=state.mass+eosScore-isolation(lattice,c.text);
         const bool direct=(state.source&SentenceSourceDirect)!=0;
         const double personalization=std::min(personalizedEarlyCap,

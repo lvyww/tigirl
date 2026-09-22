@@ -18,4 +18,6 @@
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="appcontainer_read_probe.cpp" /><ClCompile Include="..\native\Dictionary.cpp" /><ClCompile Include="..\native\SentenceNgram.cpp" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ClCompile Include="..\native\Text.cpp" /></ItemGroup>
+  <Import Project="..\native\Kenlm.props" />
 </Project>

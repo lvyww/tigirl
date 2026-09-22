@@ -15,7 +15,7 @@ function Generation($Name){return [IO.File]::ReadAllText("$root\schemas\$Name\cu
 try {
     $archFiles=@(Get-ChildItem "$Package\x64","$Package\x86" -File -Recurse)
     Check ($archFiles.Count -eq 2 -and @($archFiles|Where-Object Name -ne 'Tigirl.dll').Count -eq 0) 'Architecture directories contain duplicated shared runtime files'
-    foreach($relative in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models\sentence-ngram-mobile.bin','字体\LXGWWenKaiGBScreen.ttf')){
+    foreach($relative in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','Models\sentence-fivegram.klm','字体\LXGWWenKaiGBScreen.ttf')){
         Check (Test-Path -LiteralPath (Join-Path "$Package\shared" $relative) -PathType Leaf) "Missing shared runtime file: $relative"
     }
     & "$Package\initialize.ps1" -Quiet -NoEnable

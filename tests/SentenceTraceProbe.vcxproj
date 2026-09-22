@@ -27,4 +27,5 @@
 <ClCompile Include="..\native\AddWord.cpp" />
 </ItemGroup>
 <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\native;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><Optimization>MaxSpeed</Optimization><ExceptionHandling>Sync</ExceptionHandling></ClCompile><Link><AdditionalDependencies>psapi.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <Import Project="..\native\Kenlm.props" />
 </Project>

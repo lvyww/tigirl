@@ -17,7 +17,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
         if(sentenceWorker_)sentenceWorker_->cancel(0);return;
     }
     auto path=activeSchemaDictionaryPath(userRoot_,dictionaryPath_,schema_);
-    auto model=sentenceSettings_.modelPath.empty()?dictionaryPath_.parent_path()/L"Models"/L"sentence-ngram-mobile.bin":std::filesystem::path(sentenceSettings_.modelPath);
+    auto model=sentenceSettings_.modelPath.empty()?dictionaryPath_.parent_path()/L"Models"/L"sentence-fivegram.klm":std::filesystem::path(sentenceSettings_.modelPath);
     const int common=sentenceSettings_.commonCharacterLimit;
     SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
     options.canonicalCodeReward=2;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;
@@ -27,7 +27,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     const auto number=std::to_string(common);
     const auto signature=path.u16string()+u"\n"+model.u16string()+u"\n"+sentenceSettings_.fullCodeWhitelist+u"\n"+
         std::u16string(number.begin(),number.end())+(options.allowDuplicateSingleCharacters?u"1":u"0")+
-        (sentenceSettings_.autoCommit?u"1":u"0")+(sentenceSettings_.selfLearning?u"1":u"0");
+        (sentenceSettings_.autoCommit?u"1":u"0")+(sentenceSettings_.selfLearning?u"1":u"0")+u"\n"+config_.reloadRequest;
     if(signature==sentenceSignature_ && sentenceRequestedSource_ &&
        (sentenceRequestedSource_==lexicon_ || sentenceRequestedSource_->equivalent(*lexicon_)))return;
     if(!sentenceWorker_)sentenceWorker_=std::make_unique<SentenceWorker>();
@@ -112,7 +112,7 @@ void Service::pollSentence() {
         if(completion.key==0) {
             pollDataChanges();
             if(completion.revision!=sentenceRevision_)continue;
-            if(!completion.error.empty()){report(completion.error.c_str());sentenceSignature_.clear();continue;}
+            if(!completion.error.empty()){report(completion.error.c_str());continue;}
             if(completion.resources && (!completion.source || !lexicon_ || !completion.source->equivalent(*lexicon_))) {
                 sentenceSignature_.clear();continue;
             }
