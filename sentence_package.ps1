@@ -1,9 +1,9 @@
-﻿$NativeTigerSentenceModelHash = '23216ACD8319885AA2431FFBF2231DAB4677C5D4ABB55A08A404450A15B865CA'
+﻿$NativeTigerSentenceModelHash = 'C0063898FDFF27C1FB00C1C72FA28A6C1B375FADE1EC2045D731B9DB958BDECC'
 $NativeTigerSentenceLexicalHash = '8DBC884B6CB719D07E4CEF153C8048DB19A11F8224F75A4ED87853E688A27393'
 $NativeTigerSentenceLexicalPath = Join-Path $PSScriptRoot 'resources\sentence-lexical-v1.bin'
 function Assert-NativeTigerSentenceModel([string]$Path) {
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing sentence model: $Path" }
-    if ((Get-Item -LiteralPath $Path).Length -ne 224475584 -or
+    if ((Get-Item -LiteralPath $Path).Length -ne 469886928 -or
         (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ne $NativeTigerSentenceModelHash) {
         throw 'Sentence model does not match the validated non-neural reference model.'
     }
@@ -31,10 +31,10 @@ function Copy-NativeTigerSentenceModel([string]$Source, [string]$Destination) {
         Copy-Item -LiteralPath $NativeTigerSentenceLexicalPath -Destination $lexicalTarget -Force
     }
     Assert-NativeTigerSentenceLexicalPrior $lexicalTarget
-    [ordered]@{ model='sentence-ngram-mobile.bin'; bytes=224475584; sha256=$NativeTigerSentenceModelHash.ToLowerInvariant();
+    [ordered]@{ model='sentence-ngram-mobile.bin'; bytes=469886928; sha256=$NativeTigerSentenceModelHash.ToLowerInvariant();
         lexical_prior='sentence-lexical-v1.bin'; lexical_bytes=150032; lexical_sha256=$NativeTigerSentenceLexicalHash.ToLowerInvariant();
-        source='merged-214-20260919/sentence-ngram-mobile.bin, native TCSKNM02';
-        source_sha256='23216acd8319885aa2431ffbf2231dab4677c5d4abb55a08a404450a15b865ca';
+        source='trainer_v2/full-kn-m5-v2/sentence-ngram-mobile.bin, original training model with m5 pruning, native TCSKNM02';
+        source_sha256='c0063898fdff27c1fb00c1c72fa28a6c1b375fade1ec2045d731b9db958bdecc';
         scope='Non-neural unigram/bigram/trigram model; no Qwen runtime' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $folder 'provenance.json') -Encoding UTF8
 }

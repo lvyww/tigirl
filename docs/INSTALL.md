@@ -40,7 +40,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 
 开发版构建现在还包含 `Models\sentence-ngram-mobile.bin` 和来源记录。
 默认从本地 `data\Models\sentence-ngram-mobile.bin` 读取已验证模型（不纳入 Git）。
-当前直接使用 `merged-214-20260919/sentence-ngram-mobile.bin`（TCSKNM02）；无需再展开成 TCSKNM01。
+当前默认采用最初训练模型的 m5 剪裁版：
+`trainer_v2/full-kn-m5-v2/sentence-ngram-mobile.bin`（TCSKNM02），无需展开成 TCSKNM01。
+将该文件复制到上述本地默认路径即可参与构建。文件大小为 469,886,928 字节（约 448.1 MiB），
+SHA256 为 `c0063898fdff27c1fb00c1c72fa28a6c1b375fade1ec2045d731b9db958bdecc`。
 TCSKNM02 与同源 TCSKNM01 仅存储布局不同，保留每个 n-gram 及 float32 概率。
 其他来源须同步更新 `sentence_package.ps1` 的固定哈希与长度。
 
