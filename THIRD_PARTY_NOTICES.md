@@ -39,13 +39,3 @@ SHA-256 为 `8dbc884b6cb719d07e4cef153c8048db19a11f8224f75a4ed87853e688a27393`�
 发布程序及安装包时，应保留项目许可证、本文件以及实际包含的第三方组件所要求的声明，并按 GPL v3 提供相应的完整对应源码及构建、安装脚本。不能仅凭一份项目 LICENSE，宣称所有外部材料均已获得再分发许可。
 
 本文件记录此次核对的主要来源，不是完整依赖清单、历史版权审计或对所有二进制发布包的合规验收。此次许可证提交未重新打包既有发布版本。
-
-
-## KenLM query library
-
-The fivegram reader statically includes the query-only KenLM sources vendored in
-`third_party/kenlm`, copied from TigerClaw e74a3a6. The underlying libime revision
-and original file hashes are in `third_party/kenlm/UPSTREAM.json`. The Windows
-UTF-8 path patch and Tigirl build integration are documented alongside it.
-Original LICENSE, COPYING, COPYING.3, COPYING.LESSER.3 and the double-conversion
-license are retained in source and distributed under `licenses/kenlm`.

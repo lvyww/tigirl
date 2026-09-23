@@ -17,7 +17,7 @@
 未改动的配置项不重写，因此其他进程在窗口打开期间修改的无关设置会保留。
 
 此页不包含 Qwen、模型服务器或神经重排设置。模型路径仍采用安装目录下的
-`Models/sentence-ngram-mobile.bin`；已有的 `整句语言模型` 配置覆盖值会保留。
+`Models/sentence-fivegram-mobile.bin`；已有的 `整句语言模型` 配置覆盖值会保留。
 
 验证记录：`build/input-settings-arm64.json`。测试使用独立、未激活的桌面，
 覆盖保存和重新打开、取消、显式空白名单、8种非法参数，以及 96/144/192 DPI

@@ -1,8 +1,8 @@
 #pragma once
 #include "SentenceNgram.h"
 namespace tiger {
-// KenLM query-only reader. The model is file-mapped and shared; bounded mutable
-// caches are private to each decoder's query session.
+// Native TCSKNM03 query reader. The model is file-mapped and shared; bounded
+// mutable caches are private to each decoder's query session.
 class SentenceFivegram final : public SentenceHistoryLanguageModel {
 public:
     static std::shared_ptr<const SentenceFivegram> Open(const std::filesystem::path&);
@@ -13,6 +13,7 @@ public:
     double logProbability(std::u16string_view,std::u16string_view,std::u16string_view,bool=true) const override;
     bool hasObservedBigram(std::u16string_view,std::u16string_view) const override;
     std::uint64_t mappedBytes() const override;
+    const void* baseAddress() const override;
 private:
     struct Data;
     struct Cache;

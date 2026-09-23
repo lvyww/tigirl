@@ -38,18 +38,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 方案管理、导入、选择和一次性计时提醒工具。`-CheckOnly` 检查架构、文件和
 哈希并显示拟安装目录，不执行注册。
 
-开发版构建包含 `Models\sentence-fivegram.klm`、词汇先验及来源记录。
-默认从本地 `data\Models\sentence-fivegram.klm` 读取已验证模型（不纳入 Git）。
+开发版构建包含 `Models\sentence-fivegram-mobile.bin`、词汇先验及来源记录。
+默认从本地 `data\Models\sentence-fivegram-mobile.bin` 读取已验证模型（不纳入 Git）。
 模型来源为 `brightmart-char5-500mb-20260922/char5-context128-q8.klm`，
-大小 419,929,926 字节（400.48 MiB），SHA256 为
-`580ed90ced0ac72e453e0d647635cec2d3879e2e47ae1a231b96f49b2d34eafa`。
+TCSKNM03 产物大小 460,693,519 字节（约 439.35 MiB），SHA256 为
+`4e6d79b957a55edf35cd9e2e66c62bd0bbe598581b7dc088b462122a713172a7`。
 五阶同时负责整句搜索和孤立字二元组判断；正式包不再包含三阶模型。
-KenLM 查询代码静态编入各架构 DLL，无额外查询 DLL；许可证位于 `licenses/kenlm`。
+五阶由虎娘自有的 TCSKNM03 mmap reader 直接查询，不再编译或分发 KenLM。
 模型不可用时保留普通码表输入，不自动回退三阶。详见 [五阶说明](SHAPE_FIVEGRAM.md)。
 其他来源须同步更新 `sentence_package.ps1` 的固定哈希与长度。
 
 其他目录可通过 `build_arm64.ps1` 或 `build_arm64x.ps1` 的
-`-SentenceModelPath '完整路径\sentence-fivegram.klm'` 参数指定。
+`-SentenceModelPath '完整路径\sentence-fivegram-mobile.bin'` 参数指定。
 构建和安装预检均核对固定模型的长度与 SHA256，缺失或不匹配时停止。
 模型属于非神经整句功能，包内不包含 Qwen。整句选项见
 [整句输入设置](SENTENCE_SETTINGS.md)。

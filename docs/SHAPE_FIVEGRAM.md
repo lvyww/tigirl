@@ -1,104 +1,75 @@
-# 虎娘五阶整句主线
+# 虎娘 TCSKNM03 五阶整句主线
 
-虎娘采用虎爪 e74a3a6 的压缩纯汉字五阶模型，直接参与每次 Beam 扩展和 EOS
-评分。孤立字判断也使用五阶自身的二元组，不加载三阶模型，不额外保存二元组
-索引。没有接入全拼、Qwen 或独立 Core。
+虎娘直接使用 TCSKNM03 纯汉字五阶模型参与每次 Beam 扩展和 EOS 评分。
+孤立字判断也由同一模型的 observed bigram 提供；正式运行时不加载三阶模型，
+也不依赖 KenLM、jointkenlm.dll、Qwen 或独立 Core。
 
-## 资源与构建
+## 资源与格式
 
-- 开发源：`data/Models/sentence-fivegram.klm`（不纳入 Git）。
-- 原始模型：`brightmart-char5-500mb-20260922/char5-context128-q8.klm`。
-- 长度：419,929,926 字节（400.48 MiB）。
-- SHA256：`580ed90ced0ac72e453e0d647635cec2d3879e2e47ae1a231b96f49b2d34eafa`。
-- 运行目录：共享资源目录下的 `Models/sentence-fivegram.klm`；原词汇先验
-  `sentence-lexical-v1.bin` 继续保留。构建和发布检查文件长度、哈希及来源记录。
-- KenLM 查询代码静态编入 DLL，构建覆盖 x64、x86、ARM64 和 ARM64X，运行时
-  不依赖 `jointkenlm.dll`。源码和许可证位于 `third_party/kenlm`，发布许可证
-  位于 `licenses/kenlm`。查询部分保持 C++14，虎娘自身保持 C++17。
+- 开发源：`data/Models/sentence-fivegram-mobile.bin`（不纳入 Git）。
+- 运行文件：`Models/sentence-fivegram-mobile.bin`。
+- 格式：`TCSKNM03`，order=5，context vocabulary=128，q16 概率/backoff。
+- 长度：460,693,519 字节（约 439.35 MiB）。
+- SHA256：`4e6d79b957a55edf35cd9e2e66c62bd0bbe598581b7dc088b462122a713172a7`。
+- 原词汇先验 `sentence-lexical-v1.bin` 继续保留。
 
-正式包只复制明确列出的五阶资源，不把旧构建目录残留的三阶文件一起打包。
-安装脚本使用对应的新资源清单；本次代码修改不清理任何旧安装或个人数据。
-手工配置的“整句语言模型”应指向 `.klm`，不能继续指定旧 `.bin`。
-三阶读取器仅保留用于独立回归和评测基准，不是运行时自动回退。
+TCSKNM03 与 Rime 虎整句使用同一份模型资产。1–3 gram 全保留；4/5 gram
+沿用 Brightmart char5 context128 的历史裁剪。模型保存 16-bit token ID、
+16-bit 概率和 backoff，context 分桶并带稀疏索引。
 
-## 行为与内存
+虎娘由 `SentenceFivegram` 自己 mmap 文件并直接查询，不再编译或分发第三方
+KenLM query runtime。`SentenceHistoryLanguageModel`、Beam history、锁定前缀、
+回删、已上屏历史裁剪和 EOS 逻辑均保持原五阶实现不变。
 
-每条搜索路径保存四个 token ID 和历史长度；BOS 只进入一次，EOS 使用完整历史。
-锁定前缀逐字重建历史，增量、回删、已上屏历史裁剪与完整重算保持一致。
-分数使用自然对数。现有 Beam、字频、码序和词汇先验、自学习、选重及提前
-上屏阈值不变；不支持关闭五阶句首句末评分的实验选项。
+## 行为
 
-孤立字规则仍检查低频字和左右邻字是否存在观察二元组，但来源改为五阶。
-查询一个前字后，只有 KenLM 实际命中二元组才解除相邻孤立惩罚；未知字符
-不借用 `<unk>` 的命中。不能以平滑后的概率大于零作为存在性判断。
+每条搜索路径保存最近四个 token ID 和历史长度；BOS 只进入一次，EOS 使用
+完整 history。分数仍转换为自然对数。现有 Beam、码序、词汇先验、自学习、
+选重和提前上屏策略不因模型后端替换而改变。
 
-资源线程加载只读 LAZY 文件映射；同进程共享模型，跨进程由系统共享文件页。
-每个解码器独享有界 token、完整历史评分和二元组缓存，查询持有资源引用。
-这不意味着每个实例完全零开销，也不意味着 400 MiB 都会立即驻留物理内存。
+observed bigram 只有模型中实际存在该二元组时才返回 true。未知字符不会借用
+`<unk>` 的二元组命中。冷启动模型缺失或损坏时保留普通码表输入；重载失败
+不得替换已经有效的资源。
 
-冷启动模型缺失或加载失败时保留普通码表输入并记录错误。重载失败保留原有
-有效资源，不逐键重复尝试失败加载；修复文件后可以主动重载码表或重新打开
-应用。加载失败、取消和旧请求不得发布部分结果。
-
-## 自动验证
+## 迁移验证
 
 便携专项测试：
 
 ```sh
 cmake -S tests/fivegram -B build/fivegram-tests -DCMAKE_BUILD_TYPE=Release
 cmake --build build/fivegram-tests -j 4
-build/fivegram-tests/fivegram_probe test data/Models/sentence-fivegram.klm build/fivegram-tests/fixture
+build/fivegram-tests/fivegram_probe test data/Models/sentence-fivegram-mobile.bin build/fivegram-tests/fixture
 ```
 
-Windows 专项工程：`tests/SentenceFivegramProbe.vcxproj`，使用对应平台构建后，
-执行 `sentence_fivegram_probe.exe test <模型路径> <独立测试目录>`。
-测试覆盖独立完整状态评分、OOV、二元组命中、增量、回删、锁定、取消、超过
-64 编码的历史裁剪、资源引用和缺失／截断文件。
+Windows 对应 `tests/SentenceFivegramProbe.vcxproj`。测试覆盖冻结 TCSKNM03 分数、
+OOV、observed bigram、增量、回删、锁定、取消、历史裁剪、资源生命周期和
+损坏文件拒绝。Linux、Windows x64、Win32、ARM64、ARM64EC 的真实
+460,693,519 字节模型均通过 1049 项专项检查；x64/Win32、ARM64、ARM64X
+正式构建均通过。三架构资源导入/解码、fivegram 打包清单、核心回归、自动
+提前上屏、自学习、decoder 与资源发布回归也均通过。
 
-本次 Linux、Windows x64、x86、ARM64、ARM64EC 专项各通过 1170 项检查。
-x64、x86、ARM64 DLL 加载及 TSF 对象创建通过；同一份 ARM64X DLL 在
-ARM64、x64 宿主均通过。核心测试、173044 项解码审查回归、自学习回归、
-三架构码表资源发布、发布资源清单与哈希校验通过。
-汇总与源码哈希见 `tests/fivegram/validation-20260922.json`。
-本次未安装、注册或进行应用前台输入测试。
+### 20k 首选迁移结果
 
-两万句评测使用 `tests/fivegram_eval.py`，显式传入 `--probe --model --prior
---fixture --cases --reference --output`。三阶 `--prior` 只用于测试对照。
-输出全部候选首选、目标名次、变化清单和来源哈希；测试不会修改原模型或安装。
-
-2026-09-22 离线结果：
+同一虎娘 decoder、同一 Beam/先验，仅替换模型后端：
 
 | 模式 | 旧集 / 10000 | 新集 / 10000 | 合计 / 20000 |
 | --- | ---: | ---: | ---: |
-| 虎爪五阶搜索＋旧二元组判断（对照） | 9958 | 9968 | 19926 |
-| 虎娘五阶搜索＋五阶二元组判断 | 9958 | 9969 | 19927 |
+| 迁移前 KenLM 五阶 + 五阶 observed bigram | 9958 | 9969 | 19927 |
+| TCSKNM03 native + 五阶 observed bigram | 9959 | 9971 | 19930 |
 
-对照组首选与虎爪冻结结果逐句一致。统一模型救回 1 句、退步 0 句；两组
-Top5 和 Top20 目标入池均为 19968。唯一改变为 fresh_7690，首选由
-“解黑面问她她都借故闪开有时躲到厕所里”变为目标
-“蟹爸问她她都借故闪开有时躲到厕所里”。
+共 4 条首选变化：3 条错误变正确，1 条错误变另一错误，0 条正确变错误。
+变化为 `old_2357`、`fresh_5806`、`old_8167`、`fresh_208`。此前
+`fresh_7690` 已在虎娘统一 observed bigram 时由错误变正确，因此这次迁移
+不再产生变化。
 
-这组数据包含训练文本重合，不是独立留出集；评测关闭自学习和提前上屏。
-不能据此推断五阶在所有文本上更好，或把离线回归当作真实应用输入验收。
-详细运行记录保留在 `build/fivegram-eval/final/`。
+该 20k 数据含训练文本重合，只用于迁移回归，不是独立泛化结论。
 
-受限权限验证使用 SearchHost 的现有 AppContainer 令牌模拟读取，只对独立
-测试目录授予读取权限。码表和五阶模型映射、模型查询、进程内复用均通过；
-该环境下 `filesystem::canonical` 返回访问拒绝，因此复用已有的
-`fileCachePath` 路径处理。这项验证不等同于 UWP 前台输入测试。
+## 架构结果
 
+正式生产链路现在是：
 
-## 性能与重复路径修复
+`SentenceDecoder -> SentenceHistoryLanguageModel -> SentenceFivegram(TCSKNM03) -> mmap`
 
-本次实际大码表测试发现原有路径文字比较游标在读完一段后没有进入前一段，
-可导致不同分词的同文路径比较不结束。已修正，并增加“中国＋人”和
-“中＋国＋人”合并与概率质量保留测试；这项修复同样适用于旧语言模型。
-
-两个 Windows x64 探针进程加载同一模型后，模型映射的 102502 页全部只读、
-可共享且实际被多个进程共享。单进程资源加载的私有内存增量约 1 MiB，
-不含后续解码搜索路径和候选缓存开销。
-
-Windows ARM64 机器上的 x64 探针、现有大码表、64 次递增输入测得平均约
-14.2 ms，P95 约 23.0 ms，最大约 102.9 ms；128 编码完整重算约 854 ms。
-这是一次后台构建并行时的解码器测量，不是稳定性能基线或候选窗端到端延迟。
-长句完整重算仍明显重于增量输入；没有通过缩小 Beam 或关闭规则压低耗时。
+仓库不再需要 `third_party/kenlm`、`Kenlm.props`、KenLM 特殊 C++14 编译规则
+或 KenLM 许可证随包复制。三阶 `SentenceNgram` 仍保留为独立回归/旧格式工具，
+不是生产五阶自动回退。

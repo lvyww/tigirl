@@ -4,7 +4,7 @@ from pathlib import Path
 from windows_process import run_windows,PS
 ROOT=Path(__file__).resolve().parents[1];OUT=ROOT/'build/real-sentence-measure';OUT.mkdir(exist_ok=True)
 REFERENCE=Path('/mnt/c/Users/yc/Desktop/bime_codex_src_20260513/release_arm64')
-model=ROOT/'data/Models/sentence-fivegram.klm';source=REFERENCE/'码表/虎整句'
+model=ROOT/'data/Models/sentence-fivegram-mobile.bin';source=REFERENCE/'码表/虎整句'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 def run(args):
  r=run_windows(args,capture_output=True,text=True,timeout=180)

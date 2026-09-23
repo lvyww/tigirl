@@ -17,7 +17,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
         if(sentenceWorker_)sentenceWorker_->cancel(0);return;
     }
     auto path=activeSchemaDictionaryPath(userRoot_,dictionaryPath_,schema_);
-    auto model=sentenceSettings_.modelPath.empty()?dictionaryPath_.parent_path()/L"Models"/L"sentence-fivegram.klm":std::filesystem::path(sentenceSettings_.modelPath);
+    auto model=sentenceSettings_.modelPath.empty()?dictionaryPath_.parent_path()/L"Models"/L"sentence-fivegram-mobile.bin":std::filesystem::path(sentenceSettings_.modelPath);
     const int common=sentenceSettings_.commonCharacterLimit;
     SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
     options.canonicalCodeReward=2;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;

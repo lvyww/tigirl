@@ -8,7 +8,7 @@ def run(args,success=True):
  r=run_windows(args,capture_output=True,text=True,timeout=90)
  assert (r.returncode==0)==success,(args,r.stdout,r.stderr)
  return r
-model=ROOT/'data/Models/sentence-fivegram.klm'
+model=ROOT/'data/Models/sentence-fivegram-mobile.bin'
 results={}
 with tempfile.TemporaryDirectory(prefix='sentence-resources-',dir=BUILD) as temp:
  root=Path(temp);schema=root/'测试整句';schema.mkdir();pinyin=root/'无拼音';user=root/'用户';user.mkdir()

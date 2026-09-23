@@ -1,0 +1,65 @@
+{
+  "date": "2026-09-23",
+  "migration": "KenLM binary fivegram to native TCSKNM03",
+  "model": {
+    "format": "TCSKNM03",
+    "filename": "sentence-fivegram-mobile.bin",
+    "bytes": 460693519,
+    "sha256": "4e6d79b957a55edf35cd9e2e66c62bd0bbe598581b7dc088b462122a713172a7"
+  },
+  "fivegram_checks": {
+    "linux": 1049,
+    "x64": 1049,
+    "Win32": 1049,
+    "ARM64": 1049,
+    "ARM64EC": 1049
+  },
+  "builds_passed": [
+    "x64",
+    "Win32",
+    "ARM64",
+    "ARM64X"
+  ],
+  "evaluation_20k": {
+    "rows": 20000,
+    "previous_correct": 19927,
+    "tcsknm03_correct": 19930,
+    "changed_top1": 4,
+    "rescued": 3,
+    "regressed": 0,
+    "old_correct": 9959,
+    "fresh_correct": 9971,
+    "old_top5": 9968,
+    "old_top20": 9968,
+    "fresh_top5": 10000,
+    "fresh_top20": 10000
+  },
+  "regressions": {
+    "core_tests": "passed",
+    "sentence_auto_commit": "passed",
+    "sentence_learning": "passed",
+    "sentence_decoder": "passed",
+    "sentence_resources": "passed",
+    "sentence_publish": "passed",
+    "fivegram_package": "passed"
+  },
+  "package": {
+    "no_trigram": true,
+    "invalid_model_rejected": true,
+    "kenlm_runtime_removed": true
+  },
+  "tsf_hidden_host": {
+    "status": "blocked_by_preexisting_test_fixture",
+    "reason": "The existing hidden TSF harness is stale after editable schema-source changes: it references removed tests/Tigirl.Test.manifest and does not create user-root 码表/<方案名> source directories. Temporary fixture repair reaches TCSKNM03 resource loading, then the old punctuation-state assertion fails after prior Tab learning. No migration-specific model load/decode failure was observed.",
+    "migration_failure_observed": false
+  },
+  "physical_input_tested": false,
+  "sources": {
+    "native/SentenceFivegram.cpp": "b95f0cf21529dff2d3c28d7a4679add3bbac7c4af21c6e88917437551b33415f",
+    "native/SentenceFivegram.h": "e8a826e8673a3513fb32b8794c86f9dc5b1ed6fd146d1aaf8525061c7dd64801",
+    "native/tsf/SentenceService.cpp": "d61558585f65b8f7ff18753d6c9fba2f81344750c989f4942bf6bd3bd04d11fc",
+    "sentence_package.ps1": "46db01c10bdbddf077f05075b5f3c9d359f4fe4830bea74372bc3728432b0261",
+    "tests/sentence_fivegram_probe.cpp": "7b2d9aefbe2ac6f23e91fd82c3dbbdfd74718d64077eb75868e495069e1ec4ad",
+    "tests/fivegram_eval.py": "828687bf4dfaaf0dc81e0e0f121f29358df6381c625cf2d8e592d22058f3ffd6"
+  }
+}

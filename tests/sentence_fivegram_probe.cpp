@@ -5,7 +5,6 @@
 #include "SentenceSupplement.h"
 #include "LexiconSerialize.h"
 #include "Text.h"
-#include "lm/model.hh"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -42,27 +41,28 @@ public:
 };
 void tests(const std::filesystem::path& path,const std::filesystem::path& work) {
     auto model=SentenceFivegram::Open(path);require(model==SentenceFivegram::Open(path),"model mapping not shared");
-    lm::ngram::Config config;config.load_method=util::LAZY;config.show_progress=false;config.messages=nullptr;
-    std::unique_ptr<lm::base::Model> independent(lm::ngram::LoadVirtual(path.u8string().c_str(),config));
-    for(auto text:{u"中国人民今天一起学习",u"马云雷军入选大亨名单",u"甲乙丙丁戊己庚辛",u"龘𰻞😀e\u0301",u"",u"的"}) {
-        auto query=model->querySession();auto lm=dynamic_cast<const SentenceHistoryLanguageModel*>(query.get());auto history=lm->beginHistory();
-        lm::ngram::State state,next;independent->BeginSentenceWrite(&state);double actual=0,expected=0;
-        auto elements=wordTextElements(text);elements.push_back(u"\x03");
-        for(const auto& element:elements) {
-            actual+=lm->step(history,element);
-            const auto token=independent->BaseVocabulary().Index(element==u"\x03"?"</s>":utf8(element));
-            expected+=independent->BaseScore(&state,token,&next)*std::log(10.0);state=next;
-            require(std::abs(actual-expected)<1e-9,"full-state score mismatch");
-        }
+    struct FrozenScore {const char16_t* text;double total;};
+    const FrozenScore scores[]={
+        {u"中国人民今天一起学习",-44.635550201044005},
+        {u"马云雷军入选大亨名单",-57.55154431020609},
+        {u"甲乙丙丁戊己庚辛",-30.988563628308047},
+        {u"龘",-20.292678925865971},
+        {u"😀",-31.399474239122021},
+        {u"",-16.053965655191519},
+        {u"的",-17.161944463941833},
+    };
+    for(const auto& sample:scores) {
+        auto query=model->querySession();auto lm=dynamic_cast<const SentenceHistoryLanguageModel*>(query.get());auto history=lm->beginHistory();double actual=0;
+        for(const auto& element:wordTextElements(sample.text))actual+=lm->step(history,element);
+        actual+=lm->step(history,u"\x03");require(std::abs(actual-sample.total)<1e-9,"frozen TCSKNM03 score mismatch");
     }
-    std::vector<std::u16string> chars={u"中",u"国",u"人",u"民",u"龘",u"𰻞",u"😀",u"e\u0301",u"",std::u16string(1,char16_t(0xd800))};
-    int hits=0,misses=0;
-    for(const auto& a:chars)for(const auto& b:chars) {
-        auto index=[&](std::u16string_view s){try{return independent->BaseVocabulary().Index(utf8(s));}catch(const std::invalid_argument&){return independent->BaseVocabulary().NotFound();}};
-        auto ai=index(a),bi=index(b);lm::ngram::State next;
-        bool expected=!a.empty() && !b.empty() && ai!=independent->BaseVocabulary().NotFound() && bi!=independent->BaseVocabulary().NotFound() && independent->BaseFullScoreForgotState(&ai,&ai+1,bi,&next).ngram_length==2;
-        require(model->hasObservedBigram(a,b)==expected,"observed bigram mismatch");expected?++hits:++misses;
-    }
+    struct FrozenBigram {const char16_t* previous;const char16_t* target;bool observed;};
+    const FrozenBigram bigrams[]={
+        {u"中",u"国",true},{u"人",u"民",true},{u"今",u"天",true},{u"学",u"习",true},
+        {u"国",u"人",true},{u"马",u"云",true},{u"雷",u"军",true},
+        {u"龘",u"𰻞",false},{u"中",u"龘",false},{u"😀",u"中",false},{u"",u"中",false}
+    };
+    int hits=0,misses=0;for(const auto& item:bigrams){require(model->hasObservedBigram(item.previous,item.target)==item.observed,"frozen observed bigram mismatch");item.observed?++hits:++misses;}
     require(hits && misses,"observed cases must cover both branches");
     ImportedLexicon data;data.main={{u"aa",{u"中",u"人",u"龘"}},{u"bb",{u"国",u"民",u"𰻞"}},{u"cc",{u"人民",u"今天"}},{u"dd",{u"学习",u"工作"}}};
     auto lexicon=std::make_shared<SentenceLexicon>(save(prepareSentenceLexicon(data.main),work/"fixture.tcd"));
@@ -91,8 +91,8 @@ void tests(const std::filesystem::path& path,const std::filesystem::path& work) 
         auto h=model->beginHistory();double score=0;for(const auto& e:wordTextElements(c.text))score+=model->step(h,e)+pureOptions.emittedCharacterReward;
         score+=model->step(h,u"\x03");require(std::abs(score-c.finalScore)<1e-9,"decoder lost full model history");
     }
-    {std::ifstream in(path,std::ios::binary);char header[512]{};in.read(header,sizeof(header));std::ofstream out(work/"truncated.klm",std::ios::binary);out.write(header,in.gcount());}
-    rejected=false;try{SentenceFivegram::Open(work/"truncated.klm");}catch(const std::exception&){rejected=true;}require(rejected,"truncated model accepted");
+    {std::ifstream in(path,std::ios::binary);char header[512]{};in.read(header,sizeof(header));std::ofstream out(work/"truncated.bin",std::ios::binary);out.write(header,in.gcount());}
+    rejected=false;try{SentenceFivegram::Open(work/"truncated.bin");}catch(const std::exception&){rejected=true;}require(rejected,"truncated model accepted");
     ImportedLexicon duplicateData;duplicateData.main={{u"aa",{u"中"}},{u"bb",{u"国"}},{u"aabb",{u"中国"}},{u"cc",{u"人"}}};
     auto duplicateLexicon=std::make_shared<SentenceLexicon>(save(prepareSentenceLexicon(duplicateData.main),work/"duplicates.tcd"));
     SentenceDecoder duplicates(duplicateLexicon,model,pureOptions);
@@ -104,8 +104,8 @@ void tests(const std::filesystem::path& path,const std::filesystem::path& work) 
     for(int n=0;n<4;++n)tasks.push_back(std::async(std::launch::async,[model]{auto query=model->querySession();auto h=dynamic_cast<const SentenceHistoryLanguageModel*>(query.get())->beginHistory();for(int i=0;i<1000;++i)dynamic_cast<const SentenceHistoryLanguageModel*>(query.get())->step(h,u"中");return true;}));
     for(auto& task:tasks)require(task.get(),"concurrent query failed");
     auto survivor=model->querySession();model.reset();auto lm=dynamic_cast<const SentenceHistoryLanguageModel*>(survivor.get());auto h=lm->beginHistory();require(std::isfinite(lm->step(h,u"中")),"query lease lost");
-    for(auto file:{work/"missing.klm",work/"bad.klm"}) {
-        if(file.filename()=="bad.klm"){std::ofstream out(file);out<<"bad model";}
+    for(auto file:{work/"missing.bin",work/"bad.bin"}) {
+        if(file.filename()=="bad.bin"){std::ofstream out(file);out<<"bad model";}
         rejected=false;try{SentenceFivegram::Open(file);}catch(const std::exception&){rejected=true;}require(rejected,"invalid model accepted");
     }
     std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"mapped_bytes\":"<<survivor->mappedBytes()<<"}\n";

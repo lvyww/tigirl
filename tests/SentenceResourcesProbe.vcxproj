@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup><NativeProbeName>sentence_resources_probe</NativeProbeName></PropertyGroup>
   <Import Project="ArchitectureLoadProbe.vcxproj" />
@@ -9,5 +9,7 @@
   </ItemGroup>
   <ItemDefinitionGroup><Link><AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="..\native\Text.cpp" /></ItemGroup>
-  <Import Project="..\native\Kenlm.props" />
+  <ItemGroup>
+    <ClCompile Include="..\native\SentenceFivegram.cpp"><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
+  </ItemGroup>
 </Project>

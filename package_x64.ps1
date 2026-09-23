@@ -1,7 +1,7 @@
 ﻿param(
     [string]$Version='2026.9.10.4',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
-    [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram.klm",
+    [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram-mobile.bin",
     [switch]$SkipBuild
 )
 $ErrorActionPreference='Stop'

@@ -41,10 +41,9 @@ try {
     }
     $executables = @('Tigirl.dll', 'Tigirl.SchemaSelect.exe', 'Tigirl.Import.exe', 'Tigirl.exe', 'Tigirl.Reminder.exe')
     if ($Arm64X) { $executables += @('verify_load_arm64.exe', 'verify_load_x64.exe') }
-    Assert-NativeTigerSentenceModel (Join-Path $source 'Models\sentence-fivegram.klm')
+    Assert-NativeTigerSentenceModel (Join-Path $source 'Models\sentence-fivegram-mobile.bin')
     Assert-NativeTigerSentenceLexicalPrior (Join-Path $source 'Models\sentence-lexical-v1.bin')
-    $licenseFiles = @(Get-ChildItem -LiteralPath (Join-Path $source 'licenses\kenlm') -File | ForEach-Object { 'licenses\kenlm\' + $_.Name })
-    $artifacts = $executables + $licenseFiles + @('tiger-v2.tcd', 'Models\sentence-fivegram.klm', 'Models\sentence-lexical-v1.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
+    $artifacts = $executables + @('tiger-v2.tcd', 'Models\sentence-fivegram-mobile.bin', 'Models\sentence-lexical-v1.bin', 'Models\provenance.json') + @(Get-ChildItem -LiteralPath $fontRoot -File | Sort-Object Name | ForEach-Object { "$fontFolder\$($_.Name)" })
     foreach ($sidecar in @('tiger-v2.tcd.sentence.tcd', 'tiger-v2.tcd.supplement.tcd')) {
         if (Test-Path -LiteralPath (Join-Path $source $sidecar)) { $artifacts += $sidecar }
     }
