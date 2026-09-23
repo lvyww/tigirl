@@ -85,7 +85,7 @@ struct CandidateUIPresentationProbe {
     CandidateStyle style;
     using Rect=FrameRect;
     explicit CandidateUIPresentationProbe(std::shared_ptr<const Dictionary> dictionary,bool vertical=true,
-                                         int delay=0,int annotationDelay=0,bool predecoded=false) {
+                                         int delay=0,int annotationDelay=0,bool predecoded=false,bool initialCaret=true) {
         using namespace candidate_probe;
         now+=1000;frames.clear();timers.clear();committed.clear();
         style.font=u"Segoe UI";style.vertical=vertical;
@@ -95,7 +95,7 @@ struct CandidateUIPresentationProbe {
         state->engine.enableSentenceInput(true,1);press('A');
         if(predecoded)decode({u"first"});
         ui.Attach(new CandidateUI(owner,state,style,nullptr));currentUI=ui.Get();
-        ui->Show(TRUE);update();
+        ui->Show(TRUE);update(initialCaret);
     }
     ~CandidateUIPresentationProbe() {
         ui->detach();ui.Reset();owner->Release();candidate_probe::currentUI=nullptr;
@@ -226,18 +226,31 @@ struct CandidateUIPresentationProbe {
                 p.timer(2,201);p.change();require(p.ui->transition_.Active(),"Candidates after empty decode treated as first");++cases;
             }
             {
+                CandidateUIPresentationProbe missing(dictionary,vertical,0,0,true,false);
+                missing.pump();now+=1000;missing.update(false,true);missing.pump();
+                require(!missing.visible(),"First appearance invented a caret position");
+                missing.update();missing.pump();missing.finalFrame();++cases;
+            }
+            {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.first();p.change();p.timer(2,50);
-                const auto frozen=p.rect();p.layout(false,true);
-                require(p.visible() && p.rect()==frozen && p.ui->hasPresentedCandidates_,"Short layout loss reset/hid prior frame");
-                require(!p.ui->transition_.Active(),"Layout-pending animation not stopped");
-                now+=40;p.layout(false,true);p.pump();
-                require(p.visible() && p.ui->hasPresentedCandidates_,"Queued refresh broke layout grace");
-                p.layout();p.pump();require(p.ui->transition_.Active(),"QQ-style layout recovery lost animation");
-                p.timer(4);require(p.visible() && p.ui->hasPresentedCandidates_,"Old layout deadline hid restored frame");
-                p.timer(2,201);p.finalFrame();
-                p.layout(false,true);p.timer(4,101);
-                require(!p.visible() && !p.ui->hasPresentedCandidates_,"Actual layout timeout did not reset state");
-                p.layout();p.pump();p.finalFrame();++cases;
+                const auto anchor=p.ui->caret_;
+                p.layout(false,true);p.pump();p.timer(2,1000);
+                require(p.visible() && p.ui->hasPresentedCandidates_,"Layout loss hid active candidates");
+                require(EqualRect(&anchor,&p.ui->caret_),"Cached physical caret was changed");
+                const auto oldPixels=frames.back().pixels;
+                p.press('C');p.decode({u"新的候选",u"第二个候选"});
+                p.ui->update(nullptr,nullptr,false);p.pump();p.timer(2,1000);
+                require(p.visible() && p.ui->snapshot_.raw==p.state->engine.snapshot().raw,
+                    "No-layout content did not advance");
+                require(p.ui->snapshot_.candidates.size()==2 && p.ui->snapshot_.candidates[0].display==u"新的候选",
+                    "No-layout candidate content stayed stale");
+                p.finalFrame();require(frames.back().pixels!=oldPixels,"Retained window froze old candidate pixels");
+                p.layout(false,true);p.timer(4,1000);p.pump();
+                require(p.visible() && p.ui->hasPresentedCandidates_,"Obsolete layout timer hid retained candidates");
+                p.caret.left+=40;p.caret.right+=40;p.layout();p.pump();p.timer(2,1000);
+                require(p.ui->caret_.left==p.caret.left,"Recovered caret did not resume tracking");
+                p.finalFrame();
+                require(SUCCEEDED(p.ui->Show(FALSE)),"Host hide failed");p.pump();require(!p.visible(),"Explicit host hide was ignored");++cases;
             }
             {
                 CandidateUIPresentationProbe p(dictionary,vertical,250,500,true);
@@ -304,8 +317,8 @@ struct CandidateUIPresentationProbe {
                 p.caret.left+=80;p.caret.right+=80;p.layout();p.pump();preserved();
                 require(p.ui->transition_.Active(),"Joint post-presentation motion lost animation");
                 p.timer(2,50);const auto frozen=p.rect();p.layout(false,true);preserved();
-                require(p.visible() && p.rect()==frozen && !p.ui->transition_.Active(),
-                        "Joint layout grace did not freeze the last frame");
+                require(p.visible() && p.rect()==frozen && p.ui->hasCaret_,
+                        "Joint layout loss discarded the valid anchor");
                 now+=40;p.layout();p.pump();preserved();
                 require(p.ui->transition_.Active(),"Joint layout recovery lost animation");
                 p.timer(4);preserved();p.timer(2,201);p.finalFrame();

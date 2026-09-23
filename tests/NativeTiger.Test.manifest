@@ -2,6 +2,6 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity name="NativeTiger.PrivateTest" version="1.0.0.0" processorArchitecture="arm64" type="win32" />
   <file name="Tigirl.dll">
-    <comClass clsid="{D2291A80-84D8-4641-9AB2-BDD1472C846B}" threadingModel="Apartment" />
+    <comClass clsid="{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}" threadingModel="Apartment" />
   </file>
 </assembly>

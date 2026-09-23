@@ -24,6 +24,7 @@ exit /b %TIGIRL_CLEAN_RESULT%
 ###POWERSHELL###
 '''
 payload=(Path(__file__).parent/'cleanup.ps1').read_text(encoding='utf-8-sig')
+payload=payload.replace('# LEGACY_IDENTITY_HELPER', (ROOT/'packaging/legacy_identity.ps1').read_text(encoding='utf-8-sig'))
 output=ROOT/'Tigirl-Cleanup.bat'
 output.write_bytes((header+payload).replace('\r\n','\n').replace('\n','\r\n').encode('utf-8'))
 print(output)

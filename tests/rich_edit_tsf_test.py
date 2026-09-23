@@ -28,11 +28,11 @@ state = json.loads(subprocess.check_output([*COMMAND, '-NoProfile', '-ExecutionP
 if state['desktop'] != 'Default' or not state['foreground'] or state['idle_ms'] < 15000:
     raise SystemExit('Rich Edit test not started: require interactive desktop and 15 seconds input inactivity.')
 installed = json.loads((ROOT/('build/native-install-x86.json' if args.architecture == 'Win32' else 'build/native-install.json')).read_text(encoding='utf-8-sig'))
-key = "Registry::HKEY_CLASSES_ROOT\\CLSID\\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\\InprocServer32"
+key = "Registry::HKEY_CLASSES_ROOT\\CLSID\\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\\InprocServer32"
 def registered():
     code = '(Get-Item '+quote(key)+").GetValue('')"
     if args.architecture == 'Win32':
-        code = "$b=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32); $b.OpenSubKey('CLSID\\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\\InprocServer32').GetValue('')"
+        code = "$b=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32); $b.OpenSubKey('CLSID\\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\\InprocServer32').GetValue('')"
     return subprocess.check_output([*COMMAND, '-NoProfile', '-Command', code], text=True).strip()
 assert registered().lower() == installed['dll'].lower()
 installed_path = Path(subprocess.check_output(['wslpath', '-u', installed['dll']], text=True).strip())

@@ -27,7 +27,7 @@ $exe = Join-Path $build "tests\$hostPlatform\tsf_host.exe"
 $dll = Join-Path $build $(if ($Arm64X) { 'ARM64X\ARM64EC\Release\Tigirl.dll' } else { 'ARM64\Release\Tigirl.dll' })
 $manager = Join-Path (Split-Path $dll -Parent) 'Tigirl.exe'
 $manifest = Join-Path (Split-Path $dll -Parent) 'NativeTiger.Test.manifest'
-$registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\InprocServer32'
+$registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\InprocServer32'
 $before = (Get-Item $registration).GetValue('')
 New-Item -ItemType Directory -Path $isolated | Out-Null
 New-Item -ItemType File -Path (Join-Path $isolated '.tsf-management-test') | Out-Null

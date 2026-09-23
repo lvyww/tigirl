@@ -1,6 +1,7 @@
-﻿$ErrorActionPreference='Stop'
-$NativeTigerClsid='{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
-$NativeTigerProfile='{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
+﻿. (Join-Path $PSScriptRoot 'legacy_identity.ps1')
+$ErrorActionPreference='Stop'
+$NativeTigerClsid='{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
+$NativeTigerProfile='{43201C7B-F615-469D-9D54-906D9270975E}'
 $NativeTigerInstallRoot=Join-Path $env:ProgramFiles 'Tigirl'
 function Get-PackageDll([string]$Directory,[string]$Architecture) {
     return Join-Path $Directory ($Architecture+'\Tigirl.dll')

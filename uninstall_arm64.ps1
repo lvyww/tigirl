@@ -4,10 +4,10 @@ $ErrorActionPreference = 'Stop'
 if ([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne 'Arm64') { throw 'Use native ARM64 PowerShell.' }
 $Record = [IO.Path]::GetFullPath($Record)
 $installed = Get-Content -LiteralPath $Record -Raw | ConvertFrom-Json
-$clsid = '{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
+$clsid = '{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 $x86Base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32)
 if ($x86Base.OpenSubKey("CLSID\$clsid\InprocServer32")) { throw 'Remove the x86 supplement with uninstall_x86.ps1 before uninstalling the shared profile.' }
-$profile = '{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
+$profile = '{43201C7B-F615-469D-9D54-906D9270975E}'
 $tip = "0804:$clsid$profile"
 if ($installed.tip -ne $tip) { throw 'Installation record belongs to another input profile.' }
 $installRoot = [IO.Path]::GetFullPath("$env:ProgramFiles\Tigirl")

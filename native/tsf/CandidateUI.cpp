@@ -30,9 +30,9 @@ void CandidateUI::setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFo
 }
 void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
-    owner_=nullptr; shown_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset();
+    owner_=nullptr; shown_=false;hasCaret_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset();
     if(window_) {
-        KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
+        KillTimer(window_,1);KillTimer(window_,3);
         const auto window=window_; window_=nullptr;
         SetWindowLongPtrW(window,GWLP_USERDATA,0);
         DestroyWindow(window);
@@ -57,7 +57,7 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); layoutDeadline_=0; if(window_) { KillTimer(window_,4);KillTimer(window_,1); } }
+    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); if(window_)KillTimer(window_,1); }
     else if(window_)schedulePaint();
     return S_OK;
 }
@@ -149,31 +149,22 @@ HRESULT CandidateUI::notifyUpdated(ITfUIElementMgr* manager,DWORD elementId) {
     if(SUCCEEDED(hr) && owner_ && revision==modelRevision_)updatedFlags_=0;
     return hr;
 }
-void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool layoutPending,CandidateUpdate update) {
+void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool /*layoutPending*/,CandidateUpdate update) {
     if(!owner_ || !state_) return;
     if(update==CandidateUpdate::Content)updateContent();
     if(shown_)reveal_.update(snapshot_,style_,GetTickCount64());
-    // The candidate model must advance even while the application has no layout.
-    // Brief TS_E_NOLAYOUT during an edit must not turn a visible resize into
-    // a fresh appearance. Freeze the published frame, with a bounded deadline.
-    hasCaret_=caret && CandidateOrientation::usableCaret(*caret);
-    if(!hasCaret_) {
-        ++visualRevision_;stopAnimation();itemRects_.clear();
-        if(layoutPending && shown_ && window_ && IsWindowVisible(window_)) {
-            const auto now=GetTickCount64();
-            if(!layoutDeadline_)layoutDeadline_=now+100;
-            if(now<layoutDeadline_ && SetTimer(window_,4,static_cast<UINT>(layoutDeadline_-now),nullptr))return;
+    // A host may lose all text geometry for a wrapped composition. Retain
+    // the last physical anchor for this UI/context and keep publishing content.
+    // Never convert the cached rectangle again (mixed-DPI hosts), and never
+    // borrow an anchor from another owner window or a detached composition.
+    if(ownerWindow && ownerWindow_ && ownerWindow!=ownerWindow_)hasCaret_=false;
+    if(caret && CandidateOrientation::usableCaret(*caret)) {
+        const auto physical=candidatePhysicalCaret(*caret,ownerWindow);
+        if(CandidateOrientation::usableCaret(physical)) {
+            caret_=physical;hasCaret_=true;ownerWindow_=ownerWindow;
         }
-        layoutDeadline_=0;
-        if(window_)KillTimer(window_,4);
-        hideWindow();
-        return;
     }
-    layoutDeadline_=0;if(window_)KillTimer(window_,4);
-    caret_=candidatePhysicalCaret(*caret,ownerWindow);
-    hasCaret_=CandidateOrientation::usableCaret(caret_);
     if(!hasCaret_){hideWindow();return;}
-    ownerWindow_=ownerWindow;
     CandidateDpiScope dpiScope;
     if(!shown_) return;
     if(!window_) {
@@ -220,7 +211,6 @@ void CandidateUI::refreshReveal() {
     if(!window_)return;
     KillTimer(window_,1);
     if(!owner_ || !state_ || !shown_)return;
-    if(!hasCaret_ && layoutDeadline_)return;
     // Suppress a first-result placeholder, but preserve an existing frame
     // when auto-commit consumes all old candidates and leaves a pending suffix.
     // No timer or new pixels: completion drives the next update. Old hit targets
@@ -376,14 +366,6 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
             try{self->refreshReveal();}catch(...){self->stopAnimation();self->itemRects_.clear();if(self->window_ && self->retryCount_++<3)SetTimer(window,3,100,nullptr);}
             return 0;
         }
-        if(message==WM_TIMER && w==4) {
-            if(self->layoutDeadline_ && !self->hasCaret_) {
-                const auto now=GetTickCount64();
-                if(now<self->layoutDeadline_){SetTimer(window,4,static_cast<UINT>(self->layoutDeadline_-now),nullptr);return 0;}
-                self->layoutDeadline_=0;self->hideWindow();
-            }
-            KillTimer(window,4);return 0;
-        }
         if(message==WM_TIMER && w==1) {KillTimer(window,1);self->schedulePaint();return 0;}
         if(message==WM_TIMER && w==2) {self->animate();return 0;}
         if(message==WM_TIMER && w==3) {KillTimer(window,3);if(!self->refreshPending_)self->refreshPending_=PostMessageW(window,refreshMessage,0,0)!=FALSE;return 0;}
@@ -417,7 +399,7 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
         if(message==WM_NCDESTROY) {
             if(self->window_==window) {
                 ++self->visualRevision_;self->stopAnimation();self->window_=nullptr;
-                self->hasPresentedCandidates_=false;self->refreshPending_=false;self->layoutDeadline_=0;
+                self->hasPresentedCandidates_=false;self->refreshPending_=false;
                 self->itemRects_.clear();
             }
             SetWindowLongPtrW(window,GWLP_USERDATA,0);return DefWindowProcW(window,message,w,l);

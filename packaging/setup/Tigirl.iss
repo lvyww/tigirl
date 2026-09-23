@@ -1,4 +1,4 @@
-#ifndef PackageDir
+﻿#ifndef PackageDir
  #error PackageDir is required
 #endif
 #ifndef ProductVersion
@@ -59,6 +59,7 @@ Source: "{tmp}\payload\*"; DestDir: "{code:VersionDirectory}"; Flags: external r
 Source: "{#PackageDir}\setup\Tigirl.Maintenance.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
 ; Stable small uninstall backend: it does not depend on a retiring runtime directory.
 Source: "{#PackageDir}\common.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
+Source: "{#PackageDir}\legacy_identity.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
 Source: "{#PackageDir}\data.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
 Source: "{#PackageDir}\retirement.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
 Source: "{#PackageDir}\setup\deploy.ps1"; DestDir: "{app}\maintenance\setup"; Flags: ignoreversion uninsrestartdelete

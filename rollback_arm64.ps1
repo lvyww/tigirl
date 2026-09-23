@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'shortcut_arm64.ps1')
 $Snapshot = [IO.Path]::GetFullPath($Snapshot)
 $record = Get-Content -LiteralPath $Snapshot -Raw | ConvertFrom-Json
-$clsid = '{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
+$clsid = '{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 if ($record.clsid -ne $clsid) { throw 'Snapshot belongs to another input method.' }
 $dll = [IO.Path]::GetFullPath($record.dll)
 $root = "$env:ProgramFiles\Tigirl\"

@@ -85,7 +85,7 @@ try {
     if(!$NoEnable) {
         Write-InitializeLog 'Enabling input profile'
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class NativeTigerTip { [DllImport("input.dll", CharSet=CharSet.Unicode)] public static extern bool InstallLayoutOrTip(string profile, uint flags); }'
-        if(![NativeTigerTip]::InstallLayoutOrTip('0804:{D2291A80-84D8-4641-9AB2-BDD1472C846B}{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}',0)){throw 'Cannot enable input profile.'}
+        if(![NativeTigerTip]::InstallLayoutOrTip('0804:{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}{43201C7B-F615-469D-9D54-906D9270975E}',0)){throw 'Cannot enable input profile.'}
     }
     # Baseline and data share the same recovery journal; skipped entries retain their old baseline.
     Save-DataBaseline $plan $baselinePath

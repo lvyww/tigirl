@@ -6,7 +6,7 @@ if ($Arm64X -and !$PrivateBuild) { throw '-Arm64X requires -PrivateBuild' }
 if ($X64Host -and !$Arm64X) { throw '-X64Host requires -Arm64X' }
 $hostArchitecture = if ($X64Host) { 'x64' } else { 'ARM64' }
 $exe = Join-Path $build "tests\$hostArchitecture\tsf_host.exe"
-$registrationKey = 'Registry::HKEY_CLASSES_ROOT\CLSID\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\InprocServer32'
+$registrationKey = 'Registry::HKEY_CLASSES_ROOT\CLSID\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\InprocServer32'
 $registeredBefore = (Get-Item $registrationKey).GetValue('')
 $dll = $registeredBefore
 $manifest = $null

@@ -126,7 +126,7 @@ struct CandidateUIPresentationProbe {
             p.ui->update(nullptr,p.host,true);p.pump();
             require(p.state->candidateOrientation.above(),"NOLAYOUT reset direction");
             RECT invalid{};p.ui->update(&invalid,p.host);p.pump();
-            require(!IsWindowVisible(p.ui->window_) && p.state->candidateOrientation.above(),"Zero layout polluted memory or stayed visible");
+            require(IsWindowVisible(p.ui->window_) && p.state->candidateOrientation.above(),"Zero layout discarded retained position or direction");
             p.update();p.pump();p.above();++cases;
         }
         {

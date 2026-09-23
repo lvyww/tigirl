@@ -6,7 +6,7 @@ $dll = Join-Path $root 'build\ARM64\Release\Tigirl.dll'
 $helper = Join-Path $root 'build\ARM64\Release\Tigirl.Reminder.exe'
 $manifest = Join-Path (Split-Path $dll -Parent) 'NativeTiger.Test.manifest'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'NativeTiger.Test.manifest') -Destination $manifest -Force
-$registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\InprocServer32'
+$registration = 'Registry::HKEY_CLASSES_ROOT\CLSID\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\InprocServer32'
 $before = (Get-Item $registration).GetValue('')
 $temporary = Join-Path $root ('build\timer-host-exit-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporary | Out-Null

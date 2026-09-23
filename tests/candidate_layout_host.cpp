@@ -34,7 +34,7 @@ int wmain(int argc,wchar_t** argv) {
         require(module!=nullptr,"Cannot load staged DLL");
         auto getClass=reinterpret_cast<HRESULT(STDAPICALLTYPE*)(REFCLSID,REFIID,void**)>(GetProcAddress(module,"DllGetClassObject"));
         require(getClass!=nullptr,"Class factory export missing");
-        CLSID clsid; check(CLSIDFromString(L"{D2291A80-84D8-4641-9AB2-BDD1472C846B}",&clsid));
+        CLSID clsid; check(CLSIDFromString(L"{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}",&clsid));
         ComPtr<IClassFactory> factory; check(getClass(clsid,IID_PPV_ARGS(&factory)));
         ComPtr<ITfTextInputProcessorEx> service; check(factory->CreateInstance(nullptr,IID_PPV_ARGS(&service)));
         ComPtr<ITfThreadMgrEx> manager;
@@ -107,6 +107,36 @@ int wmain(int argc,wchar_t** argv) {
             require(flags==0,"Layout left spurious model change flags");
         }
         doc.store->layoutReady=true;
+        // Model a wrapped preedit whose insertion point has no rectangle while
+        // its final character is visible. Exercise the real range/edit session,
+        // native window and recovery, without registering a TIP or global keys.
+        ComPtr<ITfUIElement> nativeElement;check(list.As(&nativeElement));
+        check(nativeElement->Show(TRUE));
+        doc.store->emptyCaretBounds=true;
+        auto queries=doc.store->tailBoundsQueries;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
+        require(doc.store->tailBoundsQueries>queries && doc.store->lastExtentStart==static_cast<LONG>(code.size())-1 &&
+            doc.store->lastExtentEnd==static_cast<LONG>(code.size()),"Wrapped caret did not query only the final character");
+        require(ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),"Visible trailing character lost native candidates");
+        doc.store->emptyCaretNoLayout=true;
+        queries=doc.store->tailBoundsQueries;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
+        require(doc.store->tailBoundsQueries>queries && ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),
+            "No-layout insertion point lost a visible trailing character");
+        doc.store->emptyCaretNoLayout=false;
+        doc.store->tailBoundsClipped=true;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
+        require(ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),"Clipped range hid the last valid candidate position");
+        doc.store->tailBoundsClipped=false;
+        doc.store->tailBoundsUnavailable=true;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
+        require(ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),"Missing character geometry hid active candidates");
+        doc.store->emptyCaretBounds=false;doc.store->tailBoundsUnavailable=false;
+        queries=doc.store->tailBoundsQueries;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
+        require(ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),"Recovered caret did not restore native candidates");
+        require(doc.store->tailBoundsQueries==queries,"Valid caret unnecessarily used trailing-character fallback");
+        check(nativeElement->Show(FALSE));
         check(list->Finalize()); drainLayout();
         require(doc.store->text==expected && compositionCount(doc)==0,"Finalization committed the wrong candidate");
         require(ui->id==TF_INVALID_UIELEMENTID,"Finalization retained a candidate element");
@@ -134,7 +164,7 @@ int wmain(int argc,wchar_t** argv) {
         check(source->UnadviseSink(uiCookie)); check(manager->Deactivate());
         DestroyWindow(window);
         std::cout<<"{\"status\":\"passed\",\"layout_changes\":12,\"real_tsf_edit_sessions\":true,"
-            "\"custom_paging_preserved\":true,\"sixth_candidate_committed\":true,"
+            "\"wrapped_caret_recovery\":true,\"custom_paging_preserved\":true,\"sixth_candidate_committed\":true,"
             "\"content_update\":true,\"abort\":true,\"late_finalize\":true,"
             "\"keystroke_subscription_mocked\":true,\"physical_input_tested\":false,"
             "\"profile_registered\":false,\"model_required\":false}\n";

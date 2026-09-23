@@ -1,8 +1,10 @@
 ﻿# Embedded in Tigirl-Cleanup.bat by build_cleanup.py. Windows PowerShell 5.1.
 param([switch]$CheckOnly)
 $ErrorActionPreference='Stop'
-$clsid='{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
-$profile='{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
+$clsid='{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
+$profile='{43201C7B-F615-469D-9D54-906D9270975E}'
+# LEGACY_IDENTITY_HELPER
+if(!(Get-Command Remove-TigirlLegacyIdentity -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot '..\..\packaging\legacy_identity.ps1')}
 $script:failures=0;$script:pending=0
 function Note($s){Write-Host $s}
 function Failed($s){$script:failures++;Note "失败/需人工处理：$s"}
@@ -81,6 +83,7 @@ function Main {
         Note '将移除本机所有 Tigirl / NativeTiger 安装版本。完成后请重启，再安装新版。'
         if((Read-Host '输入 CLEAN 确认，直接回车取消') -cne 'CLEAN'){return 2}
     }
+    if(!$CheckOnly){try{Remove-TigirlLegacyIdentity}catch{Failed $_}}
     $roots=@()
     foreach($pf in @($env:ProgramW6432,$env:ProgramFiles,${env:ProgramFiles(x86)})|Where-Object {$_}|Select-Object -Unique){
         foreach($name in @('Tigirl','NativeTiger')){$roots+=Join-Path $pf $name}
@@ -136,7 +139,11 @@ public static class TigirlCleanupNative {
             if(!$CheckOnly -and !(Get-ChildItem -LiteralPath $dir -Force|Select-Object -First 1)){[IO.Directory]::Delete($dir)}
         }catch{Failed $_}
     }}}finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)}
-    foreach($root in $roots){try{RemoveTree $root}catch{Failed $_}}
+    $legacyPaths=@(Get-TigirlLegacyPaths)
+    foreach($root in $roots){
+        if(@($legacyPaths|Where-Object {$_.path.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){Failed "旧注册仍引用此目录，已保留：$root";continue}
+        try{RemoveTree $root}catch{Failed $_}
+    }
     Note '未登录账户的用户级缓存未加载；机器输入法注册已处理，用户数据始终保留。'
     if($CheckOnly){Note '仅检查完成，未执行清理。';return $(if($script:failures){1}else{0})}
     if($script:failures){Note "有 $script:failures 项未完成，请保留日志联系维护者。";return 1}

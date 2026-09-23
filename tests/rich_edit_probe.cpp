@@ -60,8 +60,8 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ITfInputProcessorProfileMgr> profiles;
         check(CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles)));
         CLSID clsid;GUID profile;
-        check(CLSIDFromString(L"{D2291A80-84D8-4641-9AB2-BDD1472C846B}",&clsid));
-        check(CLSIDFromString(L"{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}",&profile));
+        check(CLSIDFromString(L"{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}",&clsid));
+        check(CLSIDFromString(L"{43201C7B-F615-469D-9D54-906D9270975E}",&profile));
         check(profiles->ActivateProfile(TF_PROFILETYPE_INPUTPROCESSOR,0x0804,clsid,profile,nullptr,TF_IPPMF_FORPROCESS));
         ComPtr<ITfCompartmentMgr> compartments;check(manager.As(&compartments));
         ComPtr<ITfCompartment> open;check(compartments->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE,&open));

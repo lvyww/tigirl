@@ -21,7 +21,7 @@ def win(path):
     return subprocess.check_output(['wslpath', '-w', str(path)], text=True).strip()
 
 def registration():
-    script = "(Get-Item 'Registry::HKEY_CLASSES_ROOT\\CLSID\\{D2291A80-84D8-4641-9AB2-BDD1472C846B}\\InprocServer32').GetValue('')"
+    script = "(Get-Item 'Registry::HKEY_CLASSES_ROOT\\CLSID\\{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}\\InprocServer32').GetValue('')"
     return subprocess.check_output([PS, '-NoProfile', '-Command', script], text=True).strip()
 
 before = registration()

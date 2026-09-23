@@ -12,7 +12,7 @@ int wmain(int argc,wchar_t** argv) {
     HRESULT instanceResult=E_FAIL;
     if(module) {
         const auto getClass=reinterpret_cast<HRESULT(STDAPICALLTYPE*)(REFCLSID,REFIID,void**)>(GetProcAddress(module,"DllGetClassObject"));
-        CLSID clsid{};CLSIDFromString(L"{D2291A80-84D8-4641-9AB2-BDD1472C846B}",&clsid);
+        CLSID clsid{};CLSIDFromString(L"{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}",&clsid);
         IClassFactory* factory=nullptr;
         if(getClass && SUCCEEDED(instanceResult=getClass(clsid,IID_IClassFactory,reinterpret_cast<void**>(&factory)))) {
             ITfTextInputProcessorEx* service=nullptr;

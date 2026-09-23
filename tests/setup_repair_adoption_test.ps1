@@ -7,12 +7,14 @@ if($errors){throw $errors}
 foreach($fn in $ast.FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst]},$false)){Invoke-Expression $fn.Extent.Text}
 . "$PSScriptRoot\..\packaging\data.ps1"
 $InstallRoot=Join-Path $env:TEMP ('Tigirl-repair-adoption-'+[guid]::NewGuid().ToString('N'))
+$NativeTigerClsid='{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 $NativeTigerRecord=Join-Path $InstallRoot 'install.json'
 $log=Join-Path $InstallRoot 'repair.log'
 $dir=Join-Path $InstallRoot 'versions\1111111111111111'
 $other=Join-Path $InstallRoot 'versions\2222222222222222'
 New-Item "$dir\x64","$dir\x86","$other\x64","$other\x86" -ItemType Directory -Force|Out-Null
 foreach($root in @($dir,$other)){
+ [IO.File]::WriteAllText((Join-Path $root 'common.ps1'),$NativeTigerClsid)
  [IO.File]::WriteAllText((Join-Path $root 'x64\Tigirl.dll'),'fixture')
  [IO.File]::WriteAllText((Join-Path $root 'x86\Tigirl.dll'),'fixture')
  @{version='2026.9.12.1';files=@()}|ConvertTo-Json|Set-Content (Join-Path $root 'manifest.json') -Encoding UTF8

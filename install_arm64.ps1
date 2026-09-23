@@ -1,6 +1,7 @@
 ﻿param([switch]$Elevated, [switch]$CheckOnly, [switch]$Arm64X)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'shortcut_arm64.ps1')
+. (Join-Path $PSScriptRoot 'packaging\legacy_identity.ps1')
 . (Join-Path $PSScriptRoot 'sentence_package.ps1')
 . (Join-Path $PSScriptRoot 'appcontainer_data.ps1')
 Assert-NativeTigerShortcutAvailable ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\Tigirl"
@@ -31,8 +32,8 @@ try {
     }
     $source = if ($Arm64X) { "$PSScriptRoot\build\ARM64X\ARM64EC\Release" } else { "$PSScriptRoot\build\ARM64\Release" }
     $architecture = if ($Arm64X) { 'ARM64X' } else { 'ARM64' }
-    $clsid = '{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
-    $profile = '{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}'
+    $clsid = '{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
+    $profile = '{43201C7B-F615-469D-9D54-906D9270975E}'
     $tip = "0804:$clsid$profile"
     $fontFolder = [string][char]0x5b57 + [char]0x4f53
     $fontRoot = Join-Path $source $fontFolder
@@ -134,6 +135,7 @@ public static class SampleImeInstall {
     foreach ($file in $artifacts) {
         if ((Get-FileHash -LiteralPath "$destination\$file").Hash -ne $hashes[$file]) { throw "Installed hash mismatch: $file" }
     }
+    Remove-TigirlLegacyIdentity $PSScriptRoot
     $shortcut = Set-NativeTigerShortcut ([Environment]::GetFolderPath('CommonPrograms')) "$env:ProgramFiles\Tigirl" (Join-Path $destination 'Tigirl.exe')
     @{ dll = $dll; generation = $generation; dll_hash = (Get-FileHash $dll).Hash;
        dictionary_hash = (Get-FileHash "$destination\tiger-v2.tcd").Hash; package_hash = $packageHash; artifacts = $hashes; tip = $tip; manager_shortcut = $shortcut; architecture = $architecture; load_checks = $loadChecks; installed_load_checks = $installedLoadChecks } |

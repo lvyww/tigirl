@@ -69,8 +69,12 @@ service. Focus changes refresh user data and reset transient modifier state.
 The candidate object implements `ITfCandidateListUIElementBehavior` for hosts
 that suppress the native window. Otherwise it renders a nonactivating popup and
 commits mouse selections through a revision-checked edit session. Model refresh
-does not depend on layout availability: absent geometry hides the popup while
-keeping UI-less candidate data current; a layout notification retries placement.
+does not depend on layout availability: missing geometry retains the last valid physical caret for the current
+composition/owner, while continuing to render new candidates. There is no layout
+timeout. If no valid caret has ever been obtained, the popup stays hidden; a
+layout notification retries placement. Explicit host hiding, focus loss and
+composition termination still hide/detach it. This lets wrapped Word preedits
+remain usable even when both the insertion point and final-character queries fail.
 Windows explicitly permits a missing-layout result from
 [GetTextExt](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextview-gettextext).
 Read/write session constraints are documented under

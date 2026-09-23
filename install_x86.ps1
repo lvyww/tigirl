@@ -2,7 +2,7 @@ param([switch]$CheckOnly, [switch]$Elevated)
 $ErrorActionPreference = 'Stop'
 # Supplemental x86 in-process server. The ARM64X installation remains primary.
 $record = Get-Content -Raw "$PSScriptRoot\build\native-install.json" | ConvertFrom-Json
-$clsid = '{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
+$clsid = '{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 $key = "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32"
 if ((Get-Item $key).GetValue('') -ne $record.dll) { throw 'Primary installation record is stale.' }
 $primary = Split-Path $record.dll -Parent

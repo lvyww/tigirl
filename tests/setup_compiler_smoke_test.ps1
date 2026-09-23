@@ -9,7 +9,7 @@ $payload=Join-Path $fixture 'payload';$output=Join-Path $fixture 'output'
 New-Item "$payload\setup",$output -ItemType Directory -Force|Out-Null
 try{
  # Compile the REAL installer source against small dummy files; never run it.
- foreach($name in @('common.ps1','data.ps1','retirement.ps1')){Copy-Item (Join-Path $repo "packaging\$name") $payload}
+ foreach($name in @('common.ps1','legacy_identity.ps1','data.ps1','retirement.ps1')){Copy-Item (Join-Path $repo "packaging\$name") $payload}
  Copy-Item (Join-Path $repo 'packaging\setup\deploy.ps1') "$payload\setup"
  Copy-Item (Join-Path $repo 'assets\Tigirl.ico') $payload
  [IO.File]::WriteAllText("$payload\setup\Tigirl.Maintenance.exe",'compile-only fixture')

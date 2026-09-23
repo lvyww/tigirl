@@ -557,11 +557,30 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
     }
     if(view) {
         if(context->composition && SUCCEEDED(context->composition->GetRange(&range))) {
+            BOOL empty=TRUE;
+            const bool hasText=SUCCEEDED(range->IsEmpty(cookie,&empty)) && !empty;
             if(SUCCEEDED(range->Collapse(cookie,TF_ANCHOR_END))) {
                 const auto layout=view->GetTextExt(cookie,range.Get(),&caret,&clipped);
                 if(tracing)geometry.textResult=layout;
-                hasCaret=SUCCEEDED(layout) && caret.bottom>caret.top;
+                hasCaret=SUCCEEDED(layout) && CandidateOrientation::usableCaret(caret);
                 layoutPending=layout==TS_E_NOLAYOUT;
+                // Some hosts cannot lay out a zero-length range at a wrapped
+                // preedit end. Query only its last character, never the bounding
+                // box of the whole multi-line composition. Keep the same host
+                // DPI scope and use the trailing edge of this visible character.
+                // Our embedded encoding is LTR; do not cross an empty composition.
+                if(!hasCaret && hasText && (SUCCEEDED(layout) || layoutPending)) {
+                    LONG shifted=0;
+                    if(SUCCEEDED(range->ShiftStart(cookie,-1,&shifted,nullptr)) && shifted==-1) {
+                        RECT tail{};BOOL tailClipped=FALSE;
+                        const auto tailResult=view->GetTextExt(cookie,range.Get(),&tail,&tailClipped);
+                        if(tracing){geometry.tailResult=tailResult;geometry.tail=tail;geometry.tailClipped=tailClipped!=FALSE;}
+                        if(SUCCEEDED(tailResult) && !tailClipped && CandidateOrientation::usableCaret(tail)) {
+                            caret={tail.right,tail.top,tail.right,tail.bottom};clipped=FALSE;
+                            hasCaret=true;layoutPending=false;
+                        } else layoutPending=layoutPending || tailResult==TS_E_NOLAYOUT;
+                    }
+                }
             }
         }
     }

@@ -16,10 +16,10 @@ public:
         std::uint64_t sequence=0,tick=0,owner=0,caretWindow=0;
         int callerAwareness=-1,queryAwareness=-1,ownerAwareness=-1,caretAwareness=-1;
         unsigned ownerDpi=0,caretDpi=0;
-        long textResult=E_FAIL;
-        bool clipped=false,guiValid=false;
+        long textResult=E_FAIL,tailResult=E_FAIL;
+        bool clipped=false,guiValid=false,tailClipped=false;
         const char* reason="unknown";
-        RECT reported{},converted{},ownerLogical{},ownerPhysical{},guiClient{},guiScreen{},guiPhysical{};
+        RECT tail{},reported{},converted{},ownerLogical{},ownerPhysical{},guiClient{},guiScreen{},guiPhysical{};
     };
     struct Record {
         std::uint64_t tick=0,model=0,visual=0,content=0;
@@ -66,11 +66,11 @@ public:
         try {
             std::filesystem::create_directories(directory_);
             std::ofstream geometryLog(directory_/L"geometry.tsv");
-            geometryLog<<"sequence\ttick\treason\towner\tcaret_window\tcaller_awareness\tquery_awareness\towner_awareness\tcaret_awareness\towner_dpi\tcaret_dpi\ttext_hresult\tclipped\tgui_valid\treported\tconverted\towner_logical\towner_physical\tgui_client\tgui_screen\tgui_physical\n";
+            geometryLog<<"sequence\ttick\treason\towner\tcaret_window\tcaller_awareness\tquery_awareness\towner_awareness\tcaret_awareness\towner_dpi\tcaret_dpi\ttext_hresult\tclipped\tgui_valid\treported\tconverted\towner_logical\towner_physical\tgui_client\tgui_screen\tgui_physical\ttail_hresult\ttail_clipped\ttail_rect\n";
             auto rect=[&](const RECT& r){geometryLog<<'\t'<<r.left<<','<<r.top<<','<<r.right<<','<<r.bottom;};
             for(const auto& g:geometries_){
                 geometryLog<<g.sequence<<'\t'<<g.tick<<'\t'<<g.reason<<'\t'<<g.owner<<'\t'<<g.caretWindow<<'\t'<<g.callerAwareness<<'\t'<<g.queryAwareness<<'\t'<<g.ownerAwareness<<'\t'<<g.caretAwareness<<'\t'<<g.ownerDpi<<'\t'<<g.caretDpi<<'\t'<<g.textResult<<'\t'<<g.clipped<<'\t'<<g.guiValid;
-                rect(g.reported);rect(g.converted);rect(g.ownerLogical);rect(g.ownerPhysical);rect(g.guiClient);rect(g.guiScreen);rect(g.guiPhysical);geometryLog<<'\n';
+                rect(g.reported);rect(g.converted);rect(g.ownerLogical);rect(g.ownerPhysical);rect(g.guiClient);rect(g.guiScreen);rect(g.guiPhysical);geometryLog<<'\t'<<g.tailResult<<'\t'<<g.tailClipped;rect(g.tail);geometryLog<<'\n';
             }
             geometryLog.flush();if(!geometryLog)throw std::runtime_error("geometry trace write failed");
             std::ofstream log(directory_/L"frames.tsv");

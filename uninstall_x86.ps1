@@ -1,7 +1,7 @@
 param([switch]$CheckOnly, [switch]$Elevated)
 $ErrorActionPreference = 'Stop'
 $record = Get-Content -Raw "$PSScriptRoot\build\native-install-x86.json" | ConvertFrom-Json
-$clsid = '{D2291A80-84D8-4641-9AB2-BDD1472C846B}'
+$clsid = '{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::ClassesRoot,[Microsoft.Win32.RegistryView]::Registry32)
 $subkey = "CLSID\$clsid"
 $key = $base.OpenSubKey("$subkey\InprocServer32")

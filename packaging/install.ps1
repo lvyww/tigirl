@@ -44,6 +44,8 @@ try {
         else{Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file.path) -Destination $target}
     }
     Assert-Package $destination|Out-Null
+    $rollbackPrevious=$previous
+    if($previous -and !(Select-String -LiteralPath (Join-Path $previous.directory 'common.ps1') -SimpleMatch $NativeTigerClsid -Quiet)){$rollbackPrevious=$null}
     $registrationStarted=$false
     try {
         $registrationStarted=$true
@@ -55,11 +57,12 @@ try {
         if(Test-Path -LiteralPath $NativeTigerRecord){[IO.File]::Replace($temporary,$NativeTigerRecord,[NullString]::Value)}else{[IO.File]::Move($temporary,$NativeTigerRecord)}
     }catch {
         if($registrationStarted){
-            if($previous){Invoke-Registration $previous.directory;Set-MachineEntries $previous.directory $previous.version}
+            if($rollbackPrevious){Invoke-Registration $rollbackPrevious.directory;Set-MachineEntries $rollbackPrevious.directory $rollbackPrevious.version}
             else{Invoke-Registration $destination -Remove;Remove-MachineEntries}
         }
         throw
     }
+    try{Remove-TigirlLegacyIdentity}catch{Write-Warning $_}
     # -Elevated is the machine-only child. An explicitly elevated launch
     # initializes that account; ordinary double-click preserves the user above.
     if(!$Elevated){[void](Initialize-InstalledUser $destination);exit 0}

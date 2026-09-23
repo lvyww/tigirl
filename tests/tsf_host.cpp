@@ -167,6 +167,8 @@ public:
     }
     unsigned compositionStarts=0,compositionEnds=0;
     bool layoutReady=true;
+    bool emptyCaretBounds=false,emptyCaretNoLayout=false,tailBoundsUnavailable=false,tailBoundsClipped=false;
+    unsigned tailBoundsQueries=0;LONG lastExtentStart=0,lastExtentEnd=0;
     HWND window;
     ComPtr<ITextStoreACPSink> sink;
     explicit TextStore(HWND w):window(w) {}
@@ -301,11 +303,15 @@ public:
     STDMETHODIMP GetEndACP(LONG* end) override { if(!lock) return TS_E_NOLOCK; *end=static_cast<LONG>(text.size()); return S_OK; }
     STDMETHODIMP GetActiveView(TsViewCookie* view) override { *view=1; return S_OK; }
     STDMETHODIMP GetACPFromPoint(TsViewCookie,const POINT*,DWORD,LONG* value) override { *value=selection.acpEnd; return S_OK; }
-    STDMETHODIMP GetTextExt(TsViewCookie,LONG,LONG,RECT* rect,BOOL* clipped) override {
+    STDMETHODIMP GetTextExt(TsViewCookie,LONG start,LONG end,RECT* rect,BOOL* clipped) override {
         if(GetEnvironmentVariableW(L"NATIVE_TIGER_TEST_TRACE",nullptr,0)!=0)
             std::cerr<<"text-ext ready="<<layoutReady<<" lock="<<lock<<"\n";
         if(!layoutReady) return TS_E_NOLAYOUT;
-        *rect={100,100,102,125}; *clipped=FALSE; return S_OK;
+        lastExtentStart=start;lastExtentEnd=end;
+        if(start!=end)++tailBoundsQueries;
+        if(start==end && emptyCaretNoLayout)return TS_E_NOLAYOUT;
+        if(emptyCaretBounds && (start==end || tailBoundsUnavailable)) {*rect={};*clipped=FALSE;return S_OK;}
+        *rect={100,100,102,125}; *clipped=start!=end && tailBoundsClipped; return S_OK;
     }
     STDMETHODIMP GetScreenExt(TsViewCookie,RECT* rect) override { *rect={100,100,700,600}; return S_OK; }
     STDMETHODIMP GetWnd(TsViewCookie,HWND* value) override { *value=window; return S_OK; }
@@ -598,13 +604,13 @@ int wmain(int argc,wchar_t** argv) {
         auto module=LoadLibraryW(argv[1]); require(module!=nullptr,"Cannot load native TSF DLL");
         auto getClass=reinterpret_cast<HRESULT(STDAPICALLTYPE*)(REFCLSID,REFIID,void**)>(GetProcAddress(module,"DllGetClassObject"));
         require(getClass!=nullptr,"No class factory export");
-        CLSID clsid; check(CLSIDFromString(L"{D2291A80-84D8-4641-9AB2-BDD1472C846B}",&clsid));
+        CLSID clsid; check(CLSIDFromString(L"{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}",&clsid));
         ComPtr<IClassFactory> factory; check(getClass(clsid,IID_PPV_ARGS(&factory)));
         ComPtr<ITfTextInputProcessorEx> service; check(factory->CreateInstance(nullptr,IID_PPV_ARGS(&service)));
         ComPtr<ITfThreadMgrEx> manager;
         check(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&manager)));
         service.Reset(); // System activation below creates the actual TIP instance.
-        GUID profile; check(CLSIDFromString(L"{83955C0E-2C09-47A5-BCF3-F2B98E11EE8B}",&profile));
+        GUID profile; check(CLSIDFromString(L"{43201C7B-F615-469D-9D54-906D9270975E}",&profile));
         ComPtr<ITfInputProcessorProfileMgr> profiles;
         check(CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles)));
         TfClientId client; check(manager->ActivateEx(&client,TF_TMAE_NOACTIVATEKEYBOARDLAYOUT));
@@ -1546,7 +1552,7 @@ int wmain(int argc,wchar_t** argv) {
             const auto until=GetTickCount64()+160;
             do{pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,10,QS_ALLINPUT);}while(GetTickCount64()<until);
             HWND candidateWindow=ownCandidateWindow();
-            require(!candidateWindow || !IsWindowVisible(candidateWindow),"Stale candidate geometry visible past layout deadline");
+            require(candidateWindow && IsWindowVisible(candidateWindow),"Layout loss hid candidates with a valid previous anchor");
         }
         first.store->layoutReady=true;
         check(first.store->sink->OnLayoutChange(TS_LC_CHANGE,1)); pump();

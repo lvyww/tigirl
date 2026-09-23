@@ -1,4 +1,4 @@
-# Machine-only transaction coordinator. Installed by Inno; never accepts user data paths.
+﻿# Machine-only transaction coordinator. Installed by Inno; never accepts user data paths.
 param([Parameter(Mandatory)][ValidateSet('Preflight','Begin','Apply','Commit','Recover','UninstallCheck','Uninstall')][string]$Action,
  [Parameter(Mandatory)][string]$InstallRoot,[string]$Generation,[string]$Payload)
 $ErrorActionPreference='Stop'
@@ -110,6 +110,9 @@ function Resolve-OwnedRecord {
 }
 function Test-RollbackableRecord($Record){
  if(!$Record){return $false}
+ # Old-identity DLLs cannot restore the new registration during rollback.
+ $common=Join-Path $Record.directory 'common.ps1'
+ if(!(Test-Path $common) -or !(Select-String -LiteralPath $common -SimpleMatch $NativeTigerClsid -Quiet)){return $false}
  try{Assert-VersionPath $Record.directory}catch{return $false}
  return (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'x64') -PathType Leaf) -and (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'x86') -PathType Leaf)
 }
@@ -247,6 +250,7 @@ try {
   Save-Json $next $NativeTigerRecord
   try{Set-GuiEntries ([pscustomobject]$next)}catch{Write-SetupLog ('Committed; GUI metadata needs repair: '+$_.Exception.Message)}
   try{Move-Item $journal (Join-Path $InstallRoot ('committed-'+$j.id+'.json')) -Force}catch{Write-SetupLog ('Committed; journal archive needs repair: '+$_.Exception.Message)}
+  try{Remove-TigirlLegacyIdentity}catch{Write-SetupLog ('Legacy identity retained: '+$_.Exception.Message)}
   try{Invoke-RetiredVersionCleanup $j.directory}catch{Write-SetupLog ('Committed; cleanup needs retry: '+$_.Exception.Message)}
   if($script:restart){exit 3010}
  }elseif($Action -in @('UninstallCheck','Uninstall')){

@@ -1,4 +1,4 @@
-# Managed version retirement. Function definitions only; loaded by deploy.ps1.
+﻿# Managed version retirement. Function definitions only; loaded by deploy.ps1.
 function Get-RetirementPath([string]$Directory){
  Assert-VersionPath $Directory
  return Join-Path $InstallRoot ('retired\'+(Split-Path $Directory -Leaf)+'.json')
@@ -40,6 +40,11 @@ function Preserve-ChangedPackageFile([string]$Directory,[string]$Relative,[strin
 }
 function Remove-Version([string]$Directory,[switch]$KeepControlFiles,[switch]$AtReboot){
  Assert-VersionPath $Directory
+ if(Get-Command Get-TigirlLegacyPaths -ErrorAction SilentlyContinue){
+  if(@(Get-TigirlLegacyPaths|Where-Object {$_.path.StartsWith($Directory+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){
+   Write-SetupLog "Retaining directory referenced by legacy registration: $Directory";return
+  }
+ }
  $saved=Get-RetirementPath $Directory
  if(!(Test-Path -LiteralPath $Directory)){
   if(Test-Path -LiteralPath $saved){Remove-Item -LiteralPath $saved -Force}
@@ -53,7 +58,7 @@ function Remove-Version([string]$Directory,[switch]$KeepControlFiles,[switch]$At
  }
  foreach($entry in Get-CleanupFiles $m){
   $relative=$entry.path
-  if($KeepControlFiles -and $relative -in @('common.ps1','data.ps1','retirement.ps1','setup\deploy.ps1')){continue}
+  if($KeepControlFiles -and $relative -in @('common.ps1','legacy_identity.ps1','data.ps1','retirement.ps1','setup\deploy.ps1')){continue}
   $file=Join-Path $Directory $relative
   if(!(Test-Path -LiteralPath $file -PathType Leaf)){continue}
   if($entry.sha256 -notmatch '^[a-fA-F0-9]{64}$'){Write-SetupLog "Retaining file without a trusted hash: $file";continue}

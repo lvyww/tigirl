@@ -22,128 +22,63 @@ HFONT defaultlFontHandle;				// Global font object we use everywhere
 //---------------------------------------------------------------------
 // SampleIME CLSID
 //---------------------------------------------------------------------
-// {D2291A80-84D8-4641-9AB2-BDD1472C846B}
-extern const CLSID SampleIMECLSID = { 
-    0xd2291a80,
-    0x84d8,
-    0x4641,
-    { 0x9a, 0xb2, 0xbd, 0xd1, 0x47, 0x2c, 0x84, 0x6b }
-};
+// {69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}
+extern const CLSID SampleIMECLSID = { 0x69cb1b2f, 0xcde7, 0x43a2, { 0x96, 0xc9, 0xeb, 0xf6, 0x42, 0xe7, 0x80, 0xeb } };
 
 //---------------------------------------------------------------------
 // Profile GUID
 //---------------------------------------------------------------------
-// {83955C0E-2C09-47a5-BCF3-F2B98E11EE8B}
-extern const GUID SampleIMEGuidProfile = { 
-    0x83955c0e,
-    0x2c09,
-    0x47a5,
-    { 0xbc, 0xf3, 0xf2, 0xb9, 0x8e, 0x11, 0xee, 0x8b }
-};
+// {43201C7B-F615-469D-9D54-906D9270975E}
+extern const GUID SampleIMEGuidProfile = { 0x43201c7b, 0xf615, 0x469d, { 0x9d, 0x54, 0x90, 0x6d, 0x92, 0x70, 0x97, 0x5e } };
 
 //---------------------------------------------------------------------
 // PreserveKey GUID
 //---------------------------------------------------------------------
-// {4B62B54B-F828-43B5-9095-A96DF9CBDF38}
-extern const GUID SampleIMEGuidImeModePreserveKey = {
-    0x4b62b54b, 
-    0xf828, 
-    0x43b5, 
-    { 0x90, 0x95, 0xa9, 0x6d, 0xf9, 0xcb, 0xdf, 0x38 } 
-};
+// {6753B834-77A3-463C-B637-A8FFB5639A95}
+extern const GUID SampleIMEGuidImeModePreserveKey = { 0x6753b834, 0x77a3, 0x463c, { 0xb6, 0x37, 0xa8, 0xff, 0xb5, 0x63, 0x9a, 0x95 } };
 
-// {5A08D6C4-4563-4E46-8DDB-65E75C4E73A3}
-extern const GUID SampleIMEGuidDoubleSingleBytePreserveKey = {
-    0x5a08d6c4, 
-    0x4563, 
-    0x4e46, 
-    { 0x8d, 0xdb, 0x65, 0xe7, 0x5c, 0x4e, 0x73, 0xa3 } 
-};
+// {C52E5D1F-4E3D-4521-BF4E-341FA916D1AF}
+extern const GUID SampleIMEGuidDoubleSingleBytePreserveKey = { 0xc52e5d1f, 0x4e3d, 0x4521, { 0xbf, 0x4e, 0x34, 0x1f, 0xa9, 0x16, 0xd1, 0xaf } };
 
-// {175F062E-B961-4AED-A3DF-59F78A02862D}
-extern const GUID SampleIMEGuidPunctuationPreserveKey = {
-    0x175f062e, 
-    0xb961, 
-    0x4aed, 
-    { 0xa3, 0xdf, 0x59, 0xf7, 0x8a, 0x2, 0x86, 0x2d } 
-};
+// {186486F9-29AB-4541-BE71-86162E3CC0DA}
+extern const GUID SampleIMEGuidPunctuationPreserveKey = { 0x186486f9, 0x29ab, 0x4541, { 0xbe, 0x71, 0x86, 0x16, 0x2e, 0x3c, 0xc0, 0xda } };
 
 //---------------------------------------------------------------------
 // Compartments
 //---------------------------------------------------------------------
-// {101011C5-CF72-4F0C-A515-153019593F10}
-extern const GUID SampleIMEGuidCompartmentDoubleSingleByte = {
-    0x101011c5,
-    0xcf72,
-    0x4f0c,
-    { 0xa5, 0x15, 0x15, 0x30, 0x19, 0x59, 0x3f, 0x10 }
-};
+// {69546232-818C-45FD-AC39-C3D304EB763D}
+extern const GUID SampleIMEGuidCompartmentDoubleSingleByte = { 0x69546232, 0x818c, 0x45fd, { 0xac, 0x39, 0xc3, 0xd3, 0x04, 0xeb, 0x76, 0x3d } };
 
-// {DD321BCC-A7F8-4561-9B61-9B3508C9BA97}
-extern const GUID SampleIMEGuidCompartmentPunctuation = {
-    0xdd321bcc,
-    0xa7f8,
-    0x4561,
-    { 0x9b, 0x61, 0x9b, 0x35, 0x8, 0xc9, 0xba, 0x97 }
-};
+// {4978CDAF-1107-400D-9B7D-6E597C6B6FAB}
+extern const GUID SampleIMEGuidCompartmentPunctuation = { 0x4978cdaf, 0x1107, 0x400d, { 0x9b, 0x7d, 0x6e, 0x59, 0x7c, 0x6b, 0x6f, 0xab } };
 
 
 //---------------------------------------------------------------------
 // LanguageBars
 //---------------------------------------------------------------------
 
-// {89BE500C-9462-4070-9DB0-B467BB051327}
-extern const GUID SampleIMEGuidLangBarIMEMode = {
-    0x89be500c,
-    0x9462,
-    0x4070,
-    { 0x9d, 0xb0, 0xb4, 0x67, 0xbb, 0x5, 0x13, 0x27 }
-};
+// {A10AADD5-C388-45FF-B7A5-C9D804870998}
+extern const GUID SampleIMEGuidLangBarIMEMode = { 0xa10aadd5, 0xc388, 0x45ff, { 0xb7, 0xa5, 0xc9, 0xd8, 0x04, 0x87, 0x09, 0x98 } };
 
-// {6A11D9DE-46DB-455B-A257-2EB615746BF4}
-extern const GUID SampleIMEGuidLangBarDoubleSingleByte = {
-    0x6a11d9de,
-    0x46db,
-    0x455b,
-    { 0xa2, 0x57, 0x2e, 0xb6, 0x15, 0x74, 0x6b, 0xf4 }
-};
+// {00B8250F-C55A-4028-BA82-2F4C19019100}
+extern const GUID SampleIMEGuidLangBarDoubleSingleByte = { 0x00b8250f, 0xc55a, 0x4028, { 0xba, 0x82, 0x2f, 0x4c, 0x19, 0x01, 0x91, 0x00 } };
 
-// {F29C731A-A51E-49FB-8A3C-EE51752912E2}
-extern const GUID SampleIMEGuidLangBarPunctuation = {
-    0xf29c731a,
-    0xa51e,
-    0x49fb,
-    { 0x8a, 0x3c, 0xee, 0x51, 0x75, 0x29, 0x12, 0xe2 }
-};
+// {394E74E2-AA2A-4251-B3A0-F3F1D8DDDCD2}
+extern const GUID SampleIMEGuidLangBarPunctuation = { 0x394e74e2, 0xaa2a, 0x4251, { 0xb3, 0xa0, 0xf3, 0xf1, 0xd8, 0xdd, 0xdc, 0xd2 } };
 
-// {4C802E2C-8140-4436-A5E5-F7C544EBC9CD}
-extern const GUID SampleIMEGuidDisplayAttributeInput = {
-    0x4c802e2c,
-    0x8140,
-    0x4436,
-    { 0xa5, 0xe5, 0xf7, 0xc5, 0x44, 0xeb, 0xc9, 0xcd }
-};
+// {CAAC5393-8DD7-408B-B009-24712970F13B}
+extern const GUID SampleIMEGuidDisplayAttributeInput = { 0xcaac5393, 0x8dd7, 0x408b, { 0xb0, 0x09, 0x24, 0x71, 0x29, 0x70, 0xf1, 0x3b } };
 
-// {9A1CC683-F2A7-4701-9C6E-2DA69A5CD474}
-extern const GUID SampleIMEGuidDisplayAttributeConverted = {
-    0x9a1cc683,
-    0xf2a7,
-    0x4701,
-    { 0x9c, 0x6e, 0x2d, 0xa6, 0x9a, 0x5c, 0xd4, 0x74 }
-};
+// {EAD9C853-F626-4C47-9E42-CB86FDF10A90}
+extern const GUID SampleIMEGuidDisplayAttributeConverted = { 0xead9c853, 0xf626, 0x4c47, { 0x9e, 0x42, 0xcb, 0x86, 0xfd, 0xf1, 0x0a, 0x90 } };
 
 
 //---------------------------------------------------------------------
 // UI element
 //---------------------------------------------------------------------
 
-// {84B0749F-8DE7-4732-907A-3BCB150A01A8}
-extern const GUID SampleIMEGuidCandUIElement = {
-    0x84b0749f,
-    0x8de7,
-    0x4732,
-    { 0x90, 0x7a, 0x3b, 0xcb, 0x15, 0xa, 0x1, 0xa8 }
-};
+// {7AE3CCBE-5A9A-4481-AA04-C8C8EA14655B}
+extern const GUID SampleIMEGuidCandUIElement = { 0x7ae3ccbe, 0x5a9a, 0x4481, { 0xaa, 0x04, 0xc8, 0xc8, 0xea, 0x14, 0x65, 0x5b } };
 
 //---------------------------------------------------------------------
 // Unicode byte order mark
@@ -181,13 +116,13 @@ extern const WCHAR LangbarPunctuationDescription[] = L"Punctuation";
 //---------------------------------------------------------------------
 // windows class / titile / atom
 //---------------------------------------------------------------------
-extern const WCHAR CandidateClassName[] = L"SampleIME.CandidateWindow";
+extern const WCHAR CandidateClassName[] = L"Tigirl.CandidateWindow";
 ATOM AtomCandidateWindow;
 
-extern const WCHAR ShadowClassName[] = L"SampleIME.ShadowWindow";
+extern const WCHAR ShadowClassName[] = L"Tigirl.ShadowWindow";
 ATOM AtomShadowWindow;
 
-extern const WCHAR ScrollBarClassName[] = L"SampleIME.ScrollBarWindow";
+extern const WCHAR ScrollBarClassName[] = L"Tigirl.ScrollBarWindow";
 ATOM AtomScrollBarWindow;
 
 BOOL RegisterWindowClass()
@@ -219,7 +154,7 @@ extern const WCHAR FullWidthCharTable[] = {
     0xFF20, 0xFF21, 0xFF22, 0xFF23, 0xFF24, 0xFF25, 0xFF26, 0xFF27, 0xFF28, 0xFF29, 0xFF2A, 0xFF2B, 0xFF2C, 0xFF2D, 0xFF2E, 0xFF2F,
     // P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
     0xFF30, 0xFF31, 0xFF32, 0xFF33, 0xFF34, 0xFF35, 0xFF36, 0xFF37, 0xFF38, 0xFF39, 0xFF3A, 0xFF3B, 0xFF3C, 0xFF3D, 0xFF3E, 0xFF3F,
-    // '       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o       
+    // '       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
     0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF46, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B, 0xFF4C, 0xFF4D, 0xFF4E, 0xFF4F,
     // p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~
     0xFF50, 0xFF51, 0xFF52, 0xFF53, 0xFF54, 0xFF55, 0xFF56, 0xFF57, 0xFF58, 0xFF59, 0xFF5A, 0xFF5B, 0xFF5C, 0xFF5D, 0xFF5E
@@ -365,7 +300,7 @@ BOOL UpdateModifiers(WPARAM wParam, LPARAM lParam)
 
     case VK_CONTROL:
         // is VK_CONTROL down?
-        if (sksCtrl & 0x8000)    
+        if (sksCtrl & 0x8000)
         {
             // is extended key?
             if (lParam & 0x01000000)
@@ -397,7 +332,7 @@ BOOL UpdateModifiers(WPARAM wParam, LPARAM lParam)
 
     case VK_SHIFT:
         // is VK_SHIFT down?
-        if (sksShft & 0x8000)    
+        if (sksShft & 0x8000)
         {
             // is scan code 0x36(right shift)?
             if (((lParam >> 16) & 0x00ff) == 0x36)
