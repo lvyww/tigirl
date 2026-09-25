@@ -81,6 +81,7 @@ struct SentenceDecodeResult {
     int expandedStates=0;
     bool learningAffected=false;
     std::u16string learningMode;
+    std::shared_ptr<const SentenceLearningSnapshot> learningSnapshot;
     SentenceEarlyCommitEvidence earlyCommitEvidence;
 };
 struct SentenceDecoderOptions {

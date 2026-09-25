@@ -730,7 +730,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         });
     }
     applyFusionOrdering(raw,result.candidates);
-    result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;
+    result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;result.learningSnapshot=learning_;
     result.earlyCommitEvidence.confidenceTruncated=completed.truncated;
     if(includeEarlyCommitEvidence && (!completed.truncated || options_.preserveTruncatedEarlyCommitEvidence)) {
         auto& evidence=result.earlyCommitEvidence;

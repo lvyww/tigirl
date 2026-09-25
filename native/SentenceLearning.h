@@ -207,6 +207,69 @@ public:
     }
 };
 
+inline std::vector<SentenceLearningEvent> sentenceLearningReinforceExisting(
+    std::u16string_view raw,std::u16string_view before,std::u16string_view selected,
+    const std::vector<SentenceLearningBoundary>& a,const std::vector<SentenceLearningBoundary>& b,
+    int floorRaw,std::u16string_view mode,const std::shared_ptr<const SentenceLearningSnapshot>& snapshot) {
+    std::vector<SentenceLearningEvent> result;
+    if(!snapshot || snapshot->empty() || mode.empty() || before==selected || a.empty() || b.empty())return result;
+    std::map<int,int> left,right;left[0]=right[0]=0;
+    auto fill=[&](auto& map,const auto& values,std::u16string_view text) {
+        int oldRaw=0,oldText=0;
+        for(auto p:values) {
+            if(p.raw<=oldRaw || p.text<=oldText || p.raw>static_cast<int>(raw.size()) || p.text>static_cast<int>(text.size()))return false;
+            if(!learningCharacters(text.substr(oldText,p.text-oldText)))return false;
+            map[p.raw]=p.text;oldRaw=p.raw;oldText=p.text;
+        }
+        return oldRaw==static_cast<int>(raw.size()) && oldText==static_cast<int>(text.size());
+    };
+    if(!fill(left,a,before) || !fill(right,b,selected))return result;
+    struct Match {int rawStart,rawEnd,textStart,textEnd,characters;std::u16string code,text,context;};
+    int previous=0;
+    for(const auto& edge:left) {
+        const int end=edge.first;
+        if(!end || !right.count(end))continue;
+        const int changedStart=right[previous],changedEnd=right[end];
+        const auto changed=selected.substr(changedStart,changedEnd-changedStart);
+        const auto old=before.substr(left[previous],edge.second-left[previous]);
+        if(previous>=floorRaw && changed!=old) {
+            std::vector<Match> matches;
+            for(auto start=right.lower_bound(previous);start!=right.end() && start->first<end;++start) {
+                if(start->first<previous)continue;
+                auto finish=start;++finish;
+                for(;finish!=right.end() && finish->first<=end;++finish) {
+                    const auto text=selected.substr(start->second,finish->second-start->second);
+                    const int characters=static_cast<int>(learningCharacters(text));
+                    if(!characters || characters>16 || !learningStaticText(text) || before.find(text)!=std::u16string_view::npos)continue;
+                    std::u16string code(raw.substr(start->first,finish->first-start->first));
+                    for(auto& c:code)if(c>=u'A' && c<=u'Z')c+=u'a'-u'A';
+                    const auto ctx=learningContext(selected.substr(0,start->second));
+                    if(snapshot->score(mode,code,text,ctx)<=0)continue;
+                    matches.push_back({start->first,finish->first,start->second,finish->second,characters,
+                        std::move(code),std::u16string(text),ctx});
+                }
+            }
+            if(!matches.empty()) {
+                auto best=std::max_element(matches.begin(),matches.end(),[](const auto& x,const auto& y){return x.characters<y.characters;});
+                const int longest=best->characters;
+                int longestCount=0;for(const auto& m:matches)if(m.characters==longest)++longestCount;
+                bool containsAll=longestCount==1;
+                if(containsAll)for(const auto& m:matches)
+                    if(m.rawStart<best->rawStart || m.rawEnd>best->rawEnd){containsAll=false;break;}
+                if(containsAll) {
+                    SentenceLearningEvent event;event.id=learningId();event.time=learningNow();event.mode=std::u16string(mode);
+                    event.code=best->code;event.text=best->text;event.context=best->context;
+                    event.rawStart=best->rawStart;event.rawEnd=best->rawEnd;event.textStart=best->textStart;event.textEnd=best->textEnd;
+                    result.push_back(std::move(event));
+                }
+            }
+        }
+        previous=end;
+    }
+    if(result.size()!=1)result.clear();
+    return result;
+}
+
 struct SentenceFusionPreference {
     static std::u16string mode(std::u16string_view sentenceMode) {
         if(sentenceMode.empty())return {};

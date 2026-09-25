@@ -253,8 +253,18 @@ void SentenceSession::captureLearning(int index) {
         std::reverse(result.begin(),result.end());return result;
     };
     int floor=std::max(committedRaw_,activeLock()?static_cast<int>(activeLock()->rawCode.size()):0);
-    auto events=sentenceLearningDiff(raw_,learningBaseline_->text,chosen.text,boundaries(*learningBaseline_),boundaries(chosen),floor);
-    for(auto& e:events){e.mode=result_->learningMode;pendingLearning_.push_back(std::move(e));}
+    const auto beforeBoundaries=boundaries(*learningBaseline_),chosenBoundaries=boundaries(chosen);
+    auto events=sentenceLearningDiff(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,floor);
+    for(auto& e:events)e.mode=result_->learningMode;
+    auto reinforced=sentenceLearningReinforceExisting(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,
+        floor,result_->learningMode,result_->learningSnapshot);
+    for(auto& e:reinforced) {
+        const bool duplicate=std::any_of(events.begin(),events.end(),[&](const auto& old) {
+            return old.mode==e.mode && old.code==e.code && old.text==e.text;
+        });
+        if(!duplicate)events.push_back(std::move(e));
+    }
+    for(auto& e:events)pendingLearning_.push_back(std::move(e));
     learningBaseline_.reset();
 }
 void SentenceSession::captureFusionLearning(int index) {

@@ -43,6 +43,19 @@ static void pureTests() {
     check(sentenceLearningDiff(u"aa",u"甲",u"乙",{{1,1}},{{2,1}},0).empty(),"incomplete boundary rejected");
     auto e=event(u"aabb",u"虎娘",u"设置");auto s=SentenceLearningSnapshot::build({e},e.time);
     check(s->score(e.mode,e.code,e.text,e.context)==9,"first correction equals supplement weight 1000");
+    auto known=event(u"bb",u"八妾",u"旧文");auto knownSnapshot=SentenceLearningSnapshot::build({known},known.time);
+    auto reinforced=sentenceLearningReinforceExisting(u"aabbcc",u"设置父女窗口",u"设置八妾关系",
+        {{2,2},{6,6}},{{2,2},{4,4},{6,6}},0,known.mode,knownSnapshot);
+    check(reinforced.size()==1 && reinforced[0].code==u"bb" && reinforced[0].text==u"八妾" &&
+        reinforced[0].context==u"设置","whole-candidate diff reinforces existing aligned inner fragment");
+    auto leveled=SentenceLearningSnapshot::build({known,reinforced[0]},known.time);
+    check(leveled->score(known.mode,known.code,known.text,u"其他")==8,
+        "implicit confirmation advances cross-context learning exactly one level");
+    auto relation=event(u"cc",u"关系",u"旧文");
+    auto ambiguous=SentenceLearningSnapshot::build({known,relation},known.time);
+    check(sentenceLearningReinforceExisting(u"aabbcc",u"设置父女窗口",u"设置八妾关系",
+        {{2,2},{6,6}},{{2,2},{4,4},{6,6}},0,known.mode,ambiguous).empty(),
+        "independent learned fragments are not guessed");
     check(s->score(e.mode,e.code,e.text,u"其他")==6,"first correction cross-context preference");
     check(s->score(u"other-mode",e.code,e.text,e.context)==0,"mode isolation");
     check(s->prefixScore(e.mode,u"aa",u"虎",e.context)==9,"partial path hint");
