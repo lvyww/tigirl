@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-24",
+  "migration": "TCSKNM03 version 2 Q8 only; no Q16 runtime compatibility",
+  "model": {
+    "format": "TCSKNM03",
+    "version": 2,
+    "quantization_bits": 8,
+    "order": 5,
+    "bytes": 356492204,
+    "sha256": "5c46b7c2734886e868c6207a724f4dff2d9c64cb3eba193e7dd44ea9df244361",
+    "source_archive": "rime-q8-20260924/虎整句-Rime-Q8-实验版.7z",
+    "source_member": "models/sentence-fivegram-mobile.bin"
+  },
+  "fivegram_checks": {
+    "linux": 1049,
+    "x64": 1049,
+    "Win32": 1049,
+    "ARM64": 1049,
+    "ARM64EC": 1049
+  },
+  "oracle": {
+    "queries": 1341,
+    "reference": "Independent Python reference from Rime Q8 experiment, frozen in q8-oracle.tsv",
+    "tolerance": 1e-09,
+    "linux_max_error": 7.105427357601002e-15,
+    "windows_max_error": 0
+  },
+  "format_fixtures": {
+    "scores": 7,
+    "rejected_variants": 8,
+    "platforms": [
+      "linux",
+      "x64",
+      "Win32",
+      "ARM64",
+      "ARM64EC"
+    ],
+    "real_q16_rejected": true
+  },
+  "paired_20k": {
+    "rows": 20000,
+    "q16_correct": 19930,
+    "q8_correct": 19930,
+    "changed_top1": 0,
+    "changed_target_rank": 0,
+    "rescued": 0,
+    "regressed": 0
+  },
+  "evaluation_method": {
+    "baseline_reader": "d3fd13c Q16 reader built separately under ignored build/q8/baseline; not part of runtime",
+    "same_decoder_and_options": true,
+    "same_inputs_verified_by_id": true,
+    "learning_and_early_commit_enabled": false,
+    "independent_generalization_claim": false,
+    "legacy_trigram_control": "Existing eval harness also computes a separate old-prior control; paired report uses only each model own fivegram observed-bigram unified column",
+    "runtime_q16_compatibility": false
+  },
+  "builds_and_dll_activation": [
+    "x64",
+    "Win32",
+    "ARM64",
+    "ARM64X via ARM64 and x64"
+  ],
+  "regressions": {
+    "sentence_auto_commit": "passed",
+    "sentence_learning": "passed (25990 checks, 16 journal writers)",
+    "sentence_decoder": "passed",
+    "sentence_resources": "passed",
+    "fivegram_package": "passed (Q8 metadata, hash and single-model inventory)"
+  },
+  "installed_on_machine": false,
+  "installer_generated": false,
+  "physical_input_tested": false,
+  "sources": {
+    "native/SentenceFivegram.cpp": "d50f3d6184d9e8d6d1b3ae2587a7db77659f3b3d5b6fd755225cc47d58fd47b5",
+    "native/SentenceFivegram.h": "3e5fbfc984a0f2160cfdbeaf7b2e1d5219cba99bb4b001d9b64c7b4c6a962912",
+    "sentence_package.ps1": "10944d97db2be599b9f62c910c0f3aa711dec4a632bc1fc90a257a7333337bd7",
+    "tests/sentence_fivegram_probe.cpp": "86e98d0a4e6dfebceebd14fabb850700ea1fde10605a37452c1f8ef25d347eb4",
+    "tests/fivegram_format_test.py": "d42eb48dcac2be313d09a94773afbd75b33bdc809eb4fc98ae6317cb2be62667",
+    "tests/fivegram/q8-oracle.tsv": "b886d7da947b6f1e72faba573b51397749245a54d0e823d642c39b6d1084c474"
+  },
+  "evaluation_artifacts": {
+    "eval-q16/all.tsv": {
+      "sha256": "7cd149e7b2ae4eece4ea9a072374f3aee545ff23f0694719e722626a53160f58"
+    },
+    "eval-q8/all.tsv": {
+      "sha256": "b42ff2c503a3d4e4273aa8ee78dd4253dc5b893e7cc91f37c86439ef0a941634"
+    },
+    "paired-summary.json": {
+      "sha256": "60a9c0fe6181e679c1d9defe56f977cc143c94adbff789023ff071f24a48fb0b"
+    }
+  }
+}

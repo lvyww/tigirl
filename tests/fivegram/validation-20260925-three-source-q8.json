@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-25",
+  "model": {
+    "source": "C:/Archive/corpus4-articles-third-20260925/sentence-fivegram-mobile.bin",
+    "bytes": 405663171,
+    "sha256": "756f6c92cf43ad6e8e3087ce66b711ac6ad0fc41e6f3fb82b3766e35ecab8681",
+    "format": "TCSKNM03",
+    "format_version": 2,
+    "quantization_bits": 8,
+    "mixture": {
+      "Corpus4": 0.5,
+      "Articles": 0.25,
+      "Brightmart non-news": 0.25
+    }
+  },
+  "checks": {
+    "linux": 1049,
+    "x64": 1049,
+    "Win32": 1049
+  },
+  "oracle_queries": 2103,
+  "max_score_error": {
+    "linux": 7.105427357601002e-15,
+    "x64": 0,
+    "Win32": 0
+  },
+  "physical_input_tested": false,
+  "upstream_accuracy_not_remeasured": true,
+  "sources": {
+    "native/SentenceFivegram.cpp": "d50f3d6184d9e8d6d1b3ae2587a7db77659f3b3d5b6fd755225cc47d58fd47b5",
+    "sentence_package.ps1": "3894525e26d359ce9e31e5aa0dfc6189b4ea3249f0d9d981f801450264add3ff",
+    "tests/sentence_fivegram_probe.cpp": "781a4d98b980c58d24a9caec44ba80aa2b5506bc43ba268ca33378a1ac88265e",
+    "tests/fivegram/q8-oracle.tsv": "7f82442a7de2c2a68ae4075b86d56fce02e48e6e2b5382cc7bb8f375300babef"
+  },
+  "package_runtime": "passed",
+  "installer_version": "2026.9.25.1"
+}

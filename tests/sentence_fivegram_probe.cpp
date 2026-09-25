@@ -42,14 +42,15 @@ public:
 void tests(const std::filesystem::path& path,const std::filesystem::path& work) {
     auto model=SentenceFivegram::Open(path);require(model==SentenceFivegram::Open(path),"model mapping not shared");
     struct FrozenScore {const char16_t* text;double total;};
+    // Frozen from the independent Python reference reader, Q8 model 756f6c92cf43.
     const FrozenScore scores[]={
-        {u"中国人民今天一起学习",-44.635550201044005},
-        {u"马云雷军入选大亨名单",-57.55154431020609},
-        {u"甲乙丙丁戊己庚辛",-30.988563628308047},
-        {u"龘",-20.292678925865971},
-        {u"😀",-31.399474239122021},
-        {u"",-16.053965655191519},
-        {u"的",-17.161944463941833},
+        {u"中国人民今天一起学习",-36.852852225659745},
+        {u"马云雷军入选大亨名单",-65.71360926100293},
+        {u"甲乙丙丁戊己庚辛",-27.05397090819455},
+        {u"龘",-19.69900789553629},
+        {u"😀",-37.422274335091686},
+        {u"",-13.870029427041857},
+        {u"的",-15.559373613006994},
     };
     for(const auto& sample:scores) {
         auto query=model->querySession();auto lm=dynamic_cast<const SentenceHistoryLanguageModel*>(query.get());auto history=lm->beginHistory();double actual=0;
@@ -111,6 +112,20 @@ void tests(const std::filesystem::path& path,const std::filesystem::path& work) 
     std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"mapped_bytes\":"<<survivor->mappedBytes()<<"}\n";
 }
 std::vector<std::string> fields(std::string line) {std::vector<std::string> out;std::istringstream in(line);for(std::string s;std::getline(in,s,'\t');)out.push_back(s);return out;}
+void oracle(const std::filesystem::path& modelPath,const std::filesystem::path& cases) {
+    auto model=SentenceFivegram::Open(modelPath);std::ifstream in(cases);require(bool(in),"missing oracle cases");
+    unsigned count=0;double maximum=0;
+    for(std::string line;std::getline(in,line);){
+        if(line.empty()||line[0]=='#')continue;
+        if(line.back()=='\r')line.pop_back();auto f=fields(line);require(f.size()>=2,"invalid oracle case");
+        auto h=model->beginHistory();double actual=0;
+        for(std::size_t i=1;i<f.size();++i)actual=model->step(h,utf16(f[i]));
+        const auto error=std::abs(actual-std::stod(f[0]));maximum=std::max(maximum,error);
+        require(error<1e-9,"Q8 oracle score mismatch");++count;
+    }
+    require(count>0,"oracle coverage missing");
+    std::cout<<"{\"status\":\"passed\",\"queries\":"<<count<<",\"max_error\":"<<maximum<<"}\n";
+}
 void evaluate(const std::filesystem::path& modelPath,const std::filesystem::path& priorPath,const std::filesystem::path& fixture,const std::filesystem::path& cases,const std::filesystem::path& output,const std::filesystem::path& work) {
     ImportedLexicon data;std::map<std::u16string,std::size_t> indices;std::ifstream codefile(fixture/"tiger_sentence.codes.txt");
     for(std::string line;std::getline(codefile,line);){if(line.empty() || line[0]=='#')continue;std::istringstream row(line);std::string text,code;if(!(row>>text>>code))continue;auto c=utf16(code),t=utf16(text);auto found=indices.find(c);if(found==indices.end()){indices[c]=data.main.size();data.main.push_back({c,{t}});}else {auto& v=data.main[found->second].candidates;if(std::find(v.begin(),v.end(),t)==v.end())v.push_back(t);}}
@@ -135,8 +150,10 @@ void evaluate(const std::filesystem::path& modelPath,const std::filesystem::path
 }
 int run(const std::vector<std::filesystem::path>& args) {
     try{std::cout<<std::setprecision(17);if(args.size()==4 && args[1]=="test"){std::filesystem::create_directories(args[3]);tests(args[2],args[3]);return 0;}
+        if(args.size()==4 && args[1]=="oracle"){oracle(args[2],args[3]);return 0;}
+        if(args.size()==3 && args[1]=="reject"){bool rejected=false;try{SentenceFivegram::Open(args[2]);}catch(const std::exception&){rejected=true;}require(rejected,"unsupported model accepted");std::cout<<"rejected unsupported model\n";return 0;}
         if(args.size()==8 && args[1]=="eval"){std::filesystem::create_directories(args[7]);evaluate(args[2],args[3],args[4],args[5],args[6],args[7]);return 0;}
-        std::cerr<<"test MODEL WORK | eval MODEL PRIOR FIXTURE CASES OUTPUT WORK\n";return 2;
+        std::cerr<<"test MODEL WORK | oracle MODEL CASES | reject MODEL | eval MODEL PRIOR FIXTURE CASES OUTPUT WORK\n";return 2;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }
 }

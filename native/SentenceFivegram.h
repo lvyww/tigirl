@@ -1,7 +1,7 @@
 #pragma once
 #include "SentenceNgram.h"
 namespace tiger {
-// Native TCSKNM03 query reader. The model is file-mapped and shared; bounded
+// Native TCSKNM03 v2 Q8 query reader (version 1 is not supported). The model is file-mapped and shared; bounded
 // mutable caches are private to each decoder's query session.
 class SentenceFivegram final : public SentenceHistoryLanguageModel {
 public:

@@ -40,9 +40,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_arm64.ps1 -Che
 
 开发版构建包含 `Models\sentence-fivegram-mobile.bin`、词汇先验及来源记录。
 默认从本地 `data\Models\sentence-fivegram-mobile.bin` 读取已验证模型（不纳入 Git）。
-模型来源为 `brightmart-char5-500mb-20260922/char5-context128-q8.klm`，
-TCSKNM03 产物大小 460,693,519 字节（约 439.35 MiB），SHA256 为
-`4e6d79b957a55edf35cd9e2e66c62bd0bbe598581b7dc088b462122a713172a7`。
+默认采用 `corpus4-articles-third-20260925/sentence-fivegram-mobile.bin` 三路融合五阶模型。
+TCSKNM03 version 2 Q8 产物大小 405,663,171 字节（约 386.87 MiB），SHA256 为
+`756f6c92cf43ad6e8e3087ce66b711ac6ad0fc41e6f3fb82b3766e35ecab8681`。
+新版读取器仅支持 Q8；更新时必须同时分发新版程序和模型，不能把 Q8 文件单独交给旧版使用。
 五阶同时负责整句搜索和孤立字二元组判断；正式包不再包含三阶模型。
 五阶由虎娘自有的 TCSKNM03 mmap reader 直接查询，不再编译或分发 KenLM。
 模型不可用时保留普通码表输入，不自动回退三阶。详见 [五阶说明](SHAPE_FIVEGRAM.md)。
