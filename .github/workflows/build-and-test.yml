@@ -164,7 +164,7 @@ jobs:
           mkdir -p "$baseline"
           git archive 4f88a4eeffd07fa0cf26e5e26d04d2b760ab6c5b | tar -x -C "$baseline"
           python tests/compare_sentence_revisions.py --baseline "$baseline" --report sentence-equivalence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: sentence-review-equivalence
