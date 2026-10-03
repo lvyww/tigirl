@@ -257,15 +257,17 @@ void SentenceSession::captureLearning(int index) {
     auto events=sentenceLearningDiff(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,floor);
     for(auto& e:events)e.mode=result_->learningMode;
     auto reinforced=sentenceLearningReinforceExisting(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,
-        floor,result_->learningMode,result_->learningSnapshot);
+        floor,result_->learningMode,result_->learningSnapshot,
+        [supplement=result_->supplemental](std::u16string_view text){return supplement && supplement->contains(text);});
     for(auto& e:reinforced) {
         const bool duplicate=std::any_of(events.begin(),events.end(),[&](const auto& old) {
             return old.mode==e.mode && old.code==e.code && old.text==e.text;
         });
         if(!duplicate)events.push_back(std::move(e));
     }
-    sentenceLearningSeedInitialLevels(events,result_->learningSnapshot,
-        learningBaseline_->finalScore-chosen.finalScore);
+    sentenceLearningPlanLevels(events,result_->learningSnapshot,raw_,learningBaseline_->text,chosen.text,
+        beforeBoundaries,chosenBoundaries,learningBaseline_->finalScore-learningBaseline_->learningScore,
+        chosen.finalScore-chosen.learningScore);
     for(auto& e:events)pendingLearning_.push_back(std::move(e));
     learningBaseline_.reset();
 }

@@ -2,6 +2,7 @@
 #include "LearningFileExclusion.h"
 #include "SentenceSession.h"
 #include "SentenceDecoder.h"
+#include "SentenceSupplement.h"
 #include "LexiconSerialize.h"
 #include "Engine.h"
 #include "sentence_learning_performance.h"
@@ -43,23 +44,38 @@ static void pureTests() {
     check(sentenceLearningDiff(u"aa",u"甲",u"乙",{{1,1}},{{2,1}},0).empty(),"incomplete boundary rejected");
     auto e=event(u"aabb",u"虎娘",u"设置");auto s=SentenceLearningSnapshot::build({e},e.time);
     check(s->score(e.mode,e.code,e.text,e.context)==9,"first correction equals supplement weight 1000");
+    auto plan=[](std::vector<SentenceLearningEvent>& events,std::shared_ptr<const SentenceLearningSnapshot> snapshot,double gap) {
+        const auto& e=events.front();const auto prefix=e.context;const int offset=prefix.empty()?0:2;
+        std::u16string raw=(offset?u"zz":u"")+e.code;
+        std::vector<SentenceLearningBoundary> a,b;
+        if(offset){a.push_back({offset,static_cast<int>(prefix.size())});b=a;}
+        a.push_back({static_cast<int>(raw.size()),static_cast<int>(prefix.size()+2)});
+        b.push_back({static_cast<int>(raw.size()),static_cast<int>(prefix.size()+e.text.size())});
+        const double old=snapshot?snapshot->score(e.mode,e.code,e.text,e.context):0;
+        sentenceLearningPlanLevels(events,snapshot,raw,prefix+u"龙族",prefix+e.text,a,b,gap,-old);
+    };
     std::vector<SentenceLearningEvent> seededTwo{event(u"gap",u"陲机",u"测试")};
-    sentenceLearningSeedInitialLevels(seededTwo,{},10.0);
-    check(seededTwo.size()==2 && SentenceLearningSnapshot::build(seededTwo)->score(u"test-v1",u"gap",u"陲机",u"测试")==11,
-        "first correction seeds level two when same-context gap requires it");
+    plan(seededTwo,{},10);
+    check(seededTwo.size()==1 && seededTwo[0].levels==2 && SentenceLearningSnapshot::build(seededTwo)->score(u"test-v1",u"gap",u"陲机",u"测试")==11,
+        "two levels are one actual correction");
     std::vector<SentenceLearningEvent> seededThree{event(u"gap3",u"陲机",u"测试")};
-    sentenceLearningSeedInitialLevels(seededThree,{},100.0);
-    check(seededThree.size()==3 && SentenceLearningSnapshot::build(seededThree)->score(u"test-v1",u"gap3",u"陲机",u"测试")==13,
-        "first correction jump capped at level three");
-    auto knownSeed=event(u"known",u"陲机",u"测试");
-    std::vector<SentenceLearningEvent> subsequent{event(u"known",u"陲机",u"测试")};
-    sentenceLearningSeedInitialLevels(subsequent,SentenceLearningSnapshot::build({knownSeed}),100.0);
-    check(subsequent.size()==1,"subsequent manual correction still advances one level");
+    plan(seededThree,{},100);auto thirdSnapshot=SentenceLearningSnapshot::build(seededThree);
+    check(seededThree.size()==1 && seededThree[0].levels==3 && thirdSnapshot->score(u"test-v1",u"gap3",u"陲机",u"测试")==13 && thirdSnapshot->confidenceScore(u"test-v1",u"gap3",u"陲机",u"测试")==9,
+        "three ranking levels retain one real confirmation");
+    std::vector<SentenceLearningEvent> subsequent{event(u"gap3",u"陲机",u"测试")};
+    plan(subsequent,thirdSnapshot,4.5);
+    check(subsequent.size()==1 && subsequent[0].levels==3,"later correction may also jump three levels");
+    auto twiceJumped=SentenceLearningSnapshot::build({seededThree[0],subsequent[0]});
+    check(twiceJumped->score(u"test-v1",u"gap3",u"陲机",u"测试")==19 && twiceJumped->confidenceScore(u"test-v1",u"gap3",u"陲机",u"测试")==11,
+        "two actual confirmations are separate from six ranking levels");
     auto known=event(u"bb",u"八妾",u"旧文");auto knownSnapshot=SentenceLearningSnapshot::build({known},known.time);
     auto reinforced=sentenceLearningReinforceExisting(u"aabbcc",u"设置父女窗口",u"设置八妾关系",
         {{2,2},{6,6}},{{2,2},{4,4},{6,6}},0,known.mode,knownSnapshot);
     check(reinforced.size()==1 && reinforced[0].code==u"bb" && reinforced[0].text==u"八妾" &&
         reinforced[0].context==u"设置","whole-candidate diff reinforces existing aligned inner fragment");
+    auto supplemental=sentenceLearningReinforceExisting(u"aabbcc",u"设置父女窗口",u"设置八妾关系",
+        {{2,2},{6,6}},{{2,2},{4,4},{6,6}},0,known.mode,{},[](std::u16string_view text){return text==u"八妾";});
+    check(supplemental.size()==1 && supplemental[0].code==u"bb" && supplemental[0].text==u"八妾", "supplement-only inner fragment is recognized without learning history");
     auto leveled=SentenceLearningSnapshot::build({known,reinforced[0]},known.time);
     check(leveled->score(known.mode,known.code,known.text,u"其他")==8,
         "implicit confirmation advances cross-context learning exactly one level");
@@ -94,14 +110,14 @@ static void pureTests() {
     check(competition->score(e.mode,e.code,e.text,e.context)==0,"competing manual correction can demote old local preference");
     auto old=SentenceLearningSnapshot::build({e},e.time+3650LL*86400);
     check(old->score(e.mode,e.code,e.text,e.context)==9,"long-term idle time preserves reward");
-    for(auto name:{u"用户调整.txt",u".TIGIRL-USER.tsv.bak.txt",u".tigirl-learning.tsv",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u".tigirl-learning.tsv.lock"})
+    for(auto name:{u"用户调整.txt",u".TIGIRL-USER.tsv.bak.txt",u"自学习-虎娘.txt",u".TIGIRL-LEARNING-v1.log.bak.txt",u".tigerclaw-learning-v1.log.tmp.dict.yaml",u"自学习-虎娘.txt.lock"})
         check(isLearningFile(name),"reserved basename including fake lexicon extensions");
     check(!isLearningFile(u"正常码表.txt") && !isLearningFile(u"tiger.txt"),"normal dictionaries retained");
 }
 #ifdef _WIN32
 static void fileEnumerationTests(const std::filesystem::path& root) {
     auto dir=root/"enumeration";std::filesystem::create_directories(dir);
-    for(auto name:{u"fixture.txt",u"用户调整.txt.bak.txt",u".tigirl-learning.tsv.bak.txt",u".TIGERCLAW-LEARNING-v1.log.tmp.dict.yaml"}) {
+    for(auto name:{u"fixture.txt",u"用户调整.txt.bak.txt",u"自学习-虎娘.txt.bak.txt",u".TIGERCLAW-LEARNING-v1.log.tmp.dict.yaml"}) {
         std::ofstream out(dir/std::filesystem::path(name));out<<"aa\tword\n";
     }
     auto files=orderedLexiconFiles(dir,"zh-CN");
@@ -143,7 +159,7 @@ static void sessionTests() {
     s.clear();check(s.takeLearning().empty(),"later cancel does not repeat already drained event");
 }
 static void storageTests(const std::filesystem::path& folder) {
-    const auto path=folder/".tigirl-learning.tsv";SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
+    const auto path=folder/"自学习-虎娘.txt";SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
     auto a=event(),b=event(u"bb",u"国",u"乙");store.confirm({a});check(store.entries().size()==1,"successful confirmation persisted");
     store.confirm({a,a});check(store.entries().size()==1,"idempotent replays");
     SentenceLearningStore other(path);other.refresh();check(other.snapshot()->score(a.mode,a.code,a.text,a.context)>0,"second reader sees published record");
@@ -162,7 +178,7 @@ static void storageTests(const std::filesystem::path& folder) {
     auto bad=event();bad.text=u"{动态}";store.confirm({bad});check(store.entries().empty(),"dynamic records never persisted");
     auto fresh=event();store.confirm({fresh});check(store.entries().size()==1,"new events after clear");
     const auto blocker=folder/"not-a-directory";{std::ofstream out(blocker);out<<"x";}
-    bool failed=false;try{SentenceLearningStore fail(blocker/".tigirl-learning.tsv");fail.confirm({fresh});}catch(...){failed=true;}
+    bool failed=false;try{SentenceLearningStore fail(blocker/"自学习-虎娘.txt");fail.confirm({fresh});}catch(...){failed=true;}
     check(failed && store.entries().size()==1,"write failure isolated");
 }
 static void decoderTests(const std::filesystem::path& folder) {
@@ -233,6 +249,54 @@ static void decoderTests(const std::filesystem::path& folder) {
     check(merge[0].text==u"B" && merge[1].text==u"C" && merge[2].text==u"A",
         "Direct C over Composed A promotes only Direct prefix B,C");
 }
+static void adaptiveTests(const std::filesystem::path& folder) {
+    SentenceSupplementMatcher matcher({SentenceSupplementEntry::create(u"陲机",1000),
+        SentenceSupplementEntry::create(u"低权重词",1),SentenceSupplementEntry::create(u"机",1000)});
+    const auto graph=save(matcher.serializeGraph(),folder/"known-supplements.tcd");
+    auto supplement=std::make_shared<MappedSentenceSupplement>(graph);
+    check(supplement->contains(u"陲机") && supplement->contains(u"低权重词") && !supplement->contains(u"陲") && !supplement->contains(u"前陲机"),
+        "mapped supplement membership includes zero-reward records but not arbitrary prefixes/suffixes");
+    SentenceSession session;session.start(u"aabbcc",1);
+    SentenceDecodeResult result;result.rawCode=u"aabbcc";result.learningMode=u"test-v1";result.supplemental=supplement;
+    auto candidate=[](std::u16string text,std::initializer_list<SentenceLearningBoundary> points,double score) {
+        SentenceCandidate c;c.text=std::move(text);c.source=SentenceSourceComposed;c.finalScore=c.baseScore=score;
+        for(auto p:points)c.boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{c.boundary,p.text,p.raw});
+        return c;
+    };
+    result.candidates={candidate(u"设置父女窗口",{{2,2},{6,6}},15),candidate(u"设置陲机关系",{{2,2},{4,4},{6,6}},0)};
+    apply(session,result);session.moveSelection(1,5,true);
+    check(session.commitCandidate(1)==std::optional<std::u16string>(u"设置陲机关系"),"supplement fixture commit mismatch");
+    auto learned=session.takeLearning();
+    check(learned.size()==2 && std::any_of(learned.begin(),learned.end(),[](const auto& e){return e.text==u"陲机" && e.code==u"bb" && e.context==u"设置";}),
+        "real session failed to reinforce a supplement-only inner fragment");
+    check(std::all_of(learned.begin(),learned.end(),[](const auto& e){return e.levels==3;}),"overlapping outer/inner rewards were incorrectly added");
+    check(session.takeLearning().empty(),"submission replay duplicated supplement learning");
+    session.start(u"aabbcc",1);apply(session,result);session.commitCandidate(0);
+    check(session.takeLearning().empty(),"ordinary first choice reinforced supplemental corpus");
+    std::vector<SentenceLearningEvent> history;SentenceLearningAccumulator incremental;
+    const std::u16string words[]={u"陲机",u"龙族",u"𠀀机"},contexts[]={u"",u"设置",u"后文"};
+    for(int i=0;i<90;++i) {
+        auto e=event(u"aabb",words[(i*7)%3],contexts[(i/3)%3]);e.levels=i%3+1;history.push_back(e);
+        auto fast=incremental.update(history),oracle=SentenceLearningSnapshot::build(history);
+        for(const auto& word:words)for(const auto& context:contexts) {
+            check(fast->score(e.mode,e.code,word,context)==oracle->score(e.mode,e.code,word,context),"weighted accumulator differs from independent replay");
+            check(fast->confidenceScore(e.mode,e.code,word,context)==oracle->confidenceScore(e.mode,e.code,word,context),"confirmation-count accumulator mismatch");
+        }
+        for(int delta=1;delta<=3;++delta) {
+            auto extra=event(e.code,words[i%3],contexts[(i/2)%3]);extra.levels=delta;
+            auto after=history;after.push_back(extra);auto expected=SentenceLearningSnapshot::build(after);
+            for(const auto& word:words)for(const auto& context:contexts)
+                check(std::abs(fast->projectedScore(e.mode,e.code,word,context,{extra},delta)-expected->score(e.mode,e.code,word,context))<1e-12,
+                    "planned rewards differ from actual replay");
+        }
+    }
+    const auto path=folder/std::filesystem::u8path(u8"自学习-跃级验收.txt");SentenceLearningStore store(path);
+    auto e=event(u"aa",u"陲机",u"设置");e.levels=3;store.confirm({e});
+    check(store.entries().size()==1 && store.snapshot()->score(e.mode,e.code,e.text,e.context)==13,"weighted storage writes more than one correction");
+    SentenceLearningStore reopened(path);reopened.refresh();
+    check(reopened.entries()[0].levels==3 && reopened.snapshot()->confidenceScore(e.mode,e.code,e.text,e.context)==9,"restart lost real confirmation count");
+    check(store.undoLast() && store.snapshot()->empty(),"single undo did not undo the entire jump");
+}
 static void engineTests(const std::filesystem::path& folder) {
     ImportedLexicon lex;lex.main={{u"aa",{u"甲",u"乙"}}};lex.indexedMain={{u"aa",8,0}};
     auto dict=save(lex,folder/"ordinary.tcd");Engine engine(dict);engine.enableSentenceInput(true,1);
@@ -252,7 +316,7 @@ int main(int argc,char** argv) {
 #ifdef _WIN32
         fileEnumerationTests(path);
 #endif
-        pureTests();sessionTests();storageTests(path);decoderTests(path);engineTests(path);
+        pureTests();sessionTests();storageTests(path);decoderTests(path);adaptiveTests(path);engineTests(path);
         checks+=learning_test::runPerformanceTests(path/"performance");
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"physical_tsf_tested\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<"check "<<checks<<": "<<e.what()<<'\n';return 1;}

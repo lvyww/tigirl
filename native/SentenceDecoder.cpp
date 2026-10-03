@@ -590,7 +590,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                         if(reward>0) {
                             lattice.learningAffected=true;
                             const double candidateLearning=(startBoundary?startBoundary->learningScore:0)+reward;
-                            const double candidateBonus=std::max(item.learningEarlyCommitBonus,learningEarlyContribution(reward));
+                            const double candidateBonus=std::max(item.learningEarlyCommitBonus,learningEarlyContribution(learning_->confidenceScore(learningMode_,raw.substr(rawStart,consumed-rawStart),fragment,context)));
                             if(candidateLearning>next.learningScore ||
                                (candidateLearning==next.learningScore && candidateBonus>next.learningEarlyCommitBonus)) {
                                 next.learningScore=candidateLearning;next.learningEarlyCommitBonus=candidateBonus;
@@ -730,7 +730,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         });
     }
     applyFusionOrdering(raw,result.candidates);
-    result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;result.learningSnapshot=learning_;
+    result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;result.learningSnapshot=learning_;result.supplemental=supplement_;
     result.earlyCommitEvidence.confidenceTruncated=completed.truncated;
     if(includeEarlyCommitEvidence && (!completed.truncated || options_.preserveTruncatedEarlyCommitEvidence)) {
         auto& evidence=result.earlyCommitEvidence;

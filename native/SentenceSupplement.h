@@ -30,9 +30,11 @@ class SentenceSupplementMatcher {
         double reward=0;
     };
     std::vector<Node> nodes_{1};
+    std::map<std::u16string,bool,std::less<>> known_;
 public:
     explicit SentenceSupplementMatcher(const std::vector<SentenceSupplementEntry>& entries={}) {
         for(const auto& entry:entries) {
+            if(!entry.text.empty())known_[entry.text]=true;
             if(entry.text.empty() || entry.reward<=0)continue;
             int state=0;
             for(const auto& element:wordTextElements(entry.text)) {
@@ -67,6 +69,7 @@ public:
             for(int i=width-1;i>=0;--i){text[i]=digits[value&15];value>>=4;}return text;
         };
         ImportedLexicon result;result.splits[u"_sentence_supplement_format"]=u"1";
+        for(const auto& entry:known_)result.splits[u"known:"+entry.first]=u"1";
         for(std::size_t i=0;i<nodes_.size();++i) {
             const auto& node=nodes_[i];const auto id=hex(i,8);std::uint64_t bits;
             static_assert(sizeof(bits)==sizeof(node.reward));std::memcpy(&bits,&node.reward,sizeof(bits));

@@ -40,9 +40,9 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     auto source=lexicon_;auto journal=schemaJournalPath(userRoot_,schema_);
     auto helper=dictionaryPath_.parent_path()/L"Tigirl.Import.exe";auto cache=userRoot_/L"cache"/L"sentence";
     auto whitelist=sentenceSettings_.whitelist();
-    auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L".tigirl-learning.tsv";
-    auto learningMode=std::u16string(u"sentence-v2|dup=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
-        u"|optimal="+std::u16string(number.begin(),number.end())+u"|whitelist="+learningConfigurationHash(sentenceSettings_.fullCodeWhitelist);
+    auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L"自学习-虎娘.txt";
+    auto learningMode=std::u16string(u"整句|单字重码=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
+        u"|最优码限制="+std::u16string(number.begin(),number.end())+u"|全码白名单="+sentenceSettings_.fullCodeWhitelist;
     const bool learningEnabled=sentenceSettings_.selfLearning;
     sentenceWorker_->submit(0,revision,[path,model,common,whitelist=std::move(whitelist),options,source,journal,helper,cache,learningPath,learningMode,learningEnabled] {
         SentenceCompletion result;result.source=source;
