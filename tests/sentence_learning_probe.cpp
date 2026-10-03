@@ -43,6 +43,18 @@ static void pureTests() {
     check(sentenceLearningDiff(u"aa",u"甲",u"乙",{{1,1}},{{2,1}},0).empty(),"incomplete boundary rejected");
     auto e=event(u"aabb",u"虎娘",u"设置");auto s=SentenceLearningSnapshot::build({e},e.time);
     check(s->score(e.mode,e.code,e.text,e.context)==9,"first correction equals supplement weight 1000");
+    std::vector<SentenceLearningEvent> seededTwo{event(u"gap",u"陲机",u"测试")};
+    sentenceLearningSeedInitialLevels(seededTwo,{},10.0);
+    check(seededTwo.size()==2 && SentenceLearningSnapshot::build(seededTwo)->score(u"test-v1",u"gap",u"陲机",u"测试")==11,
+        "first correction seeds level two when same-context gap requires it");
+    std::vector<SentenceLearningEvent> seededThree{event(u"gap3",u"陲机",u"测试")};
+    sentenceLearningSeedInitialLevels(seededThree,{},100.0);
+    check(seededThree.size()==3 && SentenceLearningSnapshot::build(seededThree)->score(u"test-v1",u"gap3",u"陲机",u"测试")==13,
+        "first correction jump capped at level three");
+    auto knownSeed=event(u"known",u"陲机",u"测试");
+    std::vector<SentenceLearningEvent> subsequent{event(u"known",u"陲机",u"测试")};
+    sentenceLearningSeedInitialLevels(subsequent,SentenceLearningSnapshot::build({knownSeed}),100.0);
+    check(subsequent.size()==1,"subsequent manual correction still advances one level");
     auto known=event(u"bb",u"八妾",u"旧文");auto knownSnapshot=SentenceLearningSnapshot::build({known},known.time);
     auto reinforced=sentenceLearningReinforceExisting(u"aabbcc",u"设置父女窗口",u"设置八妾关系",
         {{2,2},{6,6}},{{2,2},{4,4},{6,6}},0,known.mode,knownSnapshot);

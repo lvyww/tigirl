@@ -207,6 +207,23 @@ public:
     }
 };
 
+inline void sentenceLearningSeedInitialLevels(std::vector<SentenceLearningEvent>& events,
+    const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,double scoreGap) {
+    if(events.empty())return;
+    std::vector<SentenceLearningEvent> fresh;
+    for(const auto& event:events) {
+        if(!snapshot || snapshot->score(event.mode,event.code,event.text,event.context)<=0)fresh.push_back(event);
+    }
+    if(fresh.empty())return;
+    const double required=std::max(0.0,scoreGap)+1.0;
+    int level=1;
+    while(level<3 && static_cast<double>(fresh.size())*SentenceLearningSnapshot::exactScore(level)<required)++level;
+    if(level==1)return;
+    for(const auto& event:fresh)for(int copy=1;copy<level;++copy) {
+        auto seeded=event;seeded.id=learningId();events.push_back(std::move(seeded));
+    }
+}
+
 inline std::vector<SentenceLearningEvent> sentenceLearningReinforceExisting(
     std::u16string_view raw,std::u16string_view before,std::u16string_view selected,
     const std::vector<SentenceLearningBoundary>& a,const std::vector<SentenceLearningBoundary>& b,

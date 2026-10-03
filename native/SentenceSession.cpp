@@ -264,6 +264,8 @@ void SentenceSession::captureLearning(int index) {
         });
         if(!duplicate)events.push_back(std::move(e));
     }
+    sentenceLearningSeedInitialLevels(events,result_->learningSnapshot,
+        learningBaseline_->finalScore-chosen.finalScore);
     for(auto& e:events)pendingLearning_.push_back(std::move(e));
     learningBaseline_.reset();
 }
