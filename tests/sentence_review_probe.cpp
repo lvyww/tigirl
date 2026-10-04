@@ -292,7 +292,7 @@ static void mapped() {
     std::cout<<"{\"test\":\"mapped_ngram_supplement\",\"snapshots\":"<<snapshots<<",\"synthetic_model\":true}\n";
 }
 static void journalTests() {
-    auto path=root/"journal"/".tigirl-learning.tsv";SentenceLearningStore store(path);
+    auto path=root/"journal"/std::filesystem::u8path(u8"自学习-虎娘.txt");SentenceLearningStore store(path);
     SentenceLearningEvent good;good.id="same-id";good.time=learningNow();good.mode=u"m";good.code=u"aa";good.text=u"虎娘";
     auto invalid=good;invalid.mode=std::u16string(1,0xd800);
     store.confirm({invalid});check(store.snapshot()->empty(),"P5 malformed persisted mode is not learnt");
@@ -314,7 +314,8 @@ static void journalTests() {
     store.clear();
     // Existing tombstones apply before the combined active-window limit. A
     // large append cannot discard an older surviving event prematurely.
-    std::string undo="TCL2\tU\tremove-future\t"+std::to_string(learningNow())+"\tfuture-10000";
+    // Independent human-readable row, including the empty payload columns.
+    std::string undo=u8"撤销\t2026-10-04T00:00:00Z\t\t\t\t0\t\tremove-future\tfuture-10000";
     {std::ofstream out(path,std::ios::app|std::ios::binary);out<<undo<<'\n';}
     for(int i=0;i<10001;++i){large[i].id="future-"+std::to_string(i);large[i].code=i?u"aa":u"zz";}
     store.confirm(large);check(store.snapshot()->score(u"m",u"zz",u"虎娘",u"")>0,"P5 tombstones precede appended active-window trimming");
