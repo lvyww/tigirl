@@ -50,6 +50,9 @@ public:
             if(from>=count_ || to>=count_ || meta(static_cast<std::uint32_t>(from)).depth+1!=meta(static_cast<std::uint32_t>(to)).depth)throw std::runtime_error("Invalid supplement transition");
         }
     }
+    bool contains(std::u16string_view text) const {
+        return dictionary_->value(dictionary_->find(Section::Split,std::u16string(u"known:")+std::u16string(text)),0)==u"1";
+    }
     bool empty() const {return count_<=1;}
     int advance(int state,std::u16string_view element,double& reward) const {
         reward=0;if(empty() || element.empty())return 0;

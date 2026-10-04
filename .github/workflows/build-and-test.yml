@@ -156,13 +156,17 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
       - name: Functional fault injection
         run: python tests/sentence_review_negative.py --cxx g++
-      - name: Independent pre-review source comparison
+      - name: Independent pre-adaptive-learning source comparison
         shell: bash
         run: |
           set -euo pipefail
           baseline="$RUNNER_TEMP/tigirl-pre-review"
           mkdir -p "$baseline"
-          git archive 4f88a4eeffd07fa0cf26e5e26d04d2b760ab6c5b | tar -x -C "$baseline"
+          # Freeze the last mainline before adaptive increments/readable records.
+          # The former September baseline predates persistent cross-context
+          # learning and cannot be an oracle for today's intended scores.
+          # Keep every learned/unlearned, mapped/no-model snapshot assertion.
+          git archive 64e07759b1e110d0d88911a6642eed26c362e571 | tar -x -C "$baseline"
           python tests/compare_sentence_revisions.py --baseline "$baseline" --report sentence-equivalence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

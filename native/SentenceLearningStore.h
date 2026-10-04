@@ -6,6 +6,8 @@
 #include <mutex>
 #include <stdexcept>
 #include <unordered_set>
+#include <ctime>
+#include <iomanip>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -56,7 +58,32 @@ private:
         try{text=editableValue(value);}catch(...){return false;}
         return text.size()<=512 && (text.empty() || learningCharacters(text)>0);
     }
-    static std::string seal(std::string s) {return s+'\n';}
+    static std::string date(std::int64_t time) {
+        const std::time_t value=static_cast<std::time_t>(time);std::tm utc{};
+#ifdef _WIN32
+        if(gmtime_s(&utc,&value)!=0)throw std::runtime_error("Invalid learning timestamp");
+#else
+        if(!gmtime_r(&value,&utc))throw std::runtime_error("Invalid learning timestamp");
+#endif
+        std::ostringstream out;out<<std::put_time(&utc,"%Y-%m-%dT%H:%M:%SZ");return out.str();
+    }
+    static std::int64_t readDate(std::string_view text) {
+        std::tm utc{};std::istringstream input{std::string(text)};input>>std::get_time(&utc,"%Y-%m-%dT%H:%M:%SZ");
+        if(input.fail())throw std::runtime_error("Invalid learning date");
+#ifdef _WIN32
+        const auto time=_mkgmtime64(&utc);
+#else
+        const auto time=timegm(&utc);
+#endif
+        if(time<0 || date(time)!=text)throw std::runtime_error("Invalid learning date");return time;
+    }
+    static std::string row(std::string_view action,std::string_view id,std::int64_t time,
+        std::u16string_view text={},std::u16string_view code={},std::u16string_view context={},int levels=0,
+        std::u16string_view mode={},std::string_view target={}) {
+        return std::string(action)+'\t'+date(time)+'\t'+editableField(text)+'\t'+editableField(code)+'\t'+
+            editableField(context)+'\t'+std::to_string(levels)+'\t'+editableField(mode)+'\t'+std::string(id)+'\t'+std::string(target)+'\n';
+    }
+    static constexpr const char* header=u8"# 虎整句自学习记录（每条学习行代表一次人工纠正；等级上限10）\n# 操作\t时间(UTC)\t片段\t编码\t前文\t本次升级\t模式\t记录编号\t撤销目标\n";
     std::string bytes() const {
         if(!std::filesystem::exists(path_))return {};
         auto n=std::filesystem::file_size(path_);if(n>maximumBytes)throw std::runtime_error("Learning journal exceeds 16 MiB; export/clear it with the maintenance tool");
@@ -87,17 +114,19 @@ private:
             if(line.size()>8192)throw std::runtime_error("Learning text row too long");
             std::vector<std::string_view> fields;
             while(true){auto tab=line.find('\t');fields.push_back(line.substr(0,tab));if(tab==line.npos)break;line.remove_prefix(tab+1);}
-            if(fields.size()<4 || fields[0]!="TCL2" || fields[2].empty() || fields[2].size()>128)throw std::runtime_error("Invalid learning text row");
-            std::string id(fields[2]);if(state.seen.count(id))continue;
-            std::int64_t time=0;try{std::size_t n=0;time=std::stoll(std::string(fields[3]),&n);if(n!=fields[3].size() || time<0)throw std::runtime_error("Invalid learning text row");}catch(...){throw std::runtime_error("Invalid learning timestamp");}
-            if(fields[1]=="E" && fields.size()==8) {
+            if(fields.size()!=9 || fields[7].empty() || fields[7].size()>128)throw std::runtime_error("Invalid learning text row");
+            std::string id(fields[7]);if(state.seen.count(id))continue;
+            const auto time=readDate(fields[1]);
+            if(fields[0]==u8"学习") {
                 SentenceLearningEvent e;e.id=id;e.time=time;
-                if(!readField(fields[4],e.mode)||!readField(fields[5],e.code)||!readField(fields[6],e.text)||!readField(fields[7],e.context)||
-                   e.mode.empty()||e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||learningCharacters(e.context)>2)throw std::runtime_error("Invalid learning text row");
+                if(fields[5].size()!=1 || fields[5][0]<'1' || fields[5][0]>'3')throw std::runtime_error("Invalid learning increment");
+                e.levels=fields[5][0]-'0';
+                if(!readField(fields[6],e.mode)||!readField(fields[3],e.code)||!readField(fields[2],e.text)||!readField(fields[4],e.context)||
+                   e.mode.empty()||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||learningCharacters(e.context)>2 || !fields[8].empty())throw std::runtime_error("Invalid learning text row");
                 state.seen.insert(id);state.events.push_back(std::move(e));
-            }else if(fields[1]=="U" && fields.size()==5 && fields[4].size()<=128) {
-                state.seen.insert(id);removed.insert(std::string(fields[4]));
-            }else if(fields[1]=="C" && fields.size()==4) {
+            }else if(fields[0]==u8"撤销" && !fields[8].empty() && fields[8].size()<=128) {
+                state.seen.insert(id);removed.insert(std::string(fields[8]));
+            }else if(fields[0]==u8"清空" && fields[8].empty()) {
                 state.seen.insert(id);state.events.clear();removed.clear();
             }else throw std::runtime_error("Invalid learning operation");
         }
@@ -111,6 +140,7 @@ private:
         // Keep user edits intact; malformed data must never be silently replaced.
         if(!appended)journal(data);
         std::string separated;
+        if(data.empty()){separated=header;separated+=addition;addition=separated;}
         if(!data.empty() && data.back()!='\n'){separated="\n";separated+=addition;addition=separated;}
         if(data.size()+addition.size()>maximumBytes)throw std::runtime_error("Learning journal full; normal input remains available");
         std::ofstream out(path_,std::ios::binary|std::ios::app);if(!out)throw std::runtime_error("Write learning journal");
@@ -170,9 +200,9 @@ public:
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto original=journal(data);auto state=*original;std::string addition;
         for(const auto& e:events) {
             if(e.id.empty()||e.id.size()>128||e.id.find_first_of("\t\r\n")!=std::string::npos || state.seen.count(e.id) || e.mode.empty() || e.mode.size()>512 || !learningCharacters(e.mode) || !learningCharacters(e.code) ||
-               e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||(!e.context.empty()&&!learningCharacters(e.context))||learningCharacters(e.context)>2)continue;
+               e.time<0||e.code.empty()||e.code.size()>128||!learningStaticText(e.text)||(!e.context.empty()&&!learningCharacters(e.context))||learningCharacters(e.context)>2||e.levels<1||e.levels>3)continue;
             state.seen.insert(e.id);
-            addition+=seal("TCL2\tE\t"+e.id+'\t'+std::to_string(e.time)+'\t'+editableField(e.mode)+'\t'+editableField(e.code)+'\t'+editableField(e.text)+'\t'+editableField(e.context));
+            addition+=row(u8"学习",e.id,e.time,e.text,e.code,e.context,e.levels,e.mode);
         }
         if(addition.empty()){publish(state.events);return;}appendBytes(std::move(data),addition,original.get());
     }
@@ -185,12 +215,12 @@ public:
     bool undoLast() {
         std::lock_guard<std::mutex> local(mutex_);if(!std::filesystem::exists(path_))return false;
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();auto state=parse(data);if(state.events.empty())return false;
-        appendBytes(std::move(data),seal("TCL2\tU\t"+learningId()+'\t'+std::to_string(learningNow())+'\t'+state.events.back().id));return true;
+        appendBytes(std::move(data),row(u8"撤销",learningId(),learningNow(),{},{},{},0,{},state.events.back().id));return true;
     }
     void clear() {
         std::lock_guard<std::mutex> local(mutex_);std::filesystem::create_directories(path_.parent_path());
         FileLock lock(std::filesystem::path(path_.u16string()+u".lock"));auto data=bytes();
-        appendBytes(std::move(data),seal("TCL2\tC\t"+learningId()+'\t'+std::to_string(learningNow())));
+        appendBytes(std::move(data),row(u8"清空",learningId(),learningNow()));
     }
 };
 }

@@ -67,6 +67,7 @@ struct SentenceLearningEvent {
     std::int64_t time=0;
     std::u16string mode,code,text,context;
     int rawStart=0,rawEnd=0,textStart=0,textEnd=0;
+    int levels=1; // One actual correction, a bounded 1..3-level ranking increment.
 };
 struct SentenceLearningBoundary {int raw=0,text=0;};
 // Compare only intervals delimited by raw boundaries shared by BOTH paths.
@@ -114,7 +115,8 @@ class SentenceLearningSnapshot {
     using ContextScores=std::map<std::u16string,double,std::less<>>;
     struct Scores {
         ContextScores exact;
-        double general=0;
+        double general=0,confidenceGeneral=0;
+        ContextScores weights,confidenceExact;
         double forContext(std::u16string_view context) const {
             const auto it=exact.find(context);
             return it==exact.end()?general:std::max(general,it->second);
@@ -141,20 +143,21 @@ public:
     }
     static std::shared_ptr<const SentenceLearningSnapshot> build(const std::vector<SentenceLearningEvent>& events,std::int64_t now=learningNow()) {
         (void)now; // Timestamps are journal metadata only; learning never decays with time.
-        struct Choice {double weight=0;};
+        struct Choice {double weight=0,confirmed=0;};
         using Key=std::tuple<std::u16string,std::u16string,std::u16string>;
         std::map<Key,std::map<std::u16string,Choice>> groups;
         for(const auto& event:events) {
             if(event.mode.empty() || event.mode.size()>512 || event.code.empty() || event.code.size()>128 || !learningStaticText(event.text) ||
-               (!event.context.empty() && (!learningCharacters(event.context) || learningCharacters(event.context)>2)))continue;
+               (!event.context.empty() && (!learningCharacters(event.context) || learningCharacters(event.context)>2)) || event.levels<1 || event.levels>3)continue;
             auto& choices=groups[{event.code,event.mode,event.context}];
             // Only explicit manual corrections are persisted. A competing manual
             // correction weakens the old local choice; elapsed time never does.
-            for(auto& entry:choices)if(entry.first!=event.text)entry.second.weight*=0.25;
+            for(auto& entry:choices)if(entry.first!=event.text){entry.second.weight*=0.25;entry.second.confirmed*=0.25;}
             auto& target=choices.try_emplace(event.text,Choice{}).first->second;
-            target.weight=std::min(static_cast<double>(maximumCorrectionLevel),target.weight+1);
+            target.weight=std::min(static_cast<double>(maximumCorrectionLevel),target.weight+event.levels);
+            target.confirmed=std::min(static_cast<double>(maximumCorrectionLevel),target.confirmed+1);
         }
-        struct Summary {ContextScores exact;double weight=0;};
+        struct Summary {ContextScores exact,weights,confidenceExact;double weight=0,confirmed=0;};
         std::map<Key,Summary> summaries;
         for(const auto& group:groups) {
             const auto& code=std::get<0>(group.first);
@@ -164,6 +167,9 @@ public:
                 auto& summary=summaries[{code,mode,entry.first}];
                 summary.exact[context]=exactScore(entry.second.weight);
                 summary.weight+=entry.second.weight;
+                summary.confirmed+=entry.second.confirmed;
+                summary.weights[context]=entry.second.weight;
+                summary.confidenceExact[context]=SentenceLearningSnapshot::exactScore(entry.second.confirmed);
             }
         }
         auto snapshot=std::make_shared<SentenceLearningSnapshot>();
@@ -176,6 +182,8 @@ public:
             auto& partition=partitions[code];if(!partition)partition=std::make_shared<ModeScores>();
             auto& scores=(*partition)[mode][text];
             scores.general=generalScore(summary.weight);
+            scores.confidenceGeneral=generalScore(summary.confirmed);
+            scores.weights=std::move(summary.weights);scores.confidenceExact=std::move(summary.confidenceExact);
             scores.exact=std::move(summary.exact);
         }
         for(auto& partition:partitions)snapshot->byCode_.emplace(partition.first,std::move(partition.second));
@@ -199,6 +207,35 @@ public:
         }
         return result;
     }
+    double confidenceScore(std::u16string_view mode,std::u16string_view code,std::u16string_view text,std::u16string_view context) const {
+        const auto codes=byCode_.find(code);if(codes==byCode_.end())return 0;
+        const auto modes=codes->second->find(mode);if(modes==codes->second->end())return 0;
+        const auto texts=modes->second.find(text);if(texts==modes->second.end())return 0;
+        const auto& scores=texts->second;const auto exact=scores.confidenceExact.find(context);
+        return std::max(scores.confidenceGeneral,exact==scores.confidenceExact.end()?0.0:exact->second);
+    }
+    double projectedScore(std::u16string_view mode,std::u16string_view code,std::u16string_view text,
+        std::u16string_view context,const std::vector<SentenceLearningEvent>& events,int levels) const {
+        if(std::none_of(events.begin(),events.end(),[&](const auto& e){return e.mode==mode && e.code==code;}))return score(mode,code,text,context);
+        ContextScores weights;
+        const auto codes=byCode_.find(code);
+        if(codes!=byCode_.end()) {
+            const auto modes=codes->second->find(mode);
+            if(modes!=codes->second->end()) {
+                const auto texts=modes->second.find(text);
+                if(texts!=modes->second.end())weights=texts->second.weights;
+            }
+        }
+        for(const auto& e:events) {
+            if(e.mode!=mode || e.code!=code)continue;
+            auto found=weights.find(e.context);
+            if(e.text==text)weights[e.context]=std::min(static_cast<double>(maximumCorrectionLevel),(found==weights.end()?0:found->second)+levels);
+            else if(found!=weights.end())found->second*=0.25;
+        }
+        double total=0;for(const auto& e:weights)total+=e.second;
+        const auto found=weights.find(context);
+        return std::max(generalScore(total),exactScore(found==weights.end()?0:found->second));
+    }
     double score(std::u16string_view mode,std::u16string_view code,std::u16string_view text,std::u16string_view context) const {
         const auto codes=byCode_.find(code);if(codes==byCode_.end())return 0;
         const auto modes=codes->second->find(mode);if(modes==codes->second->end())return 0;
@@ -207,29 +244,54 @@ public:
     }
 };
 
-inline void sentenceLearningSeedInitialLevels(std::vector<SentenceLearningEvent>& events,
-    const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,double scoreGap) {
+inline double sentenceLearningProjectedReward(std::u16string_view raw,std::u16string_view text,
+    const std::vector<SentenceLearningBoundary>& boundaries,const std::vector<SentenceLearningEvent>& events,
+    const SentenceLearningSnapshot& snapshot,int levels) {
+    std::vector<SentenceLearningBoundary> points{{0,0}};
+    for(auto p:boundaries) {
+        if(p.raw<=points.back().raw || p.text<=points.back().text || p.raw>static_cast<int>(raw.size()) || p.text>static_cast<int>(text.size()))return 0;
+        points.push_back(p);
+    }
+    if(points.back().raw!=static_cast<int>(raw.size()) || points.back().text!=static_cast<int>(text.size()))return 0;
+    std::vector<double> best(points.size());
+    for(std::size_t end=1;end<points.size();++end) {
+        best[end]=best[end-1];
+        for(std::size_t start=end;start-->0;) {
+            const auto fragment=text.substr(points[start].text,points[end].text-points[start].text);
+            if(learningCharacters(fragment)>16)break;
+            auto code=std::u16string(raw.substr(points[start].raw,points[end].raw-points[start].raw));
+            for(auto& c:code)if(c>=u'A' && c<=u'Z')c+=u'a'-u'A';
+            const auto context=learningContext(text.substr(0,points[start].text));
+            best[end]=std::max(best[end],best[start]+snapshot.projectedScore(events.front().mode,code,fragment,context,events,levels));
+        }
+    }
+    return best.back();
+}
+inline void sentenceLearningPlanLevels(std::vector<SentenceLearningEvent>& events,
+    const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,std::u16string_view raw,
+    std::u16string_view before,std::u16string_view selected,
+    const std::vector<SentenceLearningBoundary>& a,const std::vector<SentenceLearningBoundary>& b,
+    double beforeBase,double selectedBase) {
     if(events.empty())return;
-    std::vector<SentenceLearningEvent> fresh;
-    for(const auto& event:events) {
-        if(!snapshot || snapshot->score(event.mode,event.code,event.text,event.context)<=0)fresh.push_back(event);
+    std::set<std::tuple<std::u16string,std::u16string,std::u16string,std::u16string>> seen;
+    events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& e){return !seen.emplace(e.mode,e.code,e.text,e.context).second;}),events.end());
+    const SentenceLearningSnapshot empty;const auto& state=snapshot?*snapshot:empty;
+    int levels=1;
+    if(std::isfinite(beforeBase) && std::isfinite(selectedBase))for(;levels<3;++levels) {
+        const auto left=beforeBase+sentenceLearningProjectedReward(raw,before,a,events,state,levels);
+        const auto right=selectedBase+sentenceLearningProjectedReward(raw,selected,b,events,state,levels);
+        if(right>=left+1)break;
     }
-    if(fresh.empty())return;
-    const double required=std::max(0.0,scoreGap)+1.0;
-    int level=1;
-    while(level<3 && static_cast<double>(fresh.size())*SentenceLearningSnapshot::exactScore(level)<required)++level;
-    if(level==1)return;
-    for(const auto& event:fresh)for(int copy=1;copy<level;++copy) {
-        auto seeded=event;seeded.id=learningId();events.push_back(std::move(seeded));
-    }
+    for(auto& e:events)e.levels=levels;
 }
 
 inline std::vector<SentenceLearningEvent> sentenceLearningReinforceExisting(
     std::u16string_view raw,std::u16string_view before,std::u16string_view selected,
     const std::vector<SentenceLearningBoundary>& a,const std::vector<SentenceLearningBoundary>& b,
-    int floorRaw,std::u16string_view mode,const std::shared_ptr<const SentenceLearningSnapshot>& snapshot) {
+    int floorRaw,std::u16string_view mode,const std::shared_ptr<const SentenceLearningSnapshot>& snapshot,
+    const std::function<bool(std::u16string_view)>& supplemental={}) {
     std::vector<SentenceLearningEvent> result;
-    if(!snapshot || snapshot->empty() || mode.empty() || before==selected || a.empty() || b.empty())return result;
+    if(((!snapshot || snapshot->empty()) && !supplemental) || mode.empty() || before==selected || a.empty() || b.empty())return result;
     std::map<int,int> left,right;left[0]=right[0]=0;
     auto fill=[&](auto& map,const auto& values,std::u16string_view text) {
         int oldRaw=0,oldText=0;
@@ -261,7 +323,7 @@ inline std::vector<SentenceLearningEvent> sentenceLearningReinforceExisting(
                     std::u16string code(raw.substr(start->first,finish->first-start->first));
                     for(auto& c:code)if(c>=u'A' && c<=u'Z')c+=u'a'-u'A';
                     const auto ctx=learningContext(selected.substr(0,start->second));
-                    if(snapshot->score(mode,code,text,ctx)<=0)continue;
+                    if(!(snapshot && snapshot->score(mode,code,text,ctx)>0) && !(supplemental && supplemental(text)))continue;
                     matches.push_back({start->first,finish->first,start->second,finish->second,characters,
                         std::move(code),std::u16string(text),ctx});
                 }
@@ -317,13 +379,13 @@ struct SentenceFusionPreference {
 // share untouched code partitions only within the same scoring second. Clock
 // rollback, future-clamped events, undo/clear and dropped history replay fully.
 class SentenceLearningAccumulator {
-    struct Choice {double weight=0;};
+    struct Choice {double weight=0,confirmed=0;};
     using Key=std::tuple<std::u16string,std::u16string,std::u16string>;
     std::map<Key,std::map<std::u16string,Choice>> groups_;
     std::vector<SentenceLearningEvent> events_;
     std::shared_ptr<const SentenceLearningSnapshot> current_;
     static bool same(const SentenceLearningEvent& a,const SentenceLearningEvent& b) {
-        return a.id==b.id && a.time==b.time && a.mode==b.mode && a.code==b.code && a.text==b.text && a.context==b.context;
+        return a.id==b.id && a.time==b.time && a.mode==b.mode && a.code==b.code && a.text==b.text && a.context==b.context && a.levels==b.levels;
     }
 public:
     std::shared_ptr<const SentenceLearningSnapshot> update(const std::vector<SentenceLearningEvent>& events,std::int64_t now=learningNow()) {
@@ -335,19 +397,20 @@ public:
         for(std::size_t i=events_.size();i<events.size();++i) {
             const auto& event=events[i];
             if(event.mode.empty() || event.mode.size()>512 || event.code.empty() || event.code.size()>128 || !learningStaticText(event.text) ||
-               (!event.context.empty() && (!learningCharacters(event.context) || learningCharacters(event.context)>2)))continue;
+               (!event.context.empty() && (!learningCharacters(event.context) || learningCharacters(event.context)>2)) || event.levels<1 || event.levels>3)continue;
             dirty.insert(event.code);
             auto& choices=groups_[{event.code,event.mode,event.context}];
-            for(auto& entry:choices)if(entry.first!=event.text)entry.second.weight*=0.25;
+            for(auto& entry:choices)if(entry.first!=event.text){entry.second.weight*=0.25;entry.second.confirmed*=0.25;}
             auto& target=choices.try_emplace(event.text,Choice{}).first->second;
-            target.weight=std::min(static_cast<double>(SentenceLearningSnapshot::maximumCorrectionLevel),target.weight+1);
+            target.weight=std::min(static_cast<double>(SentenceLearningSnapshot::maximumCorrectionLevel),target.weight+event.levels);
+            target.confirmed=std::min(static_cast<double>(SentenceLearningSnapshot::maximumCorrectionLevel),target.confirmed+1);
         }
         events_=events;
         if(!rebuild && dirty.empty())return current_;
         auto next=std::make_shared<SentenceLearningSnapshot>();
         if(!rebuild && current_)next->byCode_=current_->byCode_;
         for(const auto& code:dirty) {
-            struct Summary {SentenceLearningSnapshot::ContextScores exact;double weight=0;};
+            struct Summary {SentenceLearningSnapshot::ContextScores exact,weights,confidenceExact;double weight=0,confirmed=0;};
             std::map<std::pair<std::u16string,std::u16string>,Summary> summaries;
             for(auto group=groups_.lower_bound(Key{code,u"",u""});group!=groups_.end() && std::get<0>(group->first)==code;++group) {
                 const auto& mode=std::get<1>(group->first);const auto& context=std::get<2>(group->first);
@@ -355,6 +418,9 @@ public:
                     auto& summary=summaries[{mode,entry.first}];
                     summary.exact[context]=SentenceLearningSnapshot::exactScore(entry.second.weight);
                     summary.weight+=entry.second.weight;
+                summary.confirmed+=entry.second.confirmed;
+                summary.weights[context]=entry.second.weight;
+                summary.confidenceExact[context]=SentenceLearningSnapshot::exactScore(entry.second.confirmed);
                 }
             }
             auto partition=std::make_shared<SentenceLearningSnapshot::ModeScores>();
@@ -362,6 +428,8 @@ public:
                 auto& summary=entry.second;
                 auto& scores=(*partition)[entry.first.first][entry.first.second];
                 scores.general=SentenceLearningSnapshot::generalScore(summary.weight);
+                scores.confidenceGeneral=SentenceLearningSnapshot::generalScore(summary.confirmed);
+                scores.weights=std::move(summary.weights);scores.confidenceExact=std::move(summary.confidenceExact);
                 scores.exact=std::move(summary.exact);
             }
             next->byCode_[code]=std::move(partition);
