@@ -1,0 +1,70 @@
+{
+  "manager_sha256": "b92e7d2666a881b50dad924ee27e806cef157b00fcaa80fc80f1ed611fea4ada",
+  "installed": false,
+  "internal_mouse_moves_per_control": 100,
+  "controls_checked": [
+    100,
+    105,
+    202,
+    203
+  ],
+  "redundant_paints": 0,
+  "checkbox_click_toggles": true,
+  "native_settings_suite": "passed",
+  "skin": {
+    "status": "passed",
+    "dpi": [
+      96,
+      120,
+      144,
+      192
+    ],
+    "pages": 5,
+    "physical_capture": true,
+    "complete_window_frame": true,
+    "fixed_dip_size": [
+      640,
+      480
+    ],
+    "minimize_restore": true,
+    "caption_hit_test": true,
+    "keyboard_move": true,
+    "mouse_drag": true,
+    "alt_space_system_menu": true,
+    "close_without_save": true,
+    "space_toggles_native_checkbox": true,
+    "settings_tab_stops_disabled": true,
+    "native_dropdown": true,
+    "repeated_open_close_gdi_user_handles": true,
+    "validation_errors_focused_and_captured": true,
+    "font_size_does_not_change_preview_pixels": true,
+    "fixed_preview_with_200dip_setting": true,
+    "hidden_preview": true,
+    "high_contrast_palette_branch": true,
+    "actual_system_high_contrast_toggled": false,
+    "config_bytes_and_timestamp_unchanged": true,
+    "sha256": "ac1db78f48dca39ddad445c7feafd1da93af78547b2de79ac382315edf3db157"
+  },
+  "tooltip": {
+    "config_unchanged": true,
+    "actual_mouse_hover": true,
+    "manager_sha256": "B92E7D2666A881B50DAD924EE27E806CEF157B00FCAA80FC80F1ED611FEA4ADA",
+    "mouse_move_relayed": true,
+    "tip": "visible:清屏：清除未上屏编码，不删除已经输入的文字。",
+    "status": "passed"
+  },
+  "scroll": {
+    "status": "passed",
+    "actual_screen_capture": true,
+    "captures_repainted_with_WM_PRINT": false,
+    "excluded_region": "pixels outside GetWindowRgn (tiger ears and rounded body)",
+    "changed_pixels": {
+      "3": 0,
+      "1": 0,
+      "2": 0,
+      "0": 0
+    },
+    "config_unchanged": true,
+    "probe_sha256": "ac1db78f48dca39ddad445c7feafd1da93af78547b2de79ac382315edf3db157"
+  }
+}

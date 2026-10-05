@@ -6,7 +6,8 @@
   <ItemGroup>
     <ClCompile Include="..\native\ConfigStore.cpp" /><ClCompile Include="..\native\SchemaCatalog.cpp" />
     <ClCompile Include="schema_manager.cpp" /><ClCompile Include="..\native\UserStore.cpp" />
-    <ClCompile Include="InputSettings.cpp" /><ClCompile Include="FontChooser.cpp" />
+    <ClCompile Include="..\native\CandidateTheme.cpp" /><ClCompile Include="..\native\tsf\CandidateRenderer.cpp" /><ClCompile Include="..\native\CandidatePresentation.cpp" />
+    <ClCompile Include="InputSettings.cpp" /><ClCompile Include="SettingsSkin.cpp" /><ClCompile Include="SettingsControls.cpp" /><ClCompile Include="FontChooser.cpp" />
     <ClCompile Include="..\native\SentenceSettings.cpp" />
     <ClCompile Include="SelectionSettings.cpp" />
   </ItemGroup>

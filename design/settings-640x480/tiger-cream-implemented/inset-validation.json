@@ -1,0 +1,88 @@
+{
+  "changes": [
+    "settings UI font: SimHei",
+    "caption buttons inset from curved frame",
+    "footer buttons and status inset above lower border"
+  ],
+  "window": {
+    "status": "passed",
+    "dpi": [
+      96,
+      120,
+      144,
+      192
+    ],
+    "pages": 5,
+    "physical_capture": true,
+    "complete_window_frame": true,
+    "fixed_dip_size": [
+      640,
+      480
+    ],
+    "minimize_restore": true,
+    "caption_hit_test": true,
+    "keyboard_move": true,
+    "mouse_drag": true,
+    "alt_space_system_menu": true,
+    "close_without_save": true,
+    "space_toggles_native_checkbox": true,
+    "tab_shift_tab": true,
+    "native_dropdown": true,
+    "repeated_open_close_gdi_user_handles": true,
+    "validation_errors_focused_and_captured": true,
+    "preview_200dip_horizontal_10_candidates": true,
+    "hidden_preview": true,
+    "high_contrast_palette_branch": true,
+    "actual_system_high_contrast_toggled": false,
+    "config_bytes_and_timestamp_unchanged": true,
+    "sha256": "166bc2c3911a0da34028176626102a87dffea26765fa441ae29f6ae5182a3945"
+  },
+  "installed": {
+    "dpi": 144,
+    "fixed_dip_width": 640,
+    "fixed_dip_height": 480,
+    "only_settings_program_changed": true,
+    "old_clean_windows_closed": [],
+    "old_unsaved_windows_retained": [],
+    "status": "installed_and_verified",
+    "generation": "60f14370499b2aec",
+    "manager": "C:\\Program Files\\Tigirl\\versions\\60f14370499b2aec\\Tigirl.exe",
+    "manager_sha256": "830C3A8015E891FF5811BE2D7F623C284470B5D6329F6EB81BCEB4C4022B16F3",
+    "engines_unchanged": true,
+    "config_unchanged": true,
+    "registrations_verified": true,
+    "uri_verified": true,
+    "shortcut_verified": true,
+    "native_window_opened": true,
+    "tab_count": 5,
+    "preview_control_present": true,
+    "process_id": 77224,
+    "arm64_x64_load_checks": {
+      "arm64": {
+        "wow64_process_machine": 0,
+        "native_machine": 43620,
+        "loaded": true,
+        "load_error": 0,
+        "class_instance": true,
+        "instance_hresult": 0
+      },
+      "x64": {
+        "wow64_process_machine": 0,
+        "native_machine": 43620,
+        "loaded": true,
+        "load_error": 0,
+        "class_instance": true,
+        "instance_hresult": 0
+      }
+    },
+    "x86_load_check": {
+      "wow64_process_machine": 332,
+      "native_machine": 43620,
+      "loaded": true,
+      "load_error": 0,
+      "class_instance": true,
+      "instance_hresult": 0
+    },
+    "rollback_snapshot_directory": "C:\\users\\yc\\desktop\\ime\\build\\tiger-cream-inset-install\\build"
+  }
+}

@@ -40,7 +40,6 @@ struct Context {
     LPARAM observedFlags=0;
     LONG observedTime=0;
     bool observedDown=false;
-    bool controlSpaceConsumed=false;
     std::uint64_t revision=0;
 };
 

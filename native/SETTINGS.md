@@ -20,7 +20,7 @@ The following original Chinese keys are connected to the engine:
 | --- | --- |
 | 默认中文 | 是 |
 | shift切换中英文 | 是 |
-| Ctrl+空格切换中英文 | 是 |
+| Ctrl+空格切换中英文 | 已移除；兼容保留旧文件内容，但不再读取或处理 |
 | Ctrl+等号手动加词 | 是 |
 | 手动加词快捷键 | Ctrl+VK_OEM_PLUS |
 | 中文状态下使用英文标点 | 否 |

@@ -18,7 +18,7 @@ public:
     bool select(std::wstring_view value);
     std::wstring selected() const;
     void scale(UINT dpi);
-    void draw(const DRAWITEMSTRUCT& item);
+    void draw(const DRAWITEMSTRUCT& item,bool contrast=false);
     void measure(MEASUREITEMSTRUCT& item) const;
     const std::vector<Item>& items() const {return items_;}
     double previewSize() const {return size_;}

@@ -32,7 +32,6 @@ for prefix in ['', 'ab', 'dk', 'abcd', 'qwer', 'zzzz', '`ni', '`zhong', '3.14', 
         for vk in pages: events+=tap(vk)
         case(f'{prefix!r} pages {pages}',typing(prefix)+events+typing('2'))
 case('shift-toggle',typing('ab')+tap(160)+typing('ab ')+tap(160)+typing('dk '))
-case('ctrl-space',typing('ab')+[dict(vk=162,action='down',ctrl=True)]+tap(32,ctrl=True)+[dict(vk=162,action='up')]+typing('ab '))
 for prefix in ['abcdabcdab','aaaaZZZZabcd','dkdkab']:
     for count in range(len(prefix)+2):
         case(f'backtrack {prefix} {count}',typing(prefix)+tap(8)*count+typing('abcd '))

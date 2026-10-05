@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory(prefix='settings-oracle-',dir=BUILD) as temp:
     output=subprocess.check_output(['/mnt/c/Program Files/dotnet/dotnet.exe',win(ROOT/'tools/ReferenceOracle/bin/Release/net10.0-windows/ReferenceOracle.dll'),'settings',win(temp),win(trace)],text=True,encoding='utf-8-sig')
 (BUILD/'settings-oracle.jsonl').write_text(output,encoding='utf-8')
 expected=[json.loads(x) for x in output.splitlines()]
+# Explicit product change: legacy Ctrl+Space configuration is now ignored.
+for settings in expected: settings["ctrlSpaceToggle"]=False
 for exe in [BUILD/'settings_probe',BUILD/'tests/ARM64/settings_probe.exe']:
     if not exe.exists(): continue
     actual=[json.loads(x) for x in subprocess.check_output([str(exe),win(hexfile) if exe.suffix=='.exe' else str(hexfile)],text=True).splitlines()]

@@ -26,7 +26,7 @@ public static class SettingsCaptureDesktop {
    Startup startup=new Startup();startup.cb=Marshal.SizeOf(typeof(Startup));startup.desktop=name;
    var command=new StringBuilder("\""+exe+"\" \""+root+"\" \""+dictionary+"\" --test-settings \u864e\u7801\u5b57\u8bcd");
    if(!CreateProcess(exe,command,IntPtr.Zero,IntPtr.Zero,false,0,IntPtr.Zero,System.IO.Path.GetDirectoryName(exe),ref startup,out process))throw new System.ComponentModel.Win32Exception();
-   if(WaitForSingleObject(process.process,60000)!=0)throw new Exception("Settings capture timed out");
+   if(WaitForSingleObject(process.process,150000)!=0)throw new Exception("Settings capture timed out");
    uint code;if(!GetExitCodeProcess(process.process,out code) || code!=0)throw new Exception("Settings capture failed: "+code);
   } finally {
    if(process.process!=IntPtr.Zero){if(WaitForSingleObject(process.process,0)!=0)TerminateProcess(process.process,99);CloseHandle(process.process);}

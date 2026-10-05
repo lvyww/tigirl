@@ -94,7 +94,7 @@ void FontChooser::scale(UINT dpi) {
     }
 }
 void FontChooser::measure(MEASUREITEMSTRUCT& item) const {item.itemHeight=static_cast<UINT>(std::ceil((size_*1.5+6)*dpi_/96.));}
-void FontChooser::draw(const DRAWITEMSTRUCT& item) {
+void FontChooser::draw(const DRAWITEMSTRUCT& item,bool contrast) {
     if(item.itemID==UINT_MAX || item.itemID>=items_.size())return;
     const auto& font=items_[item.itemID];
     if(!target_) {
@@ -109,10 +109,9 @@ void FontChooser::draw(const DRAWITEMSTRUCT& item) {
         DWRITE_FONT_STRETCH_NORMAL,static_cast<float>(size_),L"zh-CN",&format));
     checked(format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));checked(format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER));
     const bool selected=(item.itemState&ODS_SELECTED)!=0;
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;checked(target_->CreateSolidColorBrush(color(selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT),&brush));
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;checked(target_->CreateSolidColorBrush(contrast?color(selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT):D2D1::ColorF(0x3a2a20),&brush));
     const float width=(item.rcItem.right-item.rcItem.left)*96.f/dpi_,height=(item.rcItem.bottom-item.rcItem.top)*96.f/dpi_;
-    target_->BeginDraw();target_->Clear(color(selected?COLOR_HIGHLIGHT:COLOR_WINDOW));
+    target_->BeginDraw();target_->Clear(contrast?color(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):D2D1::ColorF(selected?0xffdda8:0xfffaf0));
     target_->DrawTextW(font.label.c_str(),static_cast<UINT32>(font.label.size()),format.Get(),D2D1::RectF(6,0,std::max(6.f,width-4),height),brush.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
     const auto hr=target_->EndDraw();if(hr==D2DERR_RECREATE_TARGET)target_.Reset();else checked(hr);
-    if(item.itemState&ODS_FOCUS){RECT focus=item.rcItem;DrawFocusRect(item.hDC,&focus);}
 }

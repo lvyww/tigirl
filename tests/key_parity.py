@@ -53,7 +53,6 @@ for text in ["3.14", "''", "Abc123 ", "Abc,", "ABC "]:
     case("literal " + text, typing(text))
 case("shift toggle raw", typing("ab") + tap(160) + typing("ab") + tap(160) + typing("ab "))
 case("shift chord", tap(160)[:1] + typing("A") + tap(160)[1:] + typing("bc "))
-case("ctrl space", tap(162, ctrl=True)[:1] + tap(32, ctrl=True) + tap(162)[1:] + typing("ab"))
 case("shortcut cancels", typing("ab") + tap(162, ctrl=True)[:1] + tap(67, ctrl=True) + tap(162)[1:] + typing("a "))
 for code in rng.sample(adjustment_codes, 12):
     for modifiers in [dict(ctrl=True), dict(ctrl=True, shift=True), dict(alt=True)]:

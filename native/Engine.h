@@ -17,7 +17,8 @@ struct ActionShortcut {
 };
 struct Config {
     std::u16string reloadRequest;
-    bool defaultChinese = true, shiftToggle = true, ctrlSpaceToggle = true;
+    bool defaultChinese = true, shiftToggle = true;
+    bool ctrlSpaceToggle = false; // Deprecated compatibility field; parser and engine ignore it.
     bool englishPunctuation = false, slashDunhao = true;
     bool enterClear = false, tabClear = true, clearOnNoCode = true;
     bool maxCodeAutoCommit = true, reverseLookup = true;
@@ -127,8 +128,6 @@ private:
     KeyResult selectRaw(int index);
     int sentenceCandidateIndex(std::uint32_t index) const;
     KeyResult toggle();
-    bool controlSpace(const KeyEvent& key, KeyResult& result);
-    void resetControlSpace();
     void refreshPage();
     Lexicon::Match entry() const;
     std::u16string selected(int index) const;
@@ -165,8 +164,6 @@ private:
     int page_ = 0;
     bool leftShift_ = false, rightShift_ = false, shiftChord_ = false;
     std::array<bool, 256> consumedModifiers_{};
-    bool controlDown_ = false, spaceDown_ = false, controlArmed_ = false, controlSwitched_ = false;
-    std::chrono::steady_clock::time_point controlReleased_{};
     bool leftSingle_ = true, leftDouble_ = true, deletedSingle_ = false, deletedDouble_ = false;
     bool quoteDown_ = false, digit_ = false;
     History history_;

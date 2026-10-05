@@ -41,7 +41,6 @@ for prefix in ['', 'ab', 'dk', 'abcd', 'qwer', 'zzzz', '`ni', '`zhong', '3.14', 
         for vk in pages: events+=tap(vk)
         case(f'{prefix!r} pages {pages}',typing(prefix)+events+typing('2'))
 case('shift-toggle',typing('ab')+tap(160)+typing('ab ')+tap(160)+typing('dk '))
-case('ctrl-space',typing('ab')+[dict(vk=162,action='down',ctrl=True)]+tap(32,ctrl=True)+[dict(vk=162,action='up')]+typing('ab '))
 trace=BUILD/'settings-keys.jsonl'
 trace.write_text(''.join(json.dumps(k)+'\n' for k in keys),encoding='utf-8')
 rows=[' '.join(str(int(x)) for x in [k['reset'],k['vk'],k.get('scan',0),k['action']=='down',k.get('shift',False),k.get('ctrl',False),k.get('alt',False),k.get('win',False),k.get('caps',False),k.get('num',True),k.get('repeat',1),k.get('extended',False)]) for k in keys]

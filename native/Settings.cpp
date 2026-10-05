@@ -99,7 +99,6 @@ Config parseEngineSettings(std::u16string_view text) {
     if(auto found=values.find(u"_native_settings_reload");found!=values.end())config.reloadRequest=found->second;
     const std::pair<const char16_t*,bool Config::*> flags[]={
         {u"默认中文",&Config::defaultChinese},{u"shift切换中英文",&Config::shiftToggle},
-        {u"Ctrl+空格切换中英文",&Config::ctrlSpaceToggle},
         {u"中文状态下使用英文标点",&Config::englishPunctuation},{u"/输出顿号",&Config::slashDunhao},
         {u"回车清屏",&Config::enterClear},{u"TAB清屏",&Config::tabClear},
         {u"空码自动清屏",&Config::clearOnNoCode},{u"最大码长无重自动上屏",&Config::maxCodeAutoCommit},
@@ -122,7 +121,7 @@ Config parseEngineSettings(std::u16string_view text) {
     config.addWordShortcut=gesture(u"手动加词快捷键",{});
     auto recent=gesture(u"切换最近码表快捷键",{77,true,false,false});
     auto reserved=[&](ActionShortcut s) {
-        return (config.ctrlSpaceToggle && s.vk==32 && s.ctrl && !s.alt && !s.shift) ||
+        return (s.vk==32 && s.ctrl && !s.alt && !s.shift) ||
             (enabled(u"Alt+\\启用或禁用外挂版",true) && s.vk==220 && s.alt && !s.ctrl && !s.shift) ||
             (s.vk>=49 && s.vk<=57 && ((s.ctrl && !s.alt) || (s.alt && !s.ctrl && !s.shift)));
     };

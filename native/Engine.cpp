@@ -37,7 +37,7 @@ Config::Config() {
 }
 bool Config::operator==(const Config& other) const {
     const auto fields=[](const Config& c) {
-        return std::tie(c.reloadRequest,c.defaultChinese,c.shiftToggle,c.ctrlSpaceToggle,
+        return std::tie(c.reloadRequest,c.defaultChinese,c.shiftToggle,
             c.englishPunctuation,c.slashDunhao,c.enterClear,c.tabClear,c.clearOnNoCode,
             c.maxCodeAutoCommit,c.reverseLookup,c.semicolonSecond,c.quoteThird,
             c.showComment,c.showSplit,c.addWordEnabled,c.mixedInput,c.recentSchemaEnabled,
@@ -120,7 +120,6 @@ void Engine::focusChanged() {
     schemaAwaitingModifierRelease_ = false;
     leftShift_ = rightShift_ = shiftChord_ = false;
     consumedModifiers_.fill(false);
-    resetControlSpace();
     digit_ = false; pageRaw_.clear(); page_ = 0;
 }
 KeyResult Engine::finish(std::u16string text) {
@@ -217,45 +216,6 @@ int Engine::pageDelta(const KeyEvent& key) const {
     default: return key.shift ? 0 : key.vk == Minus ? -1 : key.vk == Plus ? 1 : 0;
     }
 }
-void Engine::resetControlSpace() {
-    controlDown_ = spaceDown_ = controlArmed_ = controlSwitched_ = false;
-    controlReleased_ = {};
-}
-bool Engine::controlSpace(const KeyEvent& key, KeyResult& result) {
-    const auto now = std::chrono::steady_clock::now();
-    auto cleanup = [&] {
-        if (!controlDown_ && !spaceDown_ && (controlSwitched_ ||
-            (controlArmed_ && controlReleased_ != std::chrono::steady_clock::time_point{} &&
-             now - controlReleased_ > std::chrono::milliseconds(250)))) resetControlSpace();
-    };
-    if (!controlKey(key.vk) && key.vk != Space) {
-        if (key.down && controlDown_) resetControlSpace(); else cleanup();
-        return false;
-    }
-    if (!config_.ctrlSpaceToggle || key.shift || key.alt || key.win) {
-        resetControlSpace(); return false;
-    }
-    bool trigger = false;
-    if (key.down) {
-        if (controlKey(key.vk)) {
-            controlDown_ = true; controlArmed_ = !spaceDown_; controlSwitched_ = false; controlReleased_ = {};
-        } else {
-            spaceDown_ = true; trigger = controlDown_ && key.repeat <= 1;
-        }
-    } else {
-        if (controlKey(key.vk)) {
-            controlDown_ = false; controlReleased_ = now; trigger = spaceDown_;
-        } else {
-            spaceDown_ = false;
-            trigger = controlDown_ || (controlReleased_ != std::chrono::steady_clock::time_point{} &&
-                now - controlReleased_ <= std::chrono::milliseconds(250));
-        }
-    }
-    const bool handled = trigger && controlArmed_ && !controlSwitched_;
-    if (handled) { result = toggle(); result.handled = true; controlSwitched_ = true; }
-    cleanup();
-    return handled;
-}
 KeyResult Engine::process(const KeyEvent& key,const SentencePathQueries& queries) {
     auto result = dispatch(key,queries);
     postprocess(key, result);
@@ -285,8 +245,8 @@ KeyResult Engine::dispatch(KeyEvent key,const SentencePathQueries& queries) {
             }
         }
     }
-    KeyResult chord;
-    if (controlSpace(key, chord)) return chord;
+    // Ctrl+Space belongs exclusively to Windows, including legacy enabled configs.
+    if (key.vk == Space && key.ctrl && !key.alt && !key.shift && !key.win) return {};
     if (key.down && modifier(key.vk) && composing() &&
         (mode_ == Mode::Composing || mode_ == Mode::Pinyin) && selection(key.vk)) {
         consumedModifiers_[key.vk] = true;

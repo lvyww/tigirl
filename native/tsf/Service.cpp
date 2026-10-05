@@ -439,15 +439,6 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         if(!test && result.awaitSentenceDecode) {
             completeSentenceNow(current,next);result=next.process(key,sentenceQueries);
         }
-        // Own the entire Space press after our Ctrl+Space toggle. Passing its
-        // repeat/up lets the host/system handle the same shortcut a second time.
-        const bool toggledControlSpace=vk==VK_SPACE && down && key.ctrl &&
-            !key.shift && !key.alt && !key.win && config_.ctrlSpaceToggle &&
-            next.chinese()!=current->engine.chinese();
-        const bool consumedSpace=vk==VK_SPACE && current->controlSpaceConsumed;
-        if(consumedSpace) result.handled=true;
-        const bool nextConsumedSpace=vk==VK_SPACE ?
-            (down && (current->controlSpaceConsumed || toggledControlSpace)) : current->controlSpaceConsumed;
         *eaten=result.handled?TRUE:FALSE;
         if(test && result.handled) return S_OK; // pure preview, no file/text writes
         if(result.switchRecentSchema) {
@@ -460,13 +451,11 @@ HRESULT Service::key(ITfContext* context,WPARAM vk,LPARAM flags,BOOL* eaten,bool
         const bool textChange=!result.commit.empty() || result.cancelComposition ||
             current->engine.compositionRaw()!=next.compositionRaw();
         if(textChange || result.handled) {
-            const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result,nextConsumedSpace](TfEditCookie cookie) mutable {
-                const auto applied=apply(current,std::move(next),result,cookie);
-                if(SUCCEEDED(applied)) current->controlSpaceConsumed=nextConsumedSpace;
-                return applied;
+            const auto hr=edit(current,TF_ES_SYNC|TF_ES_READWRITE,[this,current,next=std::move(next),result](TfEditCookie cookie) mutable {
+                return apply(current,std::move(next),result,cookie);
             });
             if(FAILED(hr)) { *eaten=FALSE; report("Keystroke edit session failed"); return hr; }
-        } else { current->engine=std::move(next); current->controlSpaceConsumed=nextConsumedSpace; ++current->revision; publishMode(current); }
+        } else { current->engine=std::move(next); ++current->revision; publishMode(current); }
         if(test) {
             current->observed=true; current->observedVk=vk; current->observedFlags=flags;
             current->observedTime=stamp; current->observedDown=down;
@@ -822,7 +811,7 @@ void Service::refreshFocus(ITfContext* context) {
         auto current=state(context,true);
         // Focus state changes immediately. A later edit grant must not clear
         // modifiers pressed after this notification.
-        if(changed) {current->engine.focusChanged();current->controlSpaceConsumed=false;current->observed=false;++current->revision;}
+        if(changed) {current->engine.focusChanged();current->observed=false;++current->revision;}
         const bool switched=current->engine.lexicon()->dictionary()!=lexicon_->dictionary();
         const bool reload=current->engine.requiresConfigurationReload(config_);
         auto next=current->engine;
@@ -852,7 +841,7 @@ HRESULT Service::OnSetFocus(BOOL foreground) {
     foreground_=foreground!=FALSE;
     if(!foreground_) {
         ++modeRevision_; hideUI(); if(languageBar_)languageBar_->update(chinese_,false);
-        for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->controlSpaceConsumed=false;item.second->observed=false;}
+        for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->observed=false;}
     }
     return S_OK;
 }
@@ -866,7 +855,7 @@ HRESULT Service::OnKillThreadFocus() {
     ++modeRevision_;
     foreground_=false; hideUI();
     if(languageBar_)languageBar_->update(chinese_,false);
-    for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->controlSpaceConsumed=false; item.second->observed=false; }
+    for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->observed=false; }
     return S_OK;
 }
 HRESULT Service::OnPopContext(ITfContext* context) {
