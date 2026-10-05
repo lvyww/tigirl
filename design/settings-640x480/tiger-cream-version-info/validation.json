@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "dpi": [
+    96,
+    120,
+    144,
+    192
+  ],
+  "pages": 5,
+  "physical_capture": true,
+  "complete_window_frame": true,
+  "fixed_dip_size": [
+    640,
+    480
+  ],
+  "minimize_restore": true,
+  "caption_hit_test": true,
+  "keyboard_move": true,
+  "mouse_drag": true,
+  "alt_space_system_menu": true,
+  "close_without_save": true,
+  "space_toggles_native_checkbox": true,
+  "settings_tab_stops_disabled": true,
+  "native_dropdown": true,
+  "repeated_open_close_gdi_user_handles": true,
+  "validation_errors_focused_and_captured": true,
+  "font_size_does_not_change_preview_pixels": true,
+  "fixed_preview_with_200dip_setting": true,
+  "hidden_preview": true,
+  "high_contrast_palette_branch": true,
+  "actual_system_high_contrast_toggled": false,
+  "config_bytes_and_timestamp_unchanged": true,
+  "sha256": "b4c2ce18acbfdcb16e0c2336ed3d2c0363dbe00fb8c7781709a864b1ccb6704a",
+  "version_label": {
+    "version": "2026.9.10.4",
+    "installed": false,
+    "exe": "C:\\users\\yc\\desktop\\ime\\build\\version-info-final\\Tigirl.exe",
+    "process_id": 87580,
+    "visible_version_label": true,
+    "status": "preview_opened"
+  }
+}

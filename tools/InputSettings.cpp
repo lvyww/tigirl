@@ -29,9 +29,10 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 #pragma comment(lib,"windowscodecs.lib")
+#pragma comment(lib,"version.lib")
 namespace {
 constexpr int Pages=221, Mascot=228, Minimize=229, Close=230;
-constexpr int Donation=223,Preview=226,Dirty=227;
+constexpr int Donation=223,Preview=226,Dirty=227,VersionInfo=231;
 constexpr int AnimationEnabled=224,AnimationDuration=225;
 struct Flag {const char16_t* key;bool tiger::Config::*member;};
 const Flag flags[]={
@@ -49,6 +50,23 @@ constexpr int CandidateDelay=218,AnnotationDelay=219,CodeMask=220;
 constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405,SentenceLearning=406;
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
+// Read the running settings executable so this label follows release resources.
+std::wstring applicationVersion() {
+    wchar_t executable[32768]{};
+    const auto length=GetModuleFileNameW(nullptr,executable,static_cast<DWORD>(std::size(executable)));
+    if(!length || length>=std::size(executable))return L"版本信息不可用";
+    DWORD unused=0;const DWORD size=GetFileVersionInfoSizeW(executable,&unused);
+    if(!size)return L"版本信息不可用";
+    std::vector<BYTE> bytes(size);
+    if(!GetFileVersionInfoW(executable,0,size,bytes.data()))return L"版本信息不可用";
+    VS_FIXEDFILEINFO* version=nullptr;UINT versionSize=0;
+    if(!VerQueryValueW(bytes.data(),L"\\",reinterpret_cast<void**>(&version),&versionSize) ||
+       versionSize<sizeof(VS_FIXEDFILEINFO) || version->dwSignature!=0xfeef04bd)return L"版本信息不可用";
+    return L"虎娘 · 版本 "+std::to_wstring(HIWORD(version->dwProductVersionMS))+L"."+
+        std::to_wstring(LOWORD(version->dwProductVersionMS))+L"."+
+        std::to_wstring(HIWORD(version->dwProductVersionLS))+L"."+
+        std::to_wstring(LOWORD(version->dwProductVersionLS));
+}
 struct Dialog {
     SettingsSkin skin;
     SettingsControls modern{skin};
@@ -316,7 +334,7 @@ struct Dialog {
     bool checked(int id){return SendMessageW(item(id),BM_GETCHECK,0,0)==BST_CHECKED;}
     std::vector<std::u16string> values() {
         std::vector<std::u16string> result;
-        for(auto c:controls){int id=GetDlgCtrlID(c.window);if(c.page<0 || id<=0 || id==Preview || id==Mascot || id==Donation || id==SelectionEditor)continue;
+        for(auto c:controls){int id=GetDlgCtrlID(c.window);if(c.page<0 || id<=0 || id==Preview || id==Mascot || id==Donation || id==VersionInfo || id==SelectionEditor)continue;
             wchar_t type[32]{};GetClassNameW(c.window,type,32);
             if(std::wstring_view(type)==L"Button")result.push_back(checked(id)?u"1":u"0");
             else if(id==AddShortcut || id==RecentShortcut)result.push_back(std::u16string(1,static_cast<char16_t>(SendMessageW(c.window,HKM_GETHOTKEY,0,0))));
@@ -502,6 +520,7 @@ struct Dialog {
         check(SentenceLearning,L"Tab 锁重上屏后自学习（仅本方案、本地保存）",initialSentence.selfLearning,408);
         buildingPage=4;loadDonation();title(L"感谢你对虎娘的支持",24);
         control(Donation,L"STATIC",L"赞赏码",SS_OWNERDRAW,200,72,320,320);
+        control(VersionInfo,L"STATIC",applicationVersion().c_str(),SS_CENTER|SS_CENTERIMAGE,16,298,560,24,true);
         buildingPage=-1;
         control(Notice,L"STATIC",L"",0,24,524,712,40,true);
         control(Dirty,L"STATIC",L"未修改",0,24,580,400,24,true);
@@ -562,7 +581,8 @@ struct Dialog {
         place(AnimationEnabled,12,268,130,28);place(AnimationDuration,254,268,64,28);place(CodeMask,476,268,98,28);
         for(auto& c:controls)if(c.page==3 && c.w==MulDiv(344,584,720))c.w=342;
         place(SentenceRetained,368,96,80,28);place(SentenceCommon,368,176,112,28);
-        place(Donation,166,42,250,250);
+        place(Donation,177,38,250,250);
+        place(VersionInfo,16,292,572,16);
         for(auto& c:controls)if(c.page==4 && GetDlgCtrlID(c.window)==0){c.y=c.title?8:298;c.x=16;c.w=560;c.h=24;}
     }
     void paintFrame(HDC dc) {
