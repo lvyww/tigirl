@@ -375,6 +375,15 @@ struct SentenceFusionPreference {
     }
 };
 
+// Successful commits can carry ordinary or fusion preferences for the same
+// active sentence mode. Keep the mode check shared with portable commit tests.
+inline void filterSentenceLearningForMode(std::vector<SentenceLearningEvent>& events,std::u16string_view activeMode) {
+    const auto fusionMode=SentenceFusionPreference::mode(activeMode);
+    events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& event) {
+        return activeMode.empty() || (event.mode!=activeMode && event.mode!=fusionMode);
+    }),events.end());
+}
+
 // Writer-local replay state, never shared with decoders. Immutable snapshots
 // share untouched code partitions only within the same scoring second. Clock
 // rollback, future-clamped events, undo/clear and dropped history replay fully.

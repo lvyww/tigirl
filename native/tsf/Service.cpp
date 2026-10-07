@@ -353,7 +353,7 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
     if(!secure_ && sentenceSettings_.selfLearning && sentenceLearningStore_ && sentenceWorker_ &&
        !result.commit.empty() && !result.learning.empty()) {
         auto store=sentenceLearningStore_;auto events=std::move(result.learning);
-        events.erase(std::remove_if(events.begin(),events.end(),[&](const auto& e){return e.mode!=sentenceLearningMode_;}),events.end());
+        filterSentenceLearningForMode(events,sentenceLearningMode_);
         for(auto& e:events)e.time=learningNow();
         if(!events.empty() && !sentenceWorker_->submitConfirmed([store,events=std::move(events)] {store->confirm(events);}))
             report("Learning write queue full; input was committed without learning");

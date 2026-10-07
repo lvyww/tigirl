@@ -249,6 +249,61 @@ static void decoderTests(const std::filesystem::path& folder) {
     check(merge[0].text==u"B" && merge[1].text==u"C" && merge[2].text==u"A",
         "Direct C over Composed A promotes only Direct prefix B,C");
 }
+static void fusionCommitTests(const std::filesystem::path& folder) {
+    // Real ujkf ambiguity: two dictionary edges versus the complete single edge.
+    auto prepared=prepareSentenceLexicon({{u"uj",{u"拾"}},{u"kf",{u"滑"}},
+        {u"ujk",{u"捡"}},{u"ujkf",{u"捡"}}});
+    auto lex=std::make_shared<SentenceLexicon>(save(prepared,folder/"fusion-ujkf.tcd"));
+    SentenceDecoderOptions options;options.allowDuplicateSingleCharacters=true;
+    options.isolationRankThreshold=0;options.emittedCharacterReward=2;
+    options.wholeInputSingleCharacterReward=5;options.canonicalCodeReward=2;
+    SentenceDecoder decoder(lex,{},options);
+    const std::u16string mode=u"test-v1";
+    const auto path=folder/"fusion-commit.txt";SentenceLearningStore store(path);store.refresh();
+    decoder.setLearning(store.snapshot(),mode);
+    const auto baseline=decoder.decode(u"ujkf",20,true);
+    check(baseline.candidates.size()==2 && baseline.candidates[0].text==u"拾滑" &&
+        baseline.candidates[0].source==SentenceSourceComposed &&
+        baseline.candidates[1].text==u"捡" && baseline.candidates[1].source==SentenceSourceDirect,
+        "ujkf reproduces composed first and direct second");
+    SentenceSession session;session.start(u"ujkf",1);apply(session,baseline);
+    session.moveSelection(1,5,true);check(session.takeLearning().empty(),"fusion Tab preview has no confirmed events");
+    session.clear();check(session.takeLearning().empty() && store.entries().empty(),"cancelled fusion choice never persists");
+    session.start(u"ujkf",1);apply(session,baseline);session.moveSelection(1,5,true);
+    check(session.commitCandidate(1)==std::optional<std::u16string>(u"捡"),"ujkf Tab confirmation commits direct candidate");
+    auto events=session.takeLearning();
+    check(events.size()==1 && events.front().mode==SentenceFusionPreference::mode(mode),
+        "cross-source commit generates one fusion event");
+    auto mixed=events;mixed.push_back(event());
+    auto foreign=event();foreign.mode=u"another-mode";mixed.push_back(foreign);
+    mixed.push_back(SentenceFusionPreference::event(foreign.mode,u"ujkf",u"捡",u"拾滑",true,4));
+    filterSentenceLearningForMode(mixed,mode);
+    check(mixed.size()==2 && mixed[0].mode==SentenceFusionPreference::mode(mode) && mixed[1].mode==mode,
+        "commit filter accepts ordinary and fusion records only for the active mode");
+    auto disabled=events;filterSentenceLearningForMode(disabled,u"");
+    check(disabled.empty(),"empty active learning mode rejects all events");
+    filterSentenceLearningForMode(events,mode);
+    check(events.size()==1,"successful commit retains fusion preference at the TSF mode gate");
+    store.confirm(events);check(store.entries().size()==1,"fusion event reaches persistent storage");
+    store.confirm(events);check(store.entries().size()==1,"replayed fusion receipt stays idempotent");
+    SentenceLearningStore reopened(path);reopened.refresh();
+    decoder.setLearning(reopened.snapshot(),mode);
+    const auto learned=decoder.decode(u"ujkf",20,true);
+    check(learned.candidates.front().text==u"捡" && learned.candidates.front().source==SentenceSourceDirect,
+        "reloaded ujkf preference promotes direct candidate and invalidates cached order");
+    session.start(u"ujkf",1);apply(session,learned);session.commitCandidate(0);
+    check(session.takeLearning().empty(),"using learned first candidate does not reinforce fusion");
+    decoder.setLearning(reopened.snapshot(),u"another-mode");
+    check(decoder.decode(u"ujkf",20,true).candidates.front().text==u"拾滑","reloaded fusion record remains mode isolated");
+    decoder.setLearning(reopened.snapshot(),mode);
+    session.start(u"ujkf",1);apply(session,decoder.decode(u"ujkf",20,true));session.moveSelection(1,5,true);
+    check(session.commitCandidate(1)==std::optional<std::u16string>(u"拾滑"),"reverse fusion selection commits composed candidate");
+    events=session.takeLearning();filterSentenceLearningForMode(events,mode);
+    check(events.size()==1,"reverse fusion confirmation also passes the mode gate");
+    store.confirm(events);SentenceLearningStore reversed(path);reversed.refresh();
+    decoder.setLearning(reversed.snapshot(),mode);
+    check(decoder.decode(u"ujkf",20,true).candidates.front().text==u"拾滑","reloaded reverse preference restores composed first");
+}
 static void adaptiveTests(const std::filesystem::path& folder) {
     SentenceSupplementMatcher matcher({SentenceSupplementEntry::create(u"陲机",1000),
         SentenceSupplementEntry::create(u"低权重词",1),SentenceSupplementEntry::create(u"机",1000)});
@@ -316,7 +371,7 @@ int main(int argc,char** argv) {
 #ifdef _WIN32
         fileEnumerationTests(path);
 #endif
-        pureTests();sessionTests();storageTests(path);decoderTests(path);adaptiveTests(path);engineTests(path);
+        pureTests();sessionTests();storageTests(path);decoderTests(path);fusionCommitTests(path);adaptiveTests(path);engineTests(path);
         checks+=learning_test::runPerformanceTests(path/"performance");
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"physical_tsf_tested\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<"check "<<checks<<": "<<e.what()<<'\n';return 1;}
