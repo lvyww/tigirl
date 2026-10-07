@@ -10,6 +10,7 @@
 #include "UserStore.h"
 #include "Text.h"
 #include "ManagementUri.h"
+#include "tsf/SsfResources.h"
 #include <fstream>
 #include <set>
 #include <algorithm>
@@ -39,7 +40,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else if(argc==4 && std::wstring_view(argv[1])==L"--menu-action"){action=argv[2];value=argv[3];}
         else if(argc==2 && std::wstring_view(argv[1])==L"--initialize"){action=L"initialize";quiet=true;}
         else if(argc!=1 && !(argc==2 && std::wstring_view(argv[1])==L"--settings"))throw std::runtime_error("Invalid tool arguments");
-        const std::set<std::wstring> allowed{L"settings",L"use",L"recent",L"reload",L"folder",L"export",L"official",L"initialize"};
+        const std::set<std::wstring> allowed{L"settings",L"use",L"recent",L"reload",L"folder",L"export",L"official",L"initialize",L"skin-folder"};
         if(!allowed.count(action) || (action!=L"use" && !value.empty()))throw std::runtime_error("Invalid management action");
         wchar_t path[32768];auto length=GetModuleFileNameW(nullptr,path,32768);if(!length || length>=32768)throw std::runtime_error("Cannot locate installed tools");
         const auto tools=std::filesystem::path(path).parent_path(),bundled=tools/L"tiger-v2.tcd";
@@ -49,6 +50,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         if(length)root=path;
         else {PWSTR local=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_NO_PACKAGE_REDIRECTION|KF_FLAG_DONT_VERIFY,nullptr,&local)))throw std::runtime_error("Cannot locate user data");root=std::filesystem::path(local)/L"Tigirl";CoTaskMemFree(local);}
         if(!root.is_absolute())throw std::runtime_error("User root must be absolute");
+        // Opening user data does not depend on valid dictionary directories.
+        if(action==L"folder"){
+            std::filesystem::create_directories(root);openTarget(root);
+            LocalFree(argv);return 0;
+        }
+        // Opening settings does not depend on scanning or validating schemes.
+        if(action==L"settings"){
+            SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+            showInputSettings(nullptr,root/L"config.txt");
+            CoUninitialize();LocalFree(argv);return 0;
+        }
         auto source=root/L"码表",pinyin=root/L"拼音反查码表";
         auto names=tiger::schemaNames(root);
         auto configuration=tiger::readConfiguration(root/L"config.txt");
@@ -69,7 +82,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
         if(action==L"settings")showInputSettings(nullptr,root/L"config.txt");
-        else if(action==L"folder"){std::filesystem::create_directories(source);openTarget(source);}
+        else if(action==L"skin-folder"){auto directory=tiger::skin::skinDirectory();std::filesystem::create_directories(directory);openTarget(directory);}
         else if(action==L"official")openTarget(L"https://github.com/lvyww/tigirl");
         else if(action==L"use" || action==L"reload" || action==L"recent" || action==L"initialize") {
             if(action==L"initialize")for(const auto& item:names)prepare(item);else prepare(name);

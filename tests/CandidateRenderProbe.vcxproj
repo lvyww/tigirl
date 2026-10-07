@@ -9,4 +9,6 @@
     <ClCompile Include="..\native\CandidateTheme.cpp" />
   </ItemGroup>
   <ItemDefinitionGroup><Link><AdditionalDependencies>user32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <Import Project="..\msbuild\SsfSources.props" />
+  <ItemGroup><ClCompile Include="..\native\Text.cpp" /></ItemGroup>
 </Project>

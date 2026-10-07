@@ -87,7 +87,7 @@ void run(const std::shared_ptr<const Lexicon>& lexicon,bool native) {
     check(ui->Show(native?TRUE:FALSE));
     // Initial model exists before BeginUIElement; its host selection is retained.
     UINT custom[]={0,2,5};check(ui->SetPageIndex(custom,3));check(ui->SetSelection(5));
-    ui->update(&caret,nullptr,false,CandidateUpdate::Layout);pump();
+    ui->update(&caret,nullptr,CandidateUpdate::Layout);pump();
     const std::vector<UINT> expected(std::begin(custom),std::end(custom));
     require(selection(*ui.Get())==5 && pages(*ui.Get())==expected,"Layout reset host selection or paging");
     check(ui->notifyUpdated(&manager,1));require(manager.calls==1 && pending(*ui.Get())==0,"Initial notification missing");
@@ -100,10 +100,30 @@ void run(const std::shared_ptr<const Lexicon>& lexicon,bool native) {
     },reinterpret_cast<LPARAM>(&window));
     RECT original{};
     if(native)require(window && IsWindowVisible(window) && GetWindowRect(window,&original),"Native frame not visible");
+    // Focus hides the existing native window, without changing the host's
+    // Show policy, custom page table, selected item or candidate model.
+    for(unsigned i=0;i<3;++i) {
+        ui->setFocused(false);ui->setFocused(false);
+        BOOL shown=TRUE;check(ui->IsShown(&shown));require(!shown,"Unfocused UI reported shown");
+        require(ui->Finalize()==TF_E_DISCONNECTED && ui->Abort()==TF_E_DISCONNECTED,
+            "Unfocused candidate accepted interaction");
+        ui->update(nullptr,nullptr,CandidateUpdate::Layout);pump();
+        if(native)require(IsWindow(window) && !IsWindowVisible(window),"Focus destroyed or redisplayed native HWND");
+        ui->setFocused(true);ui->setFocused(true);
+        ui->update(nullptr,nullptr,CandidateUpdate::Layout);pump();
+        check(ui->IsShown(&shown));require((shown!=FALSE)==native,"Focus ignored host visibility decision");
+        require(selection(*ui.Get())==5 && pages(*ui.Get())==expected,"Focus reset host selection or paging");
+        require(ui->notifyUpdated(&manager,1)==S_FALSE,"Focus republished unchanged candidate model");
+        if(native)require(IsWindowVisible(window),"Focus did not restore original HWND with cached geometry");
+    }
+    ui->setFocused(false);check(ui->Show(FALSE));ui->setFocused(true);
+    ui->update(nullptr,nullptr,CandidateUpdate::Layout);pump();
+    BOOL shown=TRUE;check(ui->IsShown(&shown));require(!shown,"Resume overrode Show(FALSE) received while hidden");
+    check(ui->Show(native?TRUE:FALSE));ui->update(nullptr,nullptr,CandidateUpdate::Layout);pump();
     for(unsigned i=0;i<12;++i) {
         KeyEvent up;up.vk='A';up.down=false;state->engine.process(up);++state->revision;
         caret.left+=3;caret.right+=3;caret.top+=2;caret.bottom+=2;
-        ui->update(i%3?&caret:nullptr,nullptr,i%3==0,CandidateUpdate::Layout);pump();
+        ui->update(i%3?&caret:nullptr,nullptr,CandidateUpdate::Layout);pump();
         require(ui->notifyUpdated(&manager,1)==S_FALSE,"Layout-only update notified the model");
         require(selection(*ui.Get())==5 && pages(*ui.Get())==expected,"Layout reset host selection or paging");
         require(label(*ui.Get(),5)==u"己" && pending(*ui.Get())==0,"Layout changed candidate data");
@@ -127,10 +147,10 @@ void run(const std::shared_ptr<const Lexicon>& lexicon,bool native) {
     manager.fail=true;require(ui->notifyUpdated(&manager,1)==E_FAIL && pending(*ui.Get()),"Failed notification was lost");
     require((manager.flags&TF_CLUIE_COUNT) && label(*ui.Get(),0)==u"你好","Content update did not replace strings/count");
     UINT shortPages[]={0,1};check(ui->SetPageIndex(shortPages,2));check(ui->SetSelection(1));
-    manager.fail=false;ui->update(&caret,nullptr,false,CandidateUpdate::Layout);check(ui->notifyUpdated(&manager,1));
+    manager.fail=false;ui->update(&caret,nullptr,CandidateUpdate::Layout);check(ui->notifyUpdated(&manager,1));
     require(selection(*ui.Get())==1 && pages(*ui.Get())==std::vector<UINT>({0,1}),"Notification retry reset host state");
     const auto notified=manager.calls;
-    ui->update(&caret,nullptr,false,CandidateUpdate::Layout);require(ui->notifyUpdated(&manager,1)==S_FALSE && manager.calls==notified,"Notification acknowledged more than once");
+    ui->update(&caret,nullptr,CandidateUpdate::Layout);require(ui->notifyUpdated(&manager,1)==S_FALSE && manager.calls==notified,"Notification acknowledged more than once");
     // Reentrant content during UpdateUIElement must remain pending. Recursively
     // notifying the manager would loop; acknowledging the older revision loses it.
     state->engine.cancel();press(state->engine,'A');ui->update(&caret,nullptr);
@@ -140,16 +160,16 @@ void run(const std::shared_ptr<const Lexicon>& lexicon,bool native) {
     };
     check(ui->notifyUpdated(&manager,1));manager.during={};
     require(pending(*ui.Get())!=0,"Old notification acknowledged new content");
-    check(ui->SetSelection(1));ui->update(&caret,nullptr,false,CandidateUpdate::Layout);
+    check(ui->SetSelection(1));ui->update(&caret,nullptr,CandidateUpdate::Layout);
     check(ui->notifyUpdated(&manager,1));require(pending(*ui.Get())==0 && selection(*ui.Get())==1,"Reentrant update not delivered");
     // A layout during the notification is not a new model revision.
-    ui->update(&caret,nullptr);manager.during=[&] {ui->update(&caret,nullptr,false,CandidateUpdate::Layout);};
+    ui->update(&caret,nullptr);manager.during=[&] {ui->update(&caret,nullptr,CandidateUpdate::Layout);};
     check(ui->notifyUpdated(&manager,1));manager.during={};require(pending(*ui.Get())==0,"Reentrant layout dirtied the model");
     // The notification may synchronously end this UI. Its lifetime is retained,
     // and a late layout/retry must not recreate or notify the detached element.
     ui->update(&caret,nullptr);manager.during=[&] {ui->detach();};
     check(ui->notifyUpdated(&manager,1));manager.during={};
-    ui->update(&caret,nullptr,false,CandidateUpdate::Layout);
+    ui->update(&caret,nullptr,CandidateUpdate::Layout);
     require(ui->notifyUpdated(&manager,1)==S_FALSE && pending(*ui.Get())==0,"Detached model notified again");
     if(native)require(!IsWindow(window),"Detached window survived");
     pump();ui.Reset();owner.Reset();require(candidate_probe::dllRefs==0,"UI reference leaked");

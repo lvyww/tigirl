@@ -146,3 +146,30 @@ Run `tests/sentence_tab_lock_test.ps1` in Windows PowerShell to build and run
 ARM64/x64/Win32 engine+decoder fixtures, the preceding rumination regression,
 and the session-state suite. These tests replay pending decode requests and
 inject stale results; they do not constitute physical foreground input testing.
+
+## 用户皮肤目录
+
+候选皮肤统一读取 `%LOCALAPPDATA%\Tigirl\皮肤`，与 `码表` 并列。
+设置和菜单的“打开皮肤目录”会创建该目录；放入 `.ssf` 后点击刷新即可。
+设置了绝对路径 `NATIVE_TIGER_USER_ROOT` 时，使用其下的 `皮肤` 子目录。
+目录解析不创建文件；缺少默认皮肤文件时保留内置默认外观。
+x64 安装包通过现有码表用户数据合并流程分发默认皮肤，保留用户修改。
+
+SSF 背景分块边界按当前 DPI 对齐到物理像素，避免缩放后出现透明接缝。
+Windows 编译 `tests/SsfRenderProbe.vcxproj` 后，可运行
+`python tests/ssf_seam_test.py --probe build/tests/ARM64/ssf_render_probe.exe`
+检查不透明/半透明、拉伸/平铺、多种 DPI 及小尺寸背景的像素连续性。
+
+SSF 解析只校验候选窗使用的 General、Display 和 Scheme 配置字段，
+跳过未使用的 StatusBar 等节内字段及遗留尾部文本；候选窗配置格式错误仍会拒绝加载。
+独立 custom 装饰层目前尚未绘制，因此部分皮肤只能显示背景和文字。
+
+设置中的字体决定中文和英文的字体，SSF 的 `font_size` 决定原始排版基准，皮肤原图画布、边距和固定切片边缘共同决定内容尺寸。背景不缩到原图以下，避免原始文字边距落出底框；内容超出时按皮肤规则扩展。
+设置字号只控制整体比例：`设置字号 / 皮肤 font_size`。文字、背景、留白、边距、间隔及鼠标命中区域一起缩放，再应用屏幕 DPI。
+字体通过设置选择，缺少皮肤字号时采用 17。皮肤外观和皮肤动画默认开启，设置中不再提供开关，也不读取旧开关。
+可在 `[Display]` 中使用虎娘扩展 `candidate_spacing`（横排候选间距）、`line_spacing`（竖排行间距）、`character_spacing`（额外字距），单位为皮肤原始 DIP，范围 0–200，省略为 0。这些是虎娘扩展，不是所有 SSF 都具备的标准字段。
+
+候选布局下拉框只有五项：横排带编码（H1）、竖排带编码（V1）、横排无编码（H2 候选部分）、竖排无编码（V2 候选部分）、仅编码（H2 候选部分）。
+配置值依次为 2、4、5、6、7，默认 6；已删除的 1、3 不再生效。布局快捷操作按这五项循环。
+两种无编码模式空码时，在候选位置绘制无序号、不可点击的编码占位文本。“仅编码”始终在横排候选面板的候选位置显示编码，不显示候选字。
+候选窗动效固定开启，使用默认时长 100 毫秒，不再读取旧动效开关和时长配置。候选外观页不显示皮肤诊断说明。

@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include "../tools/InputSettings.h"
 #include "ConfigStore.h"
+#include "../native/tsf/SsfResources.h"
 #include <fstream>
 #include <iostream>
 int wmain(int argc,wchar_t** argv) {
@@ -8,9 +9,12 @@ int wmain(int argc,wchar_t** argv) {
  const auto root=std::filesystem::path(argv[1]);
  if(!std::filesystem::exists(root/L".schema-manager-test"))return 2;
  try {
+  if(!SetEnvironmentVariableW(L"NATIVE_TIGER_USER_ROOT",root.c_str()))throw std::runtime_error("Cannot isolate user data");
+  if(tiger::skin::skinDirectory()!=root/L"皮肤")throw std::runtime_error("Skin directory escaped user root");
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
   const auto config=root/L"config.txt";
+  if(argc>2 && std::wstring_view(argv[2])==L"--startup-test"){showInputSettings(nullptr,config,10);CoUninitialize();return 0;}
   if(argc>2 && std::wstring_view(argv[2])==L"--skin-test"){
    showInputSettings(nullptr,config,8);
    showInputSettings(nullptr,config,9); // Warm process-wide font / WIC caches before counting handles.

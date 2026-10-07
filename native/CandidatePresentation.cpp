@@ -21,14 +21,17 @@ std::u16string displayComposition(const Snapshot& snapshot,const CandidateStyle&
 }
 CandidatePresentation presentCandidates(const Snapshot& snapshot,const CandidateStyle& style,bool showCandidates,bool includeAnnotations) {
     CandidatePresentation result;
-    const bool hidden=!showCandidates || (style.hideCandidates && style.candidateDelayMs<=0);
+    const bool hidden=!showCandidates || style.hideCandidates;
     result.codeOnly=hidden;
-    if(style.showCode || (!hidden && snapshot.candidates.empty())) result.code=escape(displayComposition(snapshot,style));
+    if(style.layoutMode==7) result.placeholder=escape(displayComposition(snapshot,style));
+    else if(style.showCode) result.code=escape(displayComposition(snapshot,style));
+    else if(snapshot.candidates.empty()) result.placeholder=escape(displayComposition(snapshot,style));
     if(!hidden) for(std::size_t i=0;i<snapshot.candidates.size();++i) {
         const auto& candidate=snapshot.candidates[i];
         std::u16string item;
         if(style.showIndex) { const auto n=std::to_string(i+1); item.assign(n.begin(),n.end()); item+=u' '; }
         item+=escape(candidate.display);
+        result.annotationOffsets.push_back(static_cast<std::uint32_t>(item.size()));
         if(includeAnnotations && !candidate.annotation.empty()) item+=u"〔"+escape(candidate.annotation)+u"〕";
         result.items.push_back(std::move(item));
     }

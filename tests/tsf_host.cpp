@@ -555,6 +555,7 @@ static ULONG compositionCount(const Document& doc) {
 #include "word_save_failure_fixture.h"
 #include "selection_race_fixture.h"
 #include "sentence_tsf_fixture.h"
+#include "startup_mode_fixture.h"
 int wmain(int argc,wchar_t** argv) {
     // Avoid synchronous stderr pipe writes between keys: they can mask timing
     // failures. Keep diagnostics in memory and emit them only when exiting.
@@ -565,6 +566,7 @@ int wmain(int argc,wchar_t** argv) {
         ~BufferedTrace() {if(previous){std::cerr.rdbuf(previous);std::cerr<<buffer.str();}}
     } bufferedTrace;
     try {
+        if(argc>=2 && wcscmp(argv[1],L"--startup-mode-probe")==0)return startup_mode_fixture::run(argc,argv);
         if(argc==2 && wcscmp(argv[1],L"--text-store-lock-test")==0) {text_store_lock_fixture();return 0;}
         const bool liveReader=argc==6 && wcscmp(argv[4],L"--live-reader")==0;
         const bool maskDetached=argc==6 && wcscmp(argv[4],L"--mask-detached")==0;

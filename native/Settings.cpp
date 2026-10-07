@@ -138,15 +138,16 @@ CandidateStyle parseCandidateStyle(std::u16string_view text) {
     const auto values=settingsValues(text);
     CandidateStyle style;
     const std::pair<const char16_t*,bool CandidateStyle::*> flags[]={
-        {u"候选窗动效",&CandidateStyle::animationEnabled},{u"竖排候选",&CandidateStyle::vertical},{u"显示候选序号",&CandidateStyle::showIndex},
-        {u"候选窗显示编码",&CandidateStyle::showCode},{u"隐藏候选",&CandidateStyle::hideCandidates}};
+        {u"显示候选序号",&CandidateStyle::showIndex}};
     for(const auto& flag:flags) {
         const auto found=values.find(flag.first);
         if(found!=values.end()) style.*flag.second=boolean(found->second,style.*flag.second);
     }
+    if(auto found=values.find(u"候选布局");found!=values.end())style.setLayoutMode(integer(found->second,6,7,1));
     if(auto found=values.find(u"编码伪装");found!=values.end())style.codeMask=found->second;
     if(auto found=values.find(u"字体");found!=values.end() && !found->second.empty()) style.font=found->second;
-    if(auto found=values.find(u"主题");found!=values.end() && !found->second.empty()) style.theme=found->second;
+    if(auto found=values.find(u"皮肤");found!=values.end() && !found->second.empty()) style.theme=found->second;
+    if(auto found=values.find(u"皮肤刷新");found!=values.end()) style.skinRevision=found->second;
     if(auto found=values.find(u"字体大小");found!=values.end()) {
         std::istringstream input(utf8(found->second)); input.imbue(std::locale::classic());
         double size;
@@ -154,7 +155,6 @@ CandidateStyle parseCandidateStyle(std::u16string_view text) {
     }
     if(auto found=values.find(u"延时显示候选(毫秒)");found!=values.end()) style.candidateDelayMs=integer(found->second,0,60000,0);
     if(auto found=values.find(u"延时展开注释和拆分(毫秒)");found!=values.end()) style.annotationDelayMs=integer(found->second,0,60000,0);
-    if(auto found=values.find(u"候选窗动效时间(毫秒)");found!=values.end()) style.animationDurationMs=integer(found->second,100,60000,0);
     return style;
 }
 Config loadEngineSettings(const std::filesystem::path& path) {
@@ -175,7 +175,7 @@ std::u16string configurationValue(std::u16string_view text,std::u16string_view k
     return found==values.end()?std::u16string{}:found->second;
 }
 std::u16string withHiddenCandidateSetting(std::u16string_view text,bool hidden) {
-    return withConfigurationValue(text,u"隐藏候选",hidden?u"是":u"否");
+    return withConfigurationValue(text,u"候选布局",hidden?u"7":u"6");
 }
 std::u16string withConfigurationValue(std::u16string_view text,std::u16string_view key,std::u16string_view value) {
     if(key.empty() || key.front()==u'#' || key.find_first_of(u"\t ,\r\n")!=key.npos ||

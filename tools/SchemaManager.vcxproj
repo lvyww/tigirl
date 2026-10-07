@@ -14,4 +14,5 @@
   <ItemDefinitionGroup><Link><SubSystem>Windows</SubSystem><AdditionalDependencies>dwrite.lib;d2d1.lib;comctl32.lib;ole32.lib;shell32.lib;user32.lib;gdi32.lib;uuid.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup><ResourceCompile Include="SchemaManager.rc" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="..\msbuild\SsfSources.props" />
 </Project>

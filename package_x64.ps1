@@ -1,11 +1,14 @@
 ﻿param(
     [string]$Version='2026.9.10.4',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
+    [string]$DefaultScheme='',
     [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram-mobile.bin",
     [switch]$SkipBuild
 )
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+\.\d+$'){throw 'Version must contain four numbers.'}
+. "$PSScriptRoot\package_sources.ps1"
+$sources=Get-NativeTigerPackageSources $DataSource "$PSScriptRoot\resources\Skins" $DefaultScheme
 if(!$SkipBuild){& "$PSScriptRoot\build_x64.ps1" -SentenceModelPath $SentenceModelPath;if($LASTEXITCODE){throw 'Release build failed.'}}
 $stage="$PSScriptRoot\build\packages\Tigirl-$Version-x64"
 if(Test-Path -LiteralPath $stage){throw "Package already exists; use a new version or remove the old staging directory: $stage"}
@@ -24,13 +27,11 @@ Copy-Item -LiteralPath "$PSScriptRoot\build\tests\x64\architecture_load_probe.ex
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\Win32\architecture_load_probe.exe" -Destination "$stage\verify_x86.exe"
 . "$PSScriptRoot\sentence_package.ps1"
 Copy-NativeTigerSentenceModel $SentenceModelPath "$stage\shared"
-New-Item -ItemType Directory -Force "$stage\DefaultData\码表"|Out-Null
-foreach($scheme in @('虎码字词','虎整句')){Copy-Item -LiteralPath "$DataSource\码表\$scheme" -Destination "$stage\DefaultData\码表" -Recurse}
-Copy-Item -LiteralPath "$DataSource\拼音反查码表" -Destination "$stage\DefaultData" -Recurse
+Copy-NativeTigerPackageSources $sources "$stage\DefaultData"
 # First-install settings only; existing personal configuration is never merged.
-"Ctrl+空格切换中英文`t否`r`n当前码表`t虎码字词`r`n"|Set-Content -LiteralPath "$stage\default-config.txt" -Encoding UTF8
+"Ctrl+空格切换中英文`t否`r`n当前码表`t$($sources.DefaultScheme)`r`n"|Set-Content -LiteralPath "$stage\default-config.txt" -Encoding UTF8
 # Generate the bundled fallback and its sentence sidecars from clean sources.
-& "$stage\shared\Tigirl.Import.exe" "$stage\DefaultData\码表\虎码字词" "$stage\DefaultData\拼音反查码表" "$stage\shared\fallback.tcd" 'zh-CN'
+& "$stage\shared\Tigirl.Import.exe" "$stage\DefaultData\码表\$($sources.DefaultScheme)" "$stage\DefaultData\拼音反查码表" "$stage\shared\fallback.tcd" 'zh-CN'
 if($LASTEXITCODE){throw 'Default dictionary generation failed.'}
 foreach($suffix in @('','.sentence.tcd','.supplement.tcd')){Move-Item -LiteralPath "$stage\shared\fallback.tcd$suffix" -Destination "$stage\shared\tiger-v2.tcd$suffix" -Force}
 $files=@(Get-ChildItem -LiteralPath $stage -Recurse -File|Sort-Object FullName|ForEach-Object{

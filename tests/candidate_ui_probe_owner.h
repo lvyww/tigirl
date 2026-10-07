@@ -2,7 +2,7 @@
 // Link-time stand-in for the TSF host, used only by candidate_ui_presentation_probe.
 // No service activation, COM document editing, user data, registration or threads.
 // CandidateUI/Engine/DirectWrite/Direct2D/GDI remain the production implementations.
-// The two choice paths advance Engine and detach UI, as Service::hideUI does.
+// The two choice paths advance Engine and detach UI, as Service::closeUI does.
 namespace candidate_probe {
 inline tiger::tsf::CandidateUI* currentUI=nullptr;
 inline std::u16string committed;

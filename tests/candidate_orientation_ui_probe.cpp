@@ -15,6 +15,11 @@
 namespace orientation_probe {
 unsigned checks=0,cases=0,failPublish=0,failShow=0;
 ULONGLONG now=1000;
+HWND unavailableGeometry=nullptr;
+BOOL WINAPI bounds(HWND window,RECT* rect) {
+    if(window==unavailableGeometry && window){SetLastError(ERROR_GEN_FAILURE);return FALSE;}
+    return GetWindowRect(window,rect);
+}
 std::vector<tiger::tsf::FrameRect> frames;
 std::function<void()> duringPublish;
 void require(bool ok,const char* why) { ++checks;if(!ok)throw std::runtime_error(why); }
@@ -31,10 +36,12 @@ BOOL WINAPI show(HWND window,HWND after,int x,int y,int w,int h,UINT flags) {
     return SetWindowPos(window,after,x,y,w,h,flags);
 }
 }
+#define GetWindowRect orientation_probe::bounds
 #define GetTickCount64 orientation_probe::tick
 #define UpdateLayeredWindow orientation_probe::publish
 #define SetWindowPos orientation_probe::show
 #include "../native/tsf/CandidateUI.cpp"
+#undef GetWindowRect
 #undef GetTickCount64
 #undef UpdateLayeredWindow
 #undef SetWindowPos
@@ -66,7 +73,7 @@ struct CandidateUIPresentationProbe {
         update(false);pump();below();
     }
     ~CandidateUIPresentationProbe() {
-        orientation_probe::duringPublish={};orientation_probe::failPublish=orientation_probe::failShow=0;
+        orientation_probe::duringPublish={};orientation_probe::failPublish=orientation_probe::failShow=0;orientation_probe::unavailableGeometry=nullptr;
         if(ui)ui->detach();ui.Reset();candidate_probe::currentUI=nullptr;
         if(host)DestroyWindow(host);
     }
@@ -84,7 +91,7 @@ struct CandidateUIPresentationProbe {
         ui.Attach(new CandidateUI(owner.Get(),state,style,nullptr));candidate_probe::currentUI=ui.Get();
         ui->Show(show?TRUE:FALSE);
     }
-    void update(bool content=true) {ui->update(&caret,host,false,content?CandidateUpdate::Content:CandidateUpdate::Layout);}
+    void update(bool content=true) {ui->update(&caret,host,content?CandidateUpdate::Content:CandidateUpdate::Layout);}
     void pump() {
         MSG msg{};unsigned count=0;
         while(PeekMessageW(&msg,nullptr,WM_APP+0x351,WM_APP+0x351,PM_REMOVE)) {
@@ -123,7 +130,7 @@ struct CandidateUIPresentationProbe {
         }
         {
             CandidateUIPresentationProbe p(dictionary);p.large();p.model(1);
-            p.ui->update(nullptr,p.host,true);p.pump();
+            p.ui->update(nullptr,p.host);p.pump();
             require(p.state->candidateOrientation.above(),"NOLAYOUT reset direction");
             RECT invalid{};p.ui->update(&invalid,p.host);p.pump();
             require(IsWindowVisible(p.ui->window_) && p.state->candidateOrientation.above(),"Zero layout discarded retained position or direction");
@@ -152,6 +159,15 @@ struct CandidateUIPresentationProbe {
             require(p.host!=nullptr,"Owner fixture missing");p.large();p.model(1);p.update();p.pump();p.above();
             require(SetWindowPos(p.host,nullptr,p.work.left+40,p.work.top+20,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER)!=FALSE,"Owner movement failed");
             p.update(false);p.pump();p.below();++cases;
+        }
+        {
+            CandidateUIPresentationProbe p(dictionary);
+            p.host=CreateWindowExW(WS_EX_NOACTIVATE,L"STATIC",L"missing bounds",WS_POPUP,
+                p.work.left+20,p.work.top+20,300,200,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+            require(p.host!=nullptr,"Owner geometry fixture missing");p.large();p.model(1);
+            unavailableGeometry=p.host;p.update();p.pump();
+            require(IsWindowVisible(p.ui->window_),"Auxiliary owner geometry failure hid valid caret candidates");
+            p.below();unavailableGeometry=nullptr;p.update(false);p.pump();p.below();++cases;
         }
         {
             CandidateUIPresentationProbe p(dictionary);p.large();p.create(false);p.model(1);p.update();p.pump();

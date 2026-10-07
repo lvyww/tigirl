@@ -18,7 +18,7 @@ COMMON = [
     "native/DynamicText.cpp", "native/UppercaseText.cpp", "native/Text.cpp",
     "native/SentenceSession.cpp", "native/SentenceAutoCommit.cpp",
     "native/LexiconSerialize.cpp", "native/CandidatePresentation.cpp",
-    "native/CandidateTheme.cpp", "native/tsf/CandidateRenderer.cpp",
+    "native/CandidateTheme.cpp", "native/tsf/CandidateRenderer.cpp", "native/SsfArchive.cpp", "native/SsfSkin.cpp", "native/SsfAnimation.cpp", "native/tsf/SsfResources.cpp", "native/tsf/CandidateRendererSkin.cpp",
     "native/tsf/PrivateFonts.cpp",
 ]
 LIBS = ["ole32.lib", "oleaut32.lib", "uuid.lib", "user32.lib", "gdi32.lib",

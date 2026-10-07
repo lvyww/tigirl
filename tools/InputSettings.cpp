@@ -4,6 +4,8 @@
 #include "SettingsControls.h"
 #include "SettingsPaintBuffer.h"
 #include <windowsx.h>
+#include <shellapi.h>
+#include "tsf/SsfResources.h"
 #include "SelectionSettings.h"
 #include "SelectionKeys.h"
 #include "ConfigStore.h"
@@ -33,7 +35,7 @@
 namespace {
 constexpr int Pages=221, Mascot=228, Minimize=229, Close=230;
 constexpr int Donation=223,Preview=226,Dirty=227,VersionInfo=231;
-constexpr int AnimationEnabled=224,AnimationDuration=225;
+constexpr int SkinOpen=232,SkinRefresh=233;
 struct Flag {const char16_t* key;bool tiger::Config::*member;};
 const Flag flags[]={
     {u"默认中文",&tiger::Config::defaultChinese},{u"shift切换中英文",&tiger::Config::shiftToggle},
@@ -45,7 +47,11 @@ const Flag flags[]={
     {u"引号三选",&tiger::Config::quoteThird},{u"显示注释",&tiger::Config::showComment},{u"显示拆分",&tiger::Config::showSplit}};
 constexpr int MaxCode=200,PageSize=201,Save=202,Cancel=203,Notice=204,PageKeys=205,InputPage=206,AppearancePage=207,FontName=208,FontSize=209,Theme=210,ShortcutPage=211,AddEnabled=212,AddShortcut=213,RecentEnabled=214,RecentShortcut=215,SelectionEditor=216;
 struct StyleFlag {const char16_t* key;bool tiger::CandidateStyle::*member;};
-const StyleFlag styleFlags[]={{u"竖排候选",&tiger::CandidateStyle::vertical},{u"显示候选序号",&tiger::CandidateStyle::showIndex},{u"候选窗显示编码",&tiger::CandidateStyle::showCode},{u"隐藏候选",&tiger::CandidateStyle::hideCandidates}};
+constexpr int LayoutMode=237;
+const wchar_t* layoutModes[]={L"横排带编码",L"竖排带编码",L"横排无编码",L"竖排无编码",L"仅编码"};
+constexpr int layoutIds[]={2,4,5,6,7};
+int layoutIndex(int mode){for(int i=0;i<5;++i)if(layoutIds[i]==mode)return i;return 3;}
+int layoutId(LRESULT index){return index>=0 && index<5?layoutIds[index]:6;}
 constexpr int CandidateDelay=218,AnnotationDelay=219,CodeMask=220;
 constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405,SentenceLearning=406;
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
@@ -80,11 +86,40 @@ struct Dialog {
     std::map<HWND,bool> buttonHot;
     HWND window=nullptr,content=nullptr;HFONT font=nullptr,helpFont=nullptr,titleFont=nullptr;std::filesystem::path path;
     std::vector<std::u16string> themes;
+    void refreshSkins(bool publish){
+        const auto old=SendMessageW(item(Theme),CB_GETCURSEL,0,0);
+        const auto selected=old>=0 && static_cast<std::size_t>(old)<themes.size()?themes[old]:initialStyle.theme;
+        themes=tiger::skin::skinFiles(tiger::skin::skinDirectory());
+        if(std::find(themes.begin(),themes.end(),selected)==themes.end())themes.push_back(selected);
+        SendMessageW(item(Theme),CB_RESETCONTENT,0,0);
+        for(const auto& name:themes)SendMessageW(item(Theme),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(name.c_str())));
+        SendMessageW(item(Theme),CB_SETCURSEL,std::find(themes.begin(),themes.end(),selected)-themes.begin(),0);
+        if(publish){const auto value=std::to_wstring(GetTickCount64())+L":"+std::to_wstring(GetCurrentProcessId());
+            initialStyle.skinRevision.assign(value.begin(),value.end());
+            tiger::updateConfigurationValues(path,{{u"皮肤刷新",initialStyle.skinRevision}});
+        }
+    }
     std::unique_ptr<FontChooser> fonts;
+    std::filesystem::path fontDirectory;
+    void ensureAppearance() {
+        if(fonts)return;
+        const auto before=values();
+        auto loaded=std::make_unique<FontChooser>(fontDirectory,14);
+        fonts=std::move(loaded);
+        fonts->attach(item(FontName),wide(initialStyle.font.c_str()));
+        fonts->scale(currentDpi);
+        refreshSkins(false);
+        const auto after=values();
+        // Canonical font aliases/catalog entries are initialization, not edits.
+        for(std::size_t i=0;i<baseline.size() && i<before.size() && i<after.size();++i)
+            if(baseline[i]==before[i])baseline[i]=after[i];
+        originalFontSelection=fonts->selected();
+    }
     tiger::Config initial;tiger::CandidateStyle initialStyle;int buildingPage=-1;bool saved=false;std::wstring error;
     tiger::SentenceSettings initialSentence;
     std::vector<BYTE> donationPixels;BITMAPINFO donationInfo{};
     void loadDonation() {
+        if(!donationPixels.empty())return;
         using Microsoft::WRL::ComPtr;
         auto check=[](HRESULT result){if(FAILED(result))throw std::runtime_error("Cannot decode donation image");};
         const auto module=GetModuleHandleW(nullptr);auto resource=FindResourceW(module,MAKEINTRESOURCEW(13),RT_RCDATA);
@@ -253,7 +288,7 @@ struct Dialog {
     RECT placement(const Control& c,int width) const {
         (void)width;
         const int id=GetDlgCtrlID(c.window);
-        const int h=(id==FontName || id==Theme || id==PageKeys)?28:c.h;
+        const int h=(id==FontName || id==Theme || id==PageKeys || id==LayoutMode)?28:c.h;
         return {px(c.x),px(c.y),px(c.x+c.w),px(c.y+h)};
     }
     void layout() {
@@ -302,7 +337,7 @@ struct Dialog {
         const int left=std::clamp(old.left,monitor.rcWork.left,std::max(monitor.rcWork.left,monitor.rcWork.right-px(640)));
         const int top=std::clamp(old.top,monitor.rcWork.top,std::max(monitor.rcWork.top,monitor.rcWork.bottom-px(56)));
         SetWindowPos(window,nullptr,left,top,px(640),px(480),SWP_NOZORDER|SWP_NOACTIVATE);
-        SetWindowRgn(window,SettingsSkin::region(dpi),TRUE);
+        SetWindowRgn(window,skin.region(dpi,highContrast()),TRUE);
         layout();
     }
     void scrollPage(int action,int /*position*/) {
@@ -315,6 +350,15 @@ struct Dialog {
         layout();
     }
     void page(int selected) {
+        try {
+            if(selected==1)ensureAppearance();
+            if(selected==4)loadDonation();
+        } catch(const std::exception& failure) {
+            if(selected==1)fonts.reset();
+            if(selected==4)donationPixels.clear();
+            const auto detail=tiger::utf16(failure.what());error.assign(detail.begin(),detail.end());SetWindowTextW(item(Notice),error.c_str());
+            selected=0;
+        }
         for(auto c:controls)if(c.window==GetFocus() && c.page>=0 && c.page!=selected)SetFocus(item(Pages));
         TabCtrl_SetCurSel(item(Pages),selected);
         for(auto c:controls)ShowWindow(c.window,c.page<0 || c.page==selected?SW_SHOW:SW_HIDE);
@@ -334,7 +378,7 @@ struct Dialog {
     bool checked(int id){return SendMessageW(item(id),BM_GETCHECK,0,0)==BST_CHECKED;}
     std::vector<std::u16string> values() {
         std::vector<std::u16string> result;
-        for(auto c:controls){int id=GetDlgCtrlID(c.window);if(c.page<0 || id<=0 || id==Preview || id==Mascot || id==Donation || id==VersionInfo || id==SelectionEditor)continue;
+        for(auto c:controls){int id=GetDlgCtrlID(c.window);if(c.page<0 || id<=0 || id==Preview || id==Mascot || id==Donation || id==VersionInfo || id==SkinOpen || id==SkinRefresh || id==SelectionEditor)continue;
             wchar_t type[32]{};GetClassNameW(c.window,type,32);
             if(std::wstring_view(type)==L"Button")result.push_back(checked(id)?u"1":u"0");
             else if(id==AddShortcut || id==RecentShortcut)result.push_back(std::u16string(1,static_cast<char16_t>(SendMessageW(c.window,HKM_GETHOTKEY,0,0))));
@@ -344,7 +388,7 @@ struct Dialog {
     void update() {
         if(!ready)return;
         if(!error.empty()){error.clear();SetWindowTextW(item(Notice),L"");layout();}
-        EnableWindow(item(AnimationDuration),checked(AnimationEnabled));
+        EnableWindow(item(FontName),TRUE);EnableWindow(item(FontSize),TRUE);
         EnableWindow(item(SentenceRetained),checked(SentenceAuto));
         EnableWindow(item(AddShortcut),checked(AddEnabled));EnableWindow(item(RecentShortcut),checked(RecentEnabled));
         EnableWindow(item(AnnotationDelay),checked(113)||checked(114));
@@ -358,7 +402,8 @@ struct Dialog {
         try {
             auto style=initialStyle;auto name=fonts->selected();style.font.assign(reinterpret_cast<const char16_t*>(name.data()),name.size());
             style.fontSize=14; // Stable sample size; the saved candidate size is independent.
-            for(int i=0;i<4;++i)style.*styleFlags[i].member=checked(300+i);
+            style.skinAnimation=false;
+            style.setLayoutMode(layoutId(SendMessageW(item(LayoutMode),CB_GETCURSEL,0,0)));style.showIndex=checked(301);
             auto theme=SendMessageW(item(Theme),CB_GETCURSEL,0,0);if(theme>=0 && theme<static_cast<LRESULT>(themes.size()))style.theme=themes[theme];
             style.codeMask=text(CodeMask);style.candidateDelayMs=0;
             tiger::Snapshot sample;sample.raw=u"ab";
@@ -373,15 +418,18 @@ struct Dialog {
             auto directory=std::filesystem::path(executable).parent_path()/L"字体";
             if(std::filesystem::exists(directory))for(auto& entry:std::filesystem::directory_iterator(directory))if(entry.path().extension()==L".ttf" || entry.path().extension()==L".otf")files.push_back(entry.path());
             const int w=draw.rcItem.right-draw.rcItem.left,h=draw.rcItem.bottom-draw.rcItem.top;
-            tiger::tsf::CandidateRenderer renderer(style,files);renderer.layout(presentation,static_cast<float>(w)*96/currentDpi);
-            const SIZE frame{w,h};std::vector<std::uint32_t> pixels;renderer.render(currentDpi,0,pixels,&frame);
+            tiger::tsf::CandidateRenderer renderer(style,files);renderer.layout(presentation,800.f);
+            std::vector<std::uint32_t> pixels;renderer.render(currentDpi,0,pixels);
+            const int sourceWidth=static_cast<int>(renderer.pixelWidth(currentDpi)),sourceHeight=static_cast<int>(renderer.pixelHeight(currentDpi));
             // Composite the renderer's premultiplied surface over the native page color.
             LOGBRUSH brush{};GetObjectW(backgroundBrush(),sizeof(brush),&brush);
             for(auto& pixel:pixels){unsigned a=255-(pixel>>24);unsigned r=((pixel>>16)&255)+GetRValue(brush.lbColor)*a/255,g=((pixel>>8)&255)+GetGValue(brush.lbColor)*a/255,b=(pixel&255)+GetBValue(brush.lbColor)*a/255;pixel=0xff000000|(r<<16)|(g<<8)|b;}
-            BITMAPINFO info{};info.bmiHeader={sizeof(BITMAPINFOHEADER),w,-h,1,32,BI_RGB};
+            BITMAPINFO info{};info.bmiHeader={sizeof(BITMAPINFOHEADER),sourceWidth,-sourceHeight,1,32,BI_RGB};
             ++previewCount;
             SetStretchBltMode(draw.hDC,HALFTONE);SetBrushOrgEx(draw.hDC,0,0,nullptr);
-            StretchDIBits(draw.hDC,draw.rcItem.left,draw.rcItem.top,w,h,0,0,w,h,pixels.data(),&info,DIB_RGB_COLORS,SRCCOPY);
+            const double scale=std::min(static_cast<double>(w)/sourceWidth,static_cast<double>(h)/sourceHeight);
+            const int displayWidth=std::max(1,static_cast<int>(sourceWidth*scale)),displayHeight=std::max(1,static_cast<int>(sourceHeight*scale));
+            StretchDIBits(draw.hDC,draw.rcItem.left+(w-displayWidth)/2,draw.rcItem.top+(h-displayHeight)/2,displayWidth,displayHeight,0,0,sourceWidth,sourceHeight,pixels.data(),&info,DIB_RGB_COLORS,SRCCOPY);
         } catch(...) {previewFailed=true;auto r=draw.rcItem;DrawTextW(draw.hDC,L"预览暂不可用；请检查字体。",-1,&r,DT_WORDBREAK);}
         RestoreDC(draw.hDC,savedDc);
     }
@@ -412,6 +460,11 @@ struct Dialog {
             if(c.page>=0){RECT pane{};GetClientRect(content,&pane);MapWindowPoints(content,window,reinterpret_cast<POINT*>(&pane),2);IntersectClipRect(dc,pane.left,pane.top,pane.right,pane.bottom);}
             BitBlt(dc,rect.left,rect.top,width,height,childDc,0,0,SRCCOPY);
             RestoreDC(dc,state);SelectObject(childDc,childPrevious);DeleteObject(childBitmap);DeleteDC(childDc);
+        }
+        if(!list){
+            HRGN outline=CreateRectRgn(0,0,0,0),outside=CreateRectRgn(0,0,client.right,client.bottom);
+            if(GetWindowRgn(window,outline)!=ERROR){CombineRgn(outside,outside,outline,RGN_DIFF);auto brush=CreateSolidBrush(RGB(38,38,38));FillRgn(dc,outside,brush);DeleteObject(brush);}
+            DeleteObject(outside);DeleteObject(outline);
         }
         GdiFlush();
         BITMAPFILEHEADER header{};header.bfType=0x4d42;header.bfOffBits=sizeof(header)+sizeof(BITMAPINFOHEADER);
@@ -464,28 +517,30 @@ struct Dialog {
         edit(MaxCode,L"最大码长（1–16）",std::to_wstring(initial.maxCodeLength),96);
         flag(8,L"达到最大码长且无重码时自动上屏",132);
         flag(7,L"空码自动清屏",168,24,320);flag(5,L"回车清屏",168,376,320);flag(6,L"Tab 清屏",204);
+        control(Mascot,L"STATIC",L"",SS_OWNERDRAW,446,236,130,72);
         buildingPage=1;
         control(0,L"STATIC",L"字体",0,24,24,72,24);
         wchar_t executable[32768]{};const auto length=GetModuleFileNameW(nullptr,executable,32768);
         if(!length || length>=32768)throw std::runtime_error("Cannot locate bundled fonts");
-        fonts=std::make_unique<FontChooser>(std::filesystem::path(executable).parent_path()/L"字体",14);
+        fontDirectory=std::filesystem::path(executable).parent_path()/L"字体";
         control(FontName,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,104,20,340,300);
-        fonts->attach(item(FontName),wide(initialStyle.font.c_str()));
+        SendMessageW(item(FontName),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(initialStyle.font.c_str())));
+        SendMessageW(item(FontName),CB_SETCURSEL,0,0);
 
         control(0,L"STATIC",L"字号",0,464,24,48,24);
         control(FontSize,L"EDIT",sizeText(initialStyle.fontSize).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,520,20,72,28);
-        control(0,L"STATIC",L"主题",0,24,64,72,24);
+        control(0,L"STATIC",L"皮肤",0,24,64,72,24);
         control(Theme,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,104,60,160,220);
-        int themeIndex=-1;
-        for(auto name:tiger::candidateThemeNames){if(name==initialStyle.theme)themeIndex=static_cast<int>(themes.size());themes.emplace_back(name);}
-        if(themeIndex<0){themeIndex=static_cast<int>(themes.size());themes.push_back(initialStyle.theme);}
-        for(const auto& name:themes)SendMessageW(item(Theme),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(name.c_str())));
-        SendMessageW(item(Theme),CB_SETCURSEL,themeIndex,0);
+        themes={initialStyle.theme};SendMessageW(item(Theme),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(initialStyle.theme.c_str())));
+        SendMessageW(item(Theme),CB_SETCURSEL,0,0);
+        control(SkinOpen,L"BUTTON",L"目录",WS_TABSTOP,220,44,48,28);
+        control(SkinRefresh,L"BUTTON",L"刷新",WS_TABSTOP,276,44,48,28);
 
-        control(Mascot,L"STATIC",L"",SS_OWNERDRAW,424,0,158,90);
         control(Preview,L"STATIC",L"",SS_OWNERDRAW,376,60,320,180);
-        check(300,L"竖排候选",initialStyle.vertical,104,24,160);check(301,L"显示候选序号",initialStyle.showIndex,104,200,168);
-        check(302,L"显示编码",initialStyle.showCode,140,24,160);check(303,L"隐藏候选",initialStyle.hideCandidates,140,200,168);
+        control(LayoutMode,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,12,84,308,240);
+        for(auto layoutLabel:layoutModes)SendMessageW(item(LayoutMode),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(layoutLabel));
+        SendMessageW(item(LayoutMode),CB_SETCURSEL,layoutIndex(initialStyle.layoutMode),0);
+        check(301,L"显示候选序号",initialStyle.showIndex,120,12,200);
         flag(13,L"显示注释",176,24,160);flag(14,L"显示拆分",176,200,168);
         control(0,L"STATIC",L"每页候选（1–10）",0,24,216,176,24);
         control(PageSize,L"EDIT",std::to_wstring(initial.pageSize).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,208,212,72,28);
@@ -493,9 +548,6 @@ struct Dialog {
         control(CandidateDelay,L"EDIT",std::to_wstring(initialStyle.candidateDelayMs).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,256,256,80,28);
         control(0,L"STATIC",L"注释／拆分延时",0,376,260,224,24);
         control(AnnotationDelay,L"EDIT",std::to_wstring(initialStyle.annotationDelayMs).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,616,256,80,28);
-        check(AnimationEnabled,L"候选窗动效",initialStyle.animationEnabled,296,24,208);
-        control(0,L"STATIC",L"动效时长（毫秒）",0,248,300,184,24);
-        control(AnimationDuration,L"EDIT",std::to_wstring(initialStyle.animationDurationMs).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,448,296,88,28);
         control(0,L"STATIC",L"编码伪装（留空关闭）",0,24,340,224,24);
         control(CodeMask,L"EDIT",wide(initialStyle.codeMask.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,256,336,200,28);
         buildingPage=2;
@@ -509,16 +561,20 @@ struct Dialog {
         check(RecentEnabled,L"启用最近方案切换",initial.recentSchemaEnabled,292,24,224);control(RecentShortcut,HOTKEY_CLASSW,L"",WS_TABSTOP,256,290,240,32);
         SendMessageW(item(AddShortcut),HKM_SETHOTKEY,hotkey(initial.addWordShortcut),0);SendMessageW(item(RecentShortcut),HKM_SETHOTKEY,hotkey(initial.recentSchemaShortcut),0);
         buildingPage=3;
-        check(SentenceEnabled,L"方案名称包含“整句”时自动启用整句模式",initialSentence.autoEnableBySchema,20);
-        check(SentenceAuto,L"自动提前上屏已确定的句子前缀",initialSentence.autoCommit,56);
-        edit(SentenceRetained,L"提前上屏后最少保留编码（0–32）",std::to_wstring(initialSentence.minimumRetainedRaw),96);
-        check(SentenceDuplicate,L"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters,136);
-        edit(SentenceCommon,L"仅使用最优码组句的高频字数量",std::to_wstring(initialSentence.commonCharacterLimit),176);
-        label(L"允许全码组句的例外字符（可留空）",248);
-        control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|WS_TABSTOP,24,280,672,80);
+        check(SentenceEnabled,L"名称含“整句”的方案自动启用",initialSentence.autoEnableBySchema,12,12,560);
+        check(SentenceAuto,L"自动提前上屏",initialSentence.autoCommit,48,12,264);
+        control(0,L"STATIC",L"保留编码（0–32）",0,308,52,160,24);
+        control(SentenceRetained,L"EDIT",std::to_wstring(initialSentence.minimumRetainedRaw).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,476,48,100,28);
+        check(SentenceDuplicate,L"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters,84,12,276);
+        check(SentenceLearning,L"Tab 锁重上屏后自学习",initialSentence.selfLearning,84,308,276);
+        control(0,L"STATIC",L"仅用最优码的高频字数",0,12,128,240,24);
+        control(SentenceCommon,L"EDIT",std::to_wstring(initialSentence.commonCharacterLimit).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,268,124,100,28);
+        control(0,L"STATIC",L"0：不限制",0,388,128,188,24,true);
+        control(0,L"STATIC",L"全码组句例外字",0,12,168,240,24);
+        control(0,L"STATIC",L"可留空，直接填写汉字",0,268,168,308,24,true);
+        control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|WS_TABSTOP,12,196,564,88);
         SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
-        check(SentenceLearning,L"Tab 锁重上屏后自学习（仅本方案、本地保存）",initialSentence.selfLearning,408);
-        buildingPage=4;loadDonation();title(L"感谢你对虎娘的支持",24);
+        buildingPage=4;title(L"感谢你对虎娘的支持",24);
         control(Donation,L"STATIC",L"赞赏码",SS_OWNERDRAW,200,72,320,320);
         control(VersionInfo,L"STATIC",applicationVersion().c_str(),SS_CENTER|SS_CENTERIMAGE,16,298,560,24,true);
         buildingPage=-1;
@@ -540,22 +596,28 @@ struct Dialog {
             if(!SendMessageW(tooltip,TTM_ADDTOOLW,0,reinterpret_cast<LPARAM>(&info)))throw std::runtime_error("Cannot register settings tip: "+std::to_string(id));
         };
         for(int id:{105,106,107})tip(id,L"清屏：清除未上屏编码，不删除已经输入的文字。");
-        tip(FontSize,L"字号范围 3–200；保存后用于实际候选窗。此处预览固定字号，只展示字体样式。");
-        tip(Preview,L"固定大小的字体、主题与排列示例，不随字号或每页候选数量缩放。");
-        for(int id:{CandidateDelay,AnnotationDelay,AnimationEnabled,AnimationDuration})tip(id,L"延时和动效时长：0–60000 毫秒；延时为 0 立即显示。预览不播放延时和动效。");
+        tip(FontSize,L"整体缩放基准：设置字号 ÷ 皮肤字号。文字、背景、边距、留白和间隔一起等比缩放。");
+        tip(Preview,L"皮肤按实际布局等比缩放预览；预览固定字号，只显示动画第一帧。");
+        tip(SkinOpen,L"将不超过 4 MiB 的 SSF 放入此目录，再刷新列表。此目录属于当前 Windows 用户。");
+        tip(SkinRefresh,L"重新扫描目录，并立即通知输入法重新加载当前皮肤；不会清空当前输入。");
+        for(int id:{CandidateDelay,AnnotationDelay})tip(id,L"延时和动效时长：0–60000 毫秒；延时为 0 立即显示。预览不播放延时和动效。");
         tip(CodeMask,L"编码伪装如填 ●，ab 显示为 ●●；不改变实际查码和上屏文字。留空关闭。");
         tip(SelectionEditor,L"选重键在独立窗口中单独保存，不受本窗口的取消影响。");
         for(int id:{AddEnabled,AddShortcut,RecentEnabled,RecentShortcut})tip(id,L"点击快捷键框后直接按键；组合键需包含 Ctrl 或 Alt。");
-        tip(SentenceCommon,L"范围 0–2147483647；默认 1500；0 表示不按高频字限制全码。");
-        tip(SentenceWhitelist,L"直接填写汉字，无需分隔；换行保存时自动合并为单行字符列表。");
+        tip(SentenceEnabled,L"方案名称包含“整句”时，自动启用整句输入。");
+        tip(SentenceAuto,L"将已经确定的句子前缀提前上屏，并保留指定数量的编码继续组句。");
+        tip(SentenceRetained,L"提前上屏后至少保留的编码数，范围 0–32；仅在自动提前上屏开启时生效。");
+        tip(SentenceDuplicate,L"允许同一编码对应的多个单字参与组句。");
+        tip(SentenceCommon,L"指定数量的高频字仅使用最优码组句。默认 1500，0 表示不限制；范围 0–2147483647。");
+        tip(SentenceWhitelist,L"这里的字符例外允许使用全码组句。直接填写汉字，无需分隔；换行保存时自动合并。");
         tip(SentenceLearning,L"Tab 锁重上屏后自学习；仅本方案、本地保存。");
         tip(Donation,L"微信扫码赞赏，自愿支持。");
         arrange();
-        scale(GetDpiForWindow(window));page(0);baseline=values();originalFontSelection=fonts->selected();ready=true;update();
+        scale(GetDpiForWindow(window));page(0);baseline=values();originalFontSelection=wide(initialStyle.font.c_str());ready=true;update();
     }
     void arrange() {
         // The five pages use fixed logical coordinates; only their viewport scrolls.
-        for(auto& c:controls)if(c.page>=0 && c.page!=1){c.x=MulDiv(c.x,584,720);c.w=MulDiv(c.w,584,720);}
+        for(auto& c:controls)if(c.page>=0 && c.page!=1 && c.page!=3){c.x=MulDiv(c.x,584,720);c.w=MulDiv(c.w,584,720);}
         auto place=[&](int id,int x,int y,int w,int h){for(auto& c:controls)if(GetDlgCtrlID(c.window)==id){c.x=x;c.y=y;c.w=w;c.h=h;}};
         for(auto& c:controls)if(c.page==1){
             const int id=GetDlgCtrlID(c.window);
@@ -564,23 +626,22 @@ struct Dialog {
                 else if(c.y==24 && c.x==464){c.x=220;c.y=12;c.w=32;}
                 else if(c.y==24){c.x=254;c.y=42;c.w=60;}
                 else if(c.y==64){c.x=12;c.y=48;c.w=36;}
-                else if(c.y==216){c.x=12;c.y=192;c.w=130;}
-                else if(c.y==260){c.x=c.x==24?12:308;c.y=234;c.w=130;}
+                else if(c.y==216){c.x=12;c.y=120;c.w=130;}
+                else if(c.y==260){c.x=c.x==24?12:332;c.y=228;c.w=138;}
                 else if(c.y==300){c.x=144;c.y=272;c.w=108;SetWindowTextW(c.window,L"时长（毫秒）");}
-                else if(c.y==340){c.x=342;c.y=272;c.w=130;SetWindowTextW(c.window,L"编码伪装");}
+                else if(c.y==340){c.x=12;c.y=268;c.w=138;SetWindowTextW(c.window,L"编码伪装");}
                 else if(c.y==376){c.x=12;c.y=316;c.w=560;c.h=32;}
                 else if(c.y==408){c.x=12;c.y=352;c.w=560;c.h=32;}
             }
         }
         for(auto& c:controls)if(c.page==2 && c.y>=128)c.y-=c.y>=250?96:64;
         place(FontName,52,8,160,240);place(FontSize,254,8,60,28);place(Theme,52,44,160,220);
-        place(300,12,84,140,28);place(301,164,84,156,28);place(302,12,120,140,28);place(303,164,120,156,28);
-        place(113,12,156,140,28);place(114,164,156,156,28);place(PageSize,158,188,60,28);
-        place(Mascot,440,0,120,66);place(Preview,332,68,244,148);
-        place(CandidateDelay,150,230,64,28);place(AnnotationDelay,452,230,64,28);
-        place(AnimationEnabled,12,268,130,28);place(AnimationDuration,254,268,64,28);place(CodeMask,476,268,98,28);
-        for(auto& c:controls)if(c.page==3 && c.w==MulDiv(344,584,720))c.w=342;
-        place(SentenceRetained,368,96,80,28);place(SentenceCommon,368,176,112,28);
+        place(SkinOpen,220,44,48,28);place(SkinRefresh,276,44,48,28);
+        place(LayoutMode,12,80,308,240);place(301,12,184,184,28);
+        place(113,212,184,164,28);place(114,412,184,164,28);place(PageSize,158,116,98,28);
+        place(Mascot,446,236,130,72);place(Preview,332,8,244,164);
+        place(CandidateDelay,158,224,98,28);place(AnnotationDelay,478,224,98,28);
+        place(CodeMask,158,264,418,28);
         place(Donation,177,38,250,250);
         place(VersionInfo,16,292,572,16);
         for(auto& c:controls)if(c.page==4 && GetDlgCtrlID(c.window)==0){c.y=c.title?8:298;c.x=16;c.w=560;c.h=24;}
@@ -643,13 +704,13 @@ struct Dialog {
         errorField=PageKeys;const auto selected=SendMessageW(item(PageKeys),CB_GETCURSEL,0,0);
         if(selected<0 || selected>=static_cast<LRESULT>(std::size(pageKeys)))throw std::runtime_error("请选择翻页键。");
         if(selected!=initial.pageKeys)changes.emplace_back(u"翻页键",pageKeys[selected]);
-        for(int i=0;i<4;++i) {
-            const bool value=SendMessageW(item(300+i),BM_GETCHECK,0,0)==BST_CHECKED;
-            if(value!=initialStyle.*styleFlags[i].member)changes.emplace_back(styleFlags[i].key,value?u"是":u"否");
-        }
+        errorField=LayoutMode;const auto layoutMode=layoutId(SendMessageW(item(LayoutMode),CB_GETCURSEL,0,0));
+        if(layoutMode<1 || layoutMode>7)throw std::runtime_error("请选择候选布局。");
+        if(layoutMode!=initialStyle.layoutMode)changes.emplace_back(u"候选布局",numberText(layoutMode));
+        if(checked(301)!=initialStyle.showIndex)changes.emplace_back(u"显示候选序号",checked(301)?u"是":u"否");
         const auto mask=text(CodeMask);
         if(mask!=initialStyle.codeMask)changes.emplace_back(u"编码伪装",mask);
-        errorField=FontName;const auto selectedFont=fonts->selected();
+        errorField=FontName;const auto selectedFont=fonts?fonts->selected():std::wstring(wide(initialStyle.font.c_str()));
         auto name=std::u16string(reinterpret_cast<const char16_t*>(selectedFont.data()),selectedFont.size());
         name=tiger::configurationValue(u"字体\t"+name,u"字体");
         if(name.empty())throw std::runtime_error("请选择候选字体。");
@@ -659,17 +720,13 @@ struct Dialog {
         std::istringstream input(ascii);input.imbue(std::locale::classic());double size=0;
         if(!(input>>size) || input.peek()!=std::char_traits<char>::eof() || !std::isfinite(size) || size<3 || size>200)
             throw std::runtime_error("字号必须为 3–200 的数字。");
-        const bool animation=SendMessageW(item(AnimationEnabled),BM_GETCHECK,0,0)==BST_CHECKED;
-        const auto duration=text(AnimationDuration).empty()?200:delay(AnimationDuration);
-        if(animation!=initialStyle.animationEnabled)changes.emplace_back(u"候选窗动效",animation?u"是":u"否");
-        if(duration!=initialStyle.animationDurationMs)changes.emplace_back(u"候选窗动效时间(毫秒)",numberText(duration));
         const auto candidateDelay=delay(CandidateDelay),annotationDelay=delay(AnnotationDelay);
         if(candidateDelay!=initialStyle.candidateDelayMs)changes.emplace_back(u"延时显示候选(毫秒)",numberText(candidateDelay));
         if(annotationDelay!=initialStyle.annotationDelayMs)changes.emplace_back(u"延时展开注释和拆分(毫秒)",numberText(annotationDelay));
         if(sizeValue!=std::u16string(reinterpret_cast<const char16_t*>(sizeText(initialStyle.fontSize).c_str())) && size!=initialStyle.fontSize)changes.emplace_back(u"字体大小",sizeValue);
         errorField=Theme;const auto selectedTheme=SendMessageW(item(Theme),CB_GETCURSEL,0,0);
-        if(selectedTheme<0 || static_cast<std::size_t>(selectedTheme)>=themes.size())throw std::runtime_error("请选择候选主题。");
-        if(themes[selectedTheme]!=initialStyle.theme)changes.emplace_back(u"主题",themes[selectedTheme]);
+        if(selectedTheme<0 || static_cast<std::size_t>(selectedTheme)>=themes.size())throw std::runtime_error("请选择候选皮肤。");
+        if(themes[selectedTheme]!=initialStyle.theme)changes.emplace_back(u"皮肤",themes[selectedTheme]);
         const bool add=SendMessageW(item(AddEnabled),BM_GETCHECK,0,0)==BST_CHECKED;
         const bool recent=SendMessageW(item(RecentEnabled),BM_GETCHECK,0,0)==BST_CHECKED;
         const auto addValue=static_cast<WORD>(SendMessageW(item(AddShortcut),HKM_GETHOTKEY,0,0));
@@ -753,13 +810,21 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
         if(message==WM_DRAWITEM && w==Pages){self->drawTab(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_DRAWITEM && w==Donation){self->drawDonation(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_DRAWITEM && w==FontName && self->fonts){self->fonts->draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l),self->highContrast());return TRUE;}
-        if(message==WM_DRAWITEM && (w==Theme || w==PageKeys)){self->modern.comboItem(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
-        if(message==WM_MEASUREITEM && (w==Theme || w==PageKeys)){reinterpret_cast<MEASUREITEMSTRUCT*>(l)->itemHeight=self->px(28);return TRUE;}
+        if(message==WM_DRAWITEM && (w==Theme || w==PageKeys || w==LayoutMode)){self->modern.comboItem(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
+        if(message==WM_MEASUREITEM && (w==Theme || w==PageKeys || w==LayoutMode)){reinterpret_cast<MEASUREITEMSTRUCT*>(l)->itemHeight=self->px(28);return TRUE;}
         if(message==WM_MEASUREITEM && w==FontName && self->fonts){self->fonts->measure(*reinterpret_cast<MEASUREITEMSTRUCT*>(l));return TRUE;}
         if(message==WM_SIZE){self->layout();return 0;}
         if(message==WM_MOUSEWHEEL){self->scrollPage(GET_WHEEL_DELTA_WPARAM(w)>0?SB_LINEUP:SB_LINEDOWN,0);return 0;}
         if(message==WM_GETMINMAXINFO){auto limits=reinterpret_cast<MINMAXINFO*>(l);limits->ptMinTrackSize={self->px(640),self->px(480)};limits->ptMaxTrackSize=limits->ptMinTrackSize;return 0;}
         if(message==WM_DRAWITEM && w==Preview){self->drawPreview(*reinterpret_cast<DRAWITEMSTRUCT*>(l));return TRUE;}
+        if(message==WM_COMMAND && self->ready && (LOWORD(w)==SkinOpen || LOWORD(w)==SkinRefresh) && HIWORD(w)==BN_CLICKED){
+            try{
+                if(LOWORD(w)==SkinRefresh){self->refreshSkins(true);self->update();}
+                else{auto directory=tiger::skin::skinDirectory();std::filesystem::create_directories(directory);
+                    if(reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"open",directory.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)throw std::runtime_error("Cannot open skin directory");}
+            }catch(...){MessageBoxW(window,L"无法访问皮肤目录。请检查用户数据目录和配置文件的读写权限。",L"虎娘",MB_OK|MB_ICONERROR);}
+            return 0;
+        }
         if(message==WM_COMMAND && self->ready){
             if(HIWORD(w)==EN_SETFOCUS || HIWORD(w)==BN_SETFOCUS)self->reveal(reinterpret_cast<HWND>(l));
             if(HIWORD(w)==EN_CHANGE && l){wchar_t type[24]{};GetClassNameW(reinterpret_cast<HWND>(l),type,24);if(std::wstring_view(type)==L"Edit")self->centerEdit(reinterpret_cast<HWND>(l));}
@@ -782,6 +847,7 @@ LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM w,LPARAM l) {
 }
 }
 bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode) {
+    const auto startupBegin=GetTickCount64();
     INITCOMMONCONTROLSEX common{sizeof(common),ICC_HOTKEY_CLASS|ICC_TAB_CLASSES};if(!InitCommonControlsEx(&common))throw std::runtime_error("Cannot initialize settings controls");
     Dialog dialog;dialog.path=path;
     const auto settings=tiger::readConfiguration(path);
@@ -791,9 +857,36 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
     if(!RegisterClassW(&type) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)throw std::runtime_error("Cannot register input settings window");
     if(!CreateWindowExW(WS_EX_CONTROLPARENT,type.lpszClassName,L"虎娘 · 输入设置",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,640,480,owner,nullptr,type.hInstance,&dialog))throw std::runtime_error("Cannot create input settings window");
     dialog.create();
+    // Center once on the owner's (or launchPointer's) launchMonitor after DPI sizing.
+    POINT launchPointer{};GetCursorPos(&launchPointer);
+    const auto launchMonitor=owner?MonitorFromWindow(owner,MONITOR_DEFAULTTONEAREST):MonitorFromPoint(launchPointer,MONITOR_DEFAULTTONEAREST);
+    MONITORINFO launchScreen{sizeof(launchScreen)};GetMonitorInfoW(launchMonitor,&launchScreen);
+    SetWindowPos(dialog.window,nullptr,launchScreen.rcWork.left,launchScreen.rcWork.top,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    dialog.scale(GetDpiForWindow(dialog.window));
+    RECT launchFrame{};GetWindowRect(dialog.window,&launchFrame);
+    const auto launchCenteredX=launchScreen.rcWork.left+std::max(0L,(launchScreen.rcWork.right-launchScreen.rcWork.left-(launchFrame.right-launchFrame.left))/2);
+    const auto launchCenteredY=launchScreen.rcWork.top+std::max(0L,(launchScreen.rcWork.bottom-launchScreen.rcWork.top-(launchFrame.bottom-launchFrame.top))/2);
+    SetWindowPos(dialog.window,nullptr,launchCenteredX,launchCenteredY,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    if(testMode){GetWindowRect(dialog.window,&launchFrame);if(launchFrame.left!=launchCenteredX || launchFrame.top!=launchCenteredY)throw std::runtime_error("Settings did not open centered");}
+
     EnableMenuItem(GetSystemMenu(dialog.window,FALSE),SC_SIZE,MF_BYCOMMAND|MF_GRAYED);
     EnableMenuItem(GetSystemMenu(dialog.window,FALSE),SC_MAXIMIZE,MF_BYCOMMAND|MF_GRAYED);
+    if(testMode==10){
+        const auto created=GetTickCount64()-startupBegin;
+        ShowWindow(dialog.window,SW_SHOWNOACTIVATE);UpdateWindow(dialog.window);
+        std::ofstream(path.parent_path()/L"startup-times.tsv",std::ios::app)<<created<<'\t'<<(GetTickCount64()-startupBegin)<<'\n';
+        if(dialog.fonts || !dialog.donationPixels.empty())throw std::runtime_error("Hidden pages loaded before first paint");
+        const bool old=dialog.checked(100);
+        SendMessageW(dialog.item(100),BM_SETCHECK,old?BST_UNCHECKED:BST_CHECKED,0);
+        dialog.page(1);
+        if(!dialog.fonts || dialog.values()==dialog.baseline)throw std::runtime_error("Lazy font initialization lost pending edits");
+        SendMessageW(dialog.item(100),BM_SETCHECK,old?BST_CHECKED:BST_UNCHECKED,0);
+        if(dialog.values()!=dialog.baseline)throw std::runtime_error("Lazy font initialization dirtied settings");
+        dialog.page(4);if(dialog.donationPixels.empty())throw std::runtime_error("Donation did not load on demand");
+        DestroyWindow(dialog.window);return false;
+    }
     if(testMode) {
+        dialog.ensureAppearance();
         const auto original=tiger::readConfiguration(path);
         if(testMode==9){
             for(UINT dpi:{96u,120u,144u,192u,96u}){dialog.scale(dpi);for(int selected=0;selected<5;++selected){dialog.page(selected);dialog.scrollPage(SB_BOTTOM,0);dialog.scrollPage(SB_TOP,0);}}
@@ -850,15 +943,15 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
                     capture(path.parent_path()/(L"screen-error-"+std::to_wstring(dpi)+L".bmp"));SetWindowTextW(dialog.item(MaxCode),wide(oldCode.c_str()));dialog.update();
                 }
                 dialog.scale(96);dialog.page(1);dialog.scrollPage(SB_TOP,0);
-                const auto oldSize=dialog.text(FontSize),oldCount=dialog.text(PageSize);const bool oldVertical=dialog.checked(300),oldHidden=dialog.checked(303);
+                const auto oldSize=dialog.text(FontSize),oldCount=dialog.text(PageSize);const auto oldMode=SendMessageW(dialog.item(LayoutMode),CB_GETCURSEL,0,0);
                 dialog.captureSentence(path.parent_path()/L"preview-fixed-before.bmp",1);
                 SetWindowTextW(dialog.item(FontSize),L"200");dialog.update();
                 dialog.captureSentence(path.parent_path()/L"preview-fixed-after.bmp",1);
-                SetWindowTextW(dialog.item(PageSize),L"10");SendMessageW(dialog.item(300),BM_SETCHECK,BST_UNCHECKED,0);dialog.update();
+                SetWindowTextW(dialog.item(PageSize),L"10");SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,0,0);dialog.update();
                 capture(path.parent_path()/L"screen-preview-extreme.bmp");if(dialog.previewFailed)throw std::runtime_error("Large horizontal ten-candidate preview failed");
-                SendMessageW(dialog.item(303),BM_SETCHECK,BST_CHECKED,0);dialog.update();capture(path.parent_path()/L"screen-preview-hidden.bmp");
+                SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,4,0);dialog.update();capture(path.parent_path()/L"screen-preview-hidden.bmp");
                 SetWindowTextW(dialog.item(FontSize),wide(oldSize.c_str()));SetWindowTextW(dialog.item(PageSize),wide(oldCount.c_str()));
-                SendMessageW(dialog.item(300),BM_SETCHECK,oldVertical?BST_CHECKED:BST_UNCHECKED,0);SendMessageW(dialog.item(303),BM_SETCHECK,oldHidden?BST_CHECKED:BST_UNCHECKED,0);dialog.update();
+                SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,oldMode,0);dialog.update();
                 SetForegroundWindow(dialog.window);
                 RECT beforeMove{},afterMove{};GetWindowRect(dialog.window,&beforeMove);
                 // Drive the real DefWindowProc keyboard-move modal loop.
@@ -907,12 +1000,13 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         }
         if(testMode==5){
             for(int i=0;i<static_cast<int>(std::size(flags));++i)if(flags[i].member)SendMessageW(dialog.item(100+i),BM_SETCHECK,dialog.initial.*flags[i].member?BST_UNCHECKED:BST_CHECKED,0);
-            for(int i=0;i<4;++i)SendMessageW(dialog.item(300+i),BM_SETCHECK,dialog.initialStyle.*styleFlags[i].member?BST_UNCHECKED:BST_CHECKED,0);
+            SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,(layoutIndex(dialog.initialStyle.layoutMode)+1)%5,0);
+            SendMessageW(dialog.item(301),BM_SETCHECK,dialog.initialStyle.showIndex?BST_UNCHECKED:BST_CHECKED,0);
             dialog.update();SendMessageW(dialog.window,WM_COMMAND,Save,0);
             if(!dialog.saved)throw std::runtime_error("Moved flags did not save");
             auto config=tiger::parseEngineSettings(tiger::readConfiguration(path));auto style=tiger::parseCandidateStyle(tiger::readConfiguration(path));
             for(int i=0;i<static_cast<int>(std::size(flags));++i)if(flags[i].member && config.*flags[i].member==dialog.initial.*flags[i].member)throw std::runtime_error("Moved input flag lost");
-            for(int i=0;i<4;++i)if(style.*styleFlags[i].member==dialog.initialStyle.*styleFlags[i].member)throw std::runtime_error("Moved style flag lost");
+            if(style.layoutMode!=layoutIds[(layoutIndex(dialog.initialStyle.layoutMode)+1)%5] || style.showIndex==dialog.initialStyle.showIndex)throw std::runtime_error("Layout selection lost");
             return true;
         }
         if(testMode==4){
@@ -929,8 +1023,10 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             if(!dialog.saved || tiger::readConfiguration(path)!=original || std::filesystem::last_write_time(path)!=timestamp)throw std::runtime_error("Unmodified save wrote configuration");
             return true;
         }
+        if(!IsWindowEnabled(dialog.item(FontName)) || !IsWindowEnabled(dialog.item(FontSize)))
+            throw std::runtime_error("Skin authority / global scale controls are inconsistent");
         // Each dependency must preserve its value across disable / enable.
-        for(auto pair:{std::make_pair(AnimationEnabled,AnimationDuration),std::make_pair(SentenceAuto,SentenceRetained),std::make_pair(AddEnabled,AddShortcut),std::make_pair(RecentEnabled,RecentShortcut)}){
+        for(auto pair:{std::make_pair(SentenceAuto,SentenceRetained),std::make_pair(AddEnabled,AddShortcut),std::make_pair(RecentEnabled,RecentShortcut)}){
             bool old=dialog.checked(pair.first);auto before=dialog.values();
             SendMessageW(dialog.item(pair.first),BM_SETCHECK,BST_UNCHECKED,0);dialog.update();
             if(IsWindowEnabled(dialog.item(pair.second)))throw std::runtime_error("Dependency did not disable");
@@ -999,6 +1095,14 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         }
         for(UINT dpi:{96u,120u,144u,192u}) {
             dialog.scale(dpi);RECT client{};GetClientRect(dialog.window,&client);
+            if(!Dialog::highContrast()){
+                HRGN contour=CreateRectRgn(0,0,0,0);GetWindowRgn(dialog.window,contour);
+                const bool fits=PtInRegion(contour,dialog.px(320),dialog.px(240)) && PtInRegion(contour,dialog.px(28),dialog.px(20)) &&
+                    !PtInRegion(contour,dialog.px(320),0) && !PtInRegion(contour,dialog.px(320),dialog.px(479));
+                DeleteObject(contour);if(!fits)throw std::runtime_error("Window contour does not follow tiger frame");
+                RECT bounds{};GetWindowRect(dialog.window,&bounds);
+                if(SendMessageW(dialog.window,WM_NCHITTEST,0,MAKELPARAM(bounds.left+dialog.px(360),bounds.top+dialog.px(32)))!=HTCAPTION)throw std::runtime_error("Contour blocked caption dragging");
+            }
             for(auto c:dialog.controls){wchar_t controlType[24]{};GetClassNameW(c.window,controlType,24);if(std::wstring_view(controlType)!=L"Edit")continue;
                 if(GetWindowLongPtrW(c.window,GWL_EXSTYLE)&WS_EX_CLIENTEDGE)throw std::runtime_error("Old sunken edit frame remains");
                 if(!(GetWindowLongPtrW(c.window,GWL_STYLE)&ES_CENTER))throw std::runtime_error("Edit is not horizontally centered");
@@ -1060,21 +1164,26 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         if(testMode==1)dialog.captureSentence(path.parent_path()/L"preview-large.bmp",1);
         SetWindowTextW(dialog.item(FontSize),wide(priorSize.c_str()));dialog.update();
         if(testMode==1){
-            auto before=dialog.values();bool vertical=dialog.checked(300),code=dialog.checked(302),index=dialog.checked(301),hidden=dialog.checked(303),commentVisible=dialog.checked(113),splitVisible=dialog.checked(114);
+            if(SendMessageW(dialog.item(LayoutMode),CB_GETCOUNT,0,0)!=5 || dialog.text(LayoutMode).empty())throw std::runtime_error("Layout combo items missing");
+            auto before=dialog.values();const auto oldMode=SendMessageW(dialog.item(LayoutMode),CB_GETCURSEL,0,0);bool index=dialog.checked(301),commentVisible=dialog.checked(113),splitVisible=dialog.checked(114);
+            for(int mode=0;mode<5;++mode){SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,mode,0);dialog.update();dialog.captureSentence(path.parent_path()/(L"layout-"+std::to_wstring(mode+1)+L".bmp"),1);if(dialog.previewFailed)throw std::runtime_error("Five-layout preview failed");}
             auto oldTheme=SendMessageW(dialog.item(Theme),CB_GETCURSEL,0,0);
-            SendMessageW(dialog.item(300),BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(dialog.item(302),BM_SETCHECK,BST_CHECKED,0);
-            SendMessageW(dialog.item(Theme),CB_SETCURSEL,8,0);dialog.update();dialog.captureSentence(path.parent_path()/L"preview-horizontal.bmp",1);
+            SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,0,0);
+            SendMessageW(dialog.item(Theme),CB_SETCURSEL,0,0);dialog.update();dialog.captureSentence(path.parent_path()/L"preview-horizontal.bmp",1);
             SendMessageW(dialog.item(301),BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(dialog.item(113),BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(dialog.item(114),BM_SETCHECK,BST_CHECKED,0);
             dialog.update();dialog.captureSentence(path.parent_path()/L"preview-split.bmp",1);
-            SendMessageW(dialog.item(303),BM_SETCHECK,BST_CHECKED,0);dialog.update();dialog.captureSentence(path.parent_path()/L"preview-hidden.bmp",1);
-            for(auto entry:{std::make_pair(300,vertical),std::make_pair(302,code),std::make_pair(301,index),std::make_pair(303,hidden),std::make_pair(113,commentVisible),std::make_pair(114,splitVisible)})SendMessageW(dialog.item(entry.first),BM_SETCHECK,entry.second?BST_CHECKED:BST_UNCHECKED,0);
+            SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,4,0);dialog.update();dialog.captureSentence(path.parent_path()/L"preview-hidden.bmp",1);
+            SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,oldMode,0);
+            for(auto entry:{std::make_pair(301,index),std::make_pair(113,commentVisible),std::make_pair(114,splitVisible)})SendMessageW(dialog.item(entry.first),BM_SETCHECK,entry.second?BST_CHECKED:BST_UNCHECKED,0);
             SendMessageW(dialog.item(Theme),CB_SETCURSEL,oldTheme,0);dialog.update();if(before!=dialog.values())throw std::runtime_error("Preview did not restore controls");
         }
         if(testMode==1 && (!dialog.previewCount || dialog.previewFailed))throw std::runtime_error("Candidate preview failed to render");
         if(tiger::readConfiguration(path)!=original)throw std::runtime_error("Preview changed configuration");
         if(testMode==2) {
+            if(dialog.initialStyle.theme!=u"默认.ssf" || !dialog.initialStyle.skinAnimation)
+                throw std::runtime_error("SSF skin/font/animation choices did not reopen");
             if(dialog.initialStyle.codeMask!=u"甲😀乙")throw std::runtime_error("Mask setting did not reopen");
-            if(dialog.initialStyle.animationEnabled || dialog.initialStyle.animationDurationMs!=321)throw std::runtime_error("Animation settings did not reopen");
+            if(!dialog.initialStyle.animationEnabled || dialog.initialStyle.animationDurationMs!=100)throw std::runtime_error("Animation settings did not reopen");
             SetWindowTextW(dialog.item(CodeMask),L"");
             if(dialog.initialStyle.candidateDelayMs!=250 || dialog.initialStyle.annotationDelayMs!=60000)
                 throw std::runtime_error("Saved reveal delays did not reopen");
@@ -1157,18 +1266,21 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             SetWindowTextW(dialog.item(id),L"0");if(dialog.delay(id)!=0)throw std::runtime_error("Zero delay is not immediate");
         }
         SetWindowTextW(dialog.item(CodeMask),L"甲😀乙");
-        SendMessageW(dialog.item(AnimationEnabled),BM_SETCHECK,BST_UNCHECKED,0);
-        SetWindowTextW(dialog.item(AnimationDuration),L"321");
         SetWindowTextW(dialog.item(CandidateDelay),L"250");SetWindowTextW(dialog.item(AnnotationDelay),L"60000");
         SetWindowTextW(dialog.item(FontSize),L"17.5");if(!dialog.fonts->select(L"Segoe UI"))throw std::runtime_error("System font missing from picker");
-        SendMessageW(dialog.item(300),BM_SETCHECK,BST_UNCHECKED,0);
-        SendMessageW(dialog.item(302),BM_SETCHECK,BST_CHECKED,0);
-        for(std::size_t i=0;i<tiger::candidateThemeNames.size();++i) {
+        SendMessageW(dialog.item(LayoutMode),CB_SETCURSEL,0,0);
+
+        if(dialog.themes.empty() || SendMessageW(dialog.item(Theme),CB_GETCOUNT,0,0)!=static_cast<LRESULT>(dialog.themes.size()))
+            throw std::runtime_error("Skin catalog/control count mismatch");
+        for(std::size_t i=0;i<dialog.themes.size();++i) {
             SendMessageW(dialog.item(Theme),CB_SETCURSEL,i,0);
             const auto value=dialog.text(Theme);
-            if(value!=tiger::candidateThemeNames[i] || tiger::parseCandidateStyle(u"主题\t"+value).theme!=value)
-                throw std::runtime_error("Theme choice does not match renderer names");
+            if(value!=dialog.themes[i] || !tiger::skin::validSkinFile(value) || tiger::parseCandidateStyle(u"皮肤\t"+value).theme!=value)
+                throw std::runtime_error("Skin choice does not match the SSF catalog");
         }
+        const auto defaultSkin=std::find(dialog.themes.begin(),dialog.themes.end(),u"默认.ssf");
+        if(defaultSkin==dialog.themes.end())throw std::runtime_error("Default SSF choice missing");
+        SendMessageW(dialog.item(Theme),CB_SETCURSEL,defaultSkin-dialog.themes.begin(),0);
         // Every displayed choice must map to the engine's existing mode.
         for(int i=0;i<4;++i) {
             SendMessageW(dialog.item(PageKeys),CB_SETCURSEL,i,0);

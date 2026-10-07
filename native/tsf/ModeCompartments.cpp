@@ -103,9 +103,14 @@ HRESULT ModeCompartments::publish(bool chinese) {
 }
 HRESULT ModeCompartments::changed(REFGUID guid) {
     if(writing_)return S_OK;
-    LONG value=0;bool next=false;
-    auto hr=read(guid==GUID_COMPARTMENT_KEYBOARD_OPENCLOSE?open_.Get():conversion_.Get(),value);if(FAILED(hr))return hr;
-    next=guid==GUID_COMPARTMENT_KEYBOARD_OPENCLOSE?value!=0:(value&TF_CONVERSIONMODE_NATIVE)!=0;
+    LONG value=0;bool initialized=false;
+    auto hr=read(guid==GUID_COMPARTMENT_KEYBOARD_OPENCLOSE?open_.Get():conversion_.Get(),value,&initialized);if(FAILED(hr))return hr;
+    // TSF may restore an unset compartment when the thread gains focus.
+    // S_FALSE/VT_EMPTY is not a request for English: republish the latest
+    // requested mode without changing the engine. publish handles deferred
+    // writes if this compartment cannot be written inside its own callback.
+    if(!initialized)return publish(desired_);
+    const bool next=guid==GUID_COMPARTMENT_KEYBOARD_OPENCLOSE?value!=0:(value&TF_CONVERSIONMODE_NATIVE)!=0;
     // An explicit open/close request also supersedes a pending edit when its
     // value matches the mode currently displayed while waiting for a lock.
     const bool notify=next!=chinese_ || guid==GUID_COMPARTMENT_KEYBOARD_OPENCLOSE;

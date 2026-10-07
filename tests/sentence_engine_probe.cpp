@@ -34,7 +34,7 @@ int main(int argc,char** argv) {
   tap(e,'A');ticket=*e.sentenceRequest();auto preview=e;tap(preview,'B');
   check(e.snapshot().raw==u"a" && preview.snapshot().raw==u"ab","engine preview independent");
   check(!e.applySentenceResult(*preview.sentenceRequest(),decoded()),"preview generation not published");
-  e.focusChanged();check(!e.applySentenceResult(ticket,decoded()),"focus invalidates worker generation");
+  e.focusChanged();check(e.applySentenceResult(ticket,decoded()),"focus preserves same-input worker generation");
   ticket=*e.sentenceRequest();
   e.switchSchema(e.lexicon(),Config{});check(e.snapshot().raw==u"a" && e.sentenceRequest().has_value(),"schema preserves sentence raw");
   check(!e.applySentenceResult(ticket,decoded()),"schema rejects old generation");

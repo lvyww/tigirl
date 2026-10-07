@@ -1,0 +1,20 @@
+{
+  "tool": "built-in image_gen",
+  "assets": [
+    {
+      "key": "tiger-cream",
+      "name": "虎纹奶油",
+      "prompt": "Edit this IME skin asset into a COMPACT SINGLE LINE input candidate strip. Preserve exact same character identity, color palette and drawing style. CRITICAL: Change the tall blank board into a very SHALLOW rounded rectangle, only enough for ONE line of runtime text. Board width about 1000 pixels, board height only 190 pixels; reduce character to 330 pixels high peeking above top right corner. Reposition/shrink pawprint/star/bow decorations to corners so they never obstruct text. All text interior EMPTY. Tight transparent canvas about 1100 wide by 540 high, landscape 2:1 ratio, artwork nearly touches canvas edges. No extra space below board. Text area uniform ivory. Panel edges straight, stretch-safe vertical strip near one third width and horizontal strip in middle of board. True transparent outside, opaque inside. No lettering, no numbers, no UI or text, no checkerboard. Output only this compact single-line skin, not the original tall board. Keep character proportions natural."
+    },
+    {
+      "key": "peach-tigirl",
+      "name": "蜜桃虎娘",
+      "prompt": "Edit this IME skin asset into a COMPACT SINGLE LINE input candidate strip. Preserve exact same character identity, color palette and drawing style. CRITICAL: Change the tall blank board into a very SHALLOW rounded rectangle, only enough for ONE line of runtime text. Board width about 1000 pixels, board height only 190 pixels; reduce character to 330 pixels high peeking above top right corner. Reposition/shrink pawprint/star/bow decorations to corners so they never obstruct text. All text interior EMPTY. Tight transparent canvas about 1100 wide by 540 high, landscape 2:1 ratio, artwork nearly touches canvas edges. No extra space below board. Text area uniform ivory. Panel edges straight, stretch-safe vertical strip near one third width and horizontal strip in middle of board. True transparent outside, opaque inside. No lettering, no numbers, no UI or text, no checkerboard. Output only this compact single-line skin, not the original tall board. Keep character proportions natural."
+    },
+    {
+      "key": "energetic-tigirl",
+      "name": "元气虎娘",
+      "prompt": "Edit this IME skin asset into a COMPACT SINGLE LINE input candidate strip. Preserve exact same character identity, color palette and drawing style. CRITICAL: Change the tall blank board into a very SHALLOW rounded rectangle, only enough for ONE line of runtime text. Board width about 1000 pixels, board height only 190 pixels; reduce character to 330 pixels high peeking above top right corner. Reposition/shrink pawprint/star/bow decorations to corners so they never obstruct text. All text interior EMPTY. Tight transparent canvas about 1100 wide by 540 high, landscape 2:1 ratio, artwork nearly touches canvas edges. No extra space below board. Text area uniform ivory. Panel edges straight, stretch-safe vertical strip near one third width and horizontal strip in middle of board. True transparent outside, opaque inside. No lettering, no numbers, no UI or text, no checkerboard. Output only this compact single-line skin, not the original tall board. Keep character proportions natural."
+    }
+  ]
+}

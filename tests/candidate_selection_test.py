@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
+from work_directory import temporary_work_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
@@ -32,8 +32,7 @@ def main() -> None:
     msvc = Path(compiler).name.lower() in {"cl", "cl.exe"}
     if msvc and args.sanitize:
         parser.error("--sanitize requires GCC or Clang with ASan/UBSan")
-    with tempfile.TemporaryDirectory(prefix="tigirl-selection-") as tmp:
-        work = Path(tmp)
+    with temporary_work_directory(prefix="tigirl-selection-") as work:
         exe = work / ("probe.exe" if os.name == "nt" else "probe")
         if msvc:
             flags = ["/nologo", "/std:c++17", "/EHsc", "/utf-8", "/O2", f"/I{ROOT / 'native'}"]

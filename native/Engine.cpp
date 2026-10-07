@@ -1,4 +1,4 @@
-#include "Engine.h"
+﻿#include "Engine.h"
 #include "UppercaseText.h"
 #include <algorithm>
 #include <stdexcept>
@@ -115,12 +115,13 @@ void Engine::cancel() {
     mode_ = chinese() ? Mode::Idle : Mode::English;
 }
 void Engine::focusChanged() {
-    sentence_.invalidatePending();
+    // Focus is not an edit: keep selection, locks and the decoder generation.
+    // Only held-key state (whose key-up may go to another window) is reset.
     oneShotActionKey_ = 0;
     schemaAwaitingModifierRelease_ = false;
     leftShift_ = rightShift_ = shiftChord_ = false;
     consumedModifiers_.fill(false);
-    digit_ = false; pageRaw_.clear(); page_ = 0;
+    digit_ = false;
 }
 KeyResult Engine::finish(std::u16string text) {
     cancel();
@@ -258,7 +259,7 @@ KeyResult Engine::dispatch(KeyEvent key,const SentencePathQueries& queries) {
     if (shiftKey(key.vk)) {
         bool& down = key.vk == RShift ? rightShift_ : leftShift_;
         if (key.down) {
-            if (!leftShift_ && !rightShift_) shiftChord_ = false;
+            if (!leftShift_ && !rightShift_) shiftChord_ = key.ctrl || key.alt || key.win;
             down = true; return {};
         }
         const bool matched = down; down = false;
@@ -300,8 +301,11 @@ KeyResult Engine::dispatch(KeyEvent key,const SentencePathQueries& queries) {
             }
         }
     }
-    if (key.ctrl || key.alt || key.win) {
-        const bool bare=key.alt?(key.vk==Alt || key.vk==LAlt || key.vk==RAlt):key.ctrl?controlKey(key.vk):(key.vk==LWin || key.vk==RWin);
+    // Unbound Windows shortcuts belong to the shell, not to composition
+    // cancellation. In particular Win+Shift+S must not erase the screenshot target.
+    if (key.win) return {};
+    if (key.ctrl || key.alt) {
+        const bool bare=key.alt?(key.vk==Alt || key.vk==LAlt || key.vk==RAlt):controlKey(key.vk);
         const bool shouldCancel = !bare && composing();
         if (shouldCancel) cancel();
         return {false, shouldCancel, {}};

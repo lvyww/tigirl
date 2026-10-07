@@ -25,11 +25,30 @@ try{
  Check ((Get-FileHash "$legacy\码表\legacy-only.txt").Hash -eq $legacyHash) 'Legacy source changed'
  Check (Test-Path "$root\.setup-user-transaction.json") 'Pending journal missing'
  Check (Test-Path "$root\schemas\虎整句\current.txt") 'Compiled sentence descriptor missing'
+ $pending=Get-Content -LiteralPath "$root\.setup-user-transaction.json" -Raw|ConvertFrom-Json
+ $copied=Get-Content -LiteralPath (Join-Path $pending.backup 'files.json') -Raw|ConvertFrom-Json
+ $newFiles=@($copied|Where-Object {!$_.Backup})
+ Check ($newFiles.Count -gt 0) 'Transaction recorded no newly copied files'
+ $copiedPaths=@{};foreach($item in $copied){$copiedPaths[$item.Target]=$true}
+ # The compiler opens each schema's UserStore, creating an empty journal and
+ # stable lock. These are not package sources and must not be swept by rollback.
+ $generatedPaths=@{}
+ foreach($descriptor in Get-ChildItem "$root\schemas" -File -Filter current.txt -Recurse){
+  $journal=Join-Path (Join-Path "$root\码表" $descriptor.Directory.Name) '用户调整.txt'
+  $generatedPaths[$journal]=$true;$generatedPaths[$journal+'.lock']=$true
+ }
  Run 'Rollback'
  Check ((Get-FileHash "$root\config.txt").Hash -eq $hash) 'Rollback changed preexisting configuration'
  Check (!(Test-Path "$root\installed-data-version.txt")) 'Rollback retained success marker'
  Check (!(Test-Path "$root\schemas\虎整句\current.txt")) 'Rollback retained published descriptor'
- Check (@(Get-ChildItem "$root\码表" -File -Recurse).Count -eq 0) 'Rollback retained newly copied source files'
+ foreach($item in $newFiles){
+  Check (!(Test-Path -LiteralPath $item.Target)) ("Rollback retained newly copied file: "+$item.Target)
+ }
+ $remaining=@(Get-ChildItem "$root\码表" -File -Recurse)
+ foreach($file in $remaining){
+  Check ($generatedPaths.ContainsKey($file.FullName) -and $file.Length -eq 0 -and !$copiedPaths.ContainsKey($file.FullName)) ("Rollback retained unexpected source file: "+$file.FullName)
+ }
+ Write-Output ("ROLLBACK_VALIDATED copied_new_files={0} allowed_empty_journal_files={1}" -f $newFiles.Count,$remaining.Count)
  Run 'Initialize'
  Run 'Complete'
  Check (!(Test-Path "$root\.setup-user-transaction.json")) 'Commit retained journal'

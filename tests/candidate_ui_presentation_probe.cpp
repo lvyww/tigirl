@@ -110,11 +110,11 @@ struct CandidateUIPresentationProbe {
         for(const auto& value:values) { SentenceCandidate c;c.text=value;c.segmentedCode=ticket->raw;result.candidates.push_back(std::move(c)); }
         candidate_probe::require(state->engine.applySentenceResult(*ticket,std::move(result)),"Sentence fixture rejected");
     }
-    void update(bool available=true,bool pending=false) {
-        ui->update(available?&caret:nullptr,nullptr,pending,CandidateUpdate::Content);
+    void update(bool available=true) {
+        ui->update(available?&caret:nullptr,nullptr,CandidateUpdate::Content);
     }
-    void layout(bool available=true,bool pending=false) {
-        ui->update(available?&caret:nullptr,nullptr,pending,CandidateUpdate::Layout);
+    void layout(bool available=true) {
+        ui->update(available?&caret:nullptr,nullptr,CandidateUpdate::Layout);
     }
     void pump() {
         MSG message{};unsigned count=0;
@@ -227,25 +227,25 @@ struct CandidateUIPresentationProbe {
             }
             {
                 CandidateUIPresentationProbe missing(dictionary,vertical,0,0,true,false);
-                missing.pump();now+=1000;missing.update(false,true);missing.pump();
+                missing.pump();now+=1000;missing.update(false);missing.pump();
                 require(!missing.visible(),"First appearance invented a caret position");
                 missing.update();missing.pump();missing.finalFrame();++cases;
             }
             {
                 CandidateUIPresentationProbe p(dictionary,vertical);p.first();p.change();p.timer(2,50);
                 const auto anchor=p.ui->caret_;
-                p.layout(false,true);p.pump();p.timer(2,1000);
+                p.layout(false);p.pump();p.timer(2,1000);
                 require(p.visible() && p.ui->hasPresentedCandidates_,"Layout loss hid active candidates");
                 require(EqualRect(&anchor,&p.ui->caret_),"Cached physical caret was changed");
                 const auto oldPixels=frames.back().pixels;
                 p.press('C');p.decode({u"新的候选",u"第二个候选"});
-                p.ui->update(nullptr,nullptr,false);p.pump();p.timer(2,1000);
+                p.ui->update(nullptr,nullptr);p.pump();p.timer(2,1000);
                 require(p.visible() && p.ui->snapshot_.raw==p.state->engine.snapshot().raw,
                     "No-layout content did not advance");
                 require(p.ui->snapshot_.candidates.size()==2 && p.ui->snapshot_.candidates[0].display==u"新的候选",
                     "No-layout candidate content stayed stale");
                 p.finalFrame();require(frames.back().pixels!=oldPixels,"Retained window froze old candidate pixels");
-                p.layout(false,true);p.timer(4,1000);p.pump();
+                p.layout(false);p.timer(4,1000);p.pump();
                 require(p.visible() && p.ui->hasPresentedCandidates_,"Obsolete layout timer hid retained candidates");
                 p.caret.left+=40;p.caret.right+=40;p.layout();p.pump();p.timer(2,1000);
                 require(p.ui->caret_.left==p.caret.left,"Recovered caret did not resume tracking");
@@ -316,7 +316,7 @@ struct CandidateUIPresentationProbe {
                 };
                 p.caret.left+=80;p.caret.right+=80;p.layout();p.pump();preserved();
                 require(p.ui->transition_.Active(),"Joint post-presentation motion lost animation");
-                p.timer(2,50);const auto frozen=p.rect();p.layout(false,true);preserved();
+                p.timer(2,50);const auto frozen=p.rect();p.layout(false);preserved();
                 require(p.visible() && p.rect()==frozen && p.ui->hasCaret_,
                         "Joint layout loss discarded the valid anchor");
                 now+=40;p.layout();p.pump();preserved();

@@ -175,20 +175,13 @@ bool acceptReminder(const std::filesystem::path& path,const ReminderTicket& tick
     });
     return accepted;
 }
-CandidateStyle cycleCandidateMode(const std::filesystem::path& path,bool& horizontalCode,bool& verticalCode) {
+CandidateStyle cycleCandidateMode(const std::filesystem::path& path) {
     CandidateStyle style;
-    bool horizontal=horizontalCode,vertical=verticalCode;
     mutateConfiguration(path,[&](std::u16string_view text) {
-        style=parseCandidateStyle(text);
-        if(!style.hideCandidates)(style.vertical?vertical:horizontal)=style.showCode;
-        if(style.hideCandidates && style.showCode) {style.hideCandidates=false;style.vertical=false;style.showCode=horizontal;}
-        else if(style.vertical) {style.hideCandidates=true;style.showCode=true;}
-        else {style.hideCandidates=false;style.vertical=true;style.showCode=vertical;}
-        auto updated=withConfigurationValue(text,u"隐藏候选",style.hideCandidates?u"是":u"否");
-        updated=withConfigurationValue(updated,u"竖排候选",style.vertical?u"是":u"否");
-        return withConfigurationValue(updated,u"候选窗显示编码",style.showCode?u"是":u"否");
+        style=parseCandidateStyle(text);style.setLayoutMode(style.layoutMode==2?4:style.layoutMode==7?2:style.layoutMode+1);
+        return withConfigurationValue(text,u"候选布局",std::u16string(1,char16_t(u'0'+style.layoutMode)));
     });
-    horizontalCode=horizontal;verticalCode=vertical;return style;
+    return style;
 }
 double adjustCandidateFontSize(const std::filesystem::path& path,int wheelDelta) {
     double size=17;
@@ -200,13 +193,14 @@ double adjustCandidateFontSize(const std::filesystem::path& path,int wheelDelta)
     });
     return size;
 }
-bool toggleHiddenCandidates(const std::filesystem::path& path) {
-    bool hidden=false;
+CandidateStyle toggleHiddenCandidates(const std::filesystem::path& path) {
+    CandidateStyle style;
     mutateConfiguration(path,[&](std::u16string_view text) {
-        hidden=!parseCandidateStyle(text).hideCandidates;
-        return withHiddenCandidateSetting(text,hidden);
+        style=parseCandidateStyle(text);
+        style.setLayoutMode(style.layoutMode==7?6:7);
+        return withHiddenCandidateSetting(text,style.hideCandidates);
     });
-    return hidden;
+    return style;
 }
 static std::u16string selectedSchemaText(std::u16string_view text,std::u16string_view canonicalName) {
         auto equal=[](const std::u16string& a,const std::u16string& b) {

@@ -1,0 +1,22 @@
+[
+  {
+    "key": "cream",
+    "path": "assets/skins/tigirl-trio/tiger-cream-compact.png",
+    "prompt": "Precise skin layout edit. Make this panel narrower, reduce its width about 15% by removing blank middle area only. Preserve SAME character face, pose, identity, proportions, and approximate pixel size; no redesign, no enlargement. Keep all corner ornaments and panel colors. OUTPUT canvas 1536 x 1024 pixels, landscape 3:2. Place the shallow single-line panel near bottom, x=20..1516 y=710..970; character above upper RIGHT edge fully visible. Keep transparent exterior, opaque ivory panel interior, no text. Preserve all character pixels entirely right of x=320; preserve left corner ornaments entirely left of x=280, so x=300 is a clean vertical stretch strip across top/bottom borders. Mid-height of panel y=850 must pass through plain left/right borders without any decorative objects (move corner ornaments up/down if necessary). Single clean production asset, no checkerboard, no background glow. Do not change character expression or add any new objects."
+  },
+  {
+    "key": "peach",
+    "path": "assets/skins/tigirl-trio/peach-tigirl-compact.png",
+    "prompt": "Precise skin layout edit. Make this panel narrower, reduce its width about 15% by removing blank middle area only. Preserve SAME character face, pose, identity, proportions, and approximate pixel size; no redesign, no enlargement. Keep all corner ornaments and panel colors. OUTPUT canvas 1536 x 1024 pixels, landscape 3:2. Place the shallow single-line panel near bottom, x=20..1516 y=710..970; character above upper RIGHT edge fully visible. Keep transparent exterior, opaque ivory panel interior, no text. Preserve all character pixels entirely right of x=320; preserve left corner ornaments entirely left of x=280, so x=300 is a clean vertical stretch strip across top/bottom borders. Mid-height of panel y=850 must pass through plain left/right borders without any decorative objects (move corner ornaments up/down if necessary). Single clean production asset, no checkerboard, no background glow. Do not change character expression or add any new objects."
+  },
+  {
+    "key": "energy",
+    "path": "assets/skins/tigirl-trio/energetic-tigirl-compact.png",
+    "prompt": "Precise skin layout edit. Make this panel narrower, reduce its width about 15% by removing blank middle area only. Preserve SAME character face, pose, identity, proportions, and approximate pixel size; no redesign, no enlargement. Keep all corner ornaments and panel colors. OUTPUT canvas 1536 x 1024 pixels, landscape 3:2. Place the shallow single-line panel near bottom, x=20..1516 y=710..970; character above upper RIGHT edge fully visible. Keep transparent exterior, opaque ivory panel interior, no text. Preserve all character pixels entirely right of x=320; preserve left corner ornaments entirely left of x=280, so x=300 is a clean vertical stretch strip across top/bottom borders. Mid-height of panel y=850 must pass through plain left/right borders without any decorative objects (move corner ornaments up/down if necessary). Single clean production asset, no checkerboard, no background glow. Do not change character expression or add any new objects."
+  },
+  {
+    "key": "bro",
+    "path": "assets/skins/tiger-bro/panel-gym.png",
+    "prompt": "Precise skin layout edit. Make this panel narrower, reduce its width about 15% by removing blank middle area only. Preserve SAME character face, pose, identity, proportions, and approximate pixel size; no redesign, no enlargement. Keep all corner ornaments and panel colors. OUTPUT canvas 1536 x 1024 pixels, landscape 3:2. Place the shallow single-line panel near bottom, x=20..1516 y=710..970; character above upper RIGHT edge fully visible. Keep transparent exterior, opaque ivory panel interior, no text. Preserve all character pixels entirely right of x=320; preserve left corner ornaments entirely left of x=280, so x=300 is a clean vertical stretch strip across top/bottom borders. Mid-height of panel y=850 must pass through plain left/right borders without any decorative objects (move corner ornaments up/down if necessary). Single clean production asset, no checkerboard, no background glow. Do not change character expression or add any new objects."
+  }
+]

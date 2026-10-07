@@ -32,7 +32,7 @@ void CandidateUI::detach() {
     ++visualRevision_;stopAnimation();refreshPending_=false;
     owner_=nullptr; shown_=false;hasCaret_=false; updatedFlags_=0; hasPresentedCandidates_=false; reveal_.reset();
     if(window_) {
-        KillTimer(window_,1);KillTimer(window_,3);
+        KillTimer(window_,1);KillTimer(window_,3);KillTimer(window_,4);
         const auto window=window_; window_=nullptr;
         SetWindowLongPtrW(window,GWLP_USERDATA,0);
         DestroyWindow(window);
@@ -41,6 +41,14 @@ void CandidateUI::detach() {
     frameTrace_.flush();
     fonts_.reset();
     state_.reset();
+}
+void CandidateUI::setFocused(bool focused) {
+    if(!owner_ || focused_==focused)return;
+    focused_=focused;++visualRevision_;
+    if(!focused_) {
+        hideWindow(false);
+        if(window_)KillTimer(window_,1);
+    } else if(visible() && window_)schedulePaint();
 }
 ULONG CandidateUI::AddRef() { return InterlockedIncrement(&refs_); }
 ULONG CandidateUI::Release() { auto n=InterlockedDecrement(&refs_); if(!n) delete this; return n; }
@@ -57,11 +65,11 @@ HRESULT CandidateUI::GetDescription(BSTR* value) {
 HRESULT CandidateUI::GetGUID(GUID* value) { if(!value) return E_POINTER; *value=Global::SampleIMEGuidCandUIElement; return S_OK; }
 HRESULT CandidateUI::Show(BOOL value) {
     shown_=value!=FALSE && owner_;
-    if(!shown_) { ++visualRevision_;hideWindow();reveal_.reset(); if(window_)KillTimer(window_,1); }
-    else if(window_)schedulePaint();
+    if(!visible()) { ++visualRevision_;hideWindow();reveal_.reset(); if(window_)KillTimer(window_,1); }
+    else if(visible() && window_)schedulePaint();
     return S_OK;
 }
-HRESULT CandidateUI::IsShown(BOOL* value) { if(!value) return E_POINTER; *value=shown_?TRUE:FALSE; return S_OK; }
+HRESULT CandidateUI::IsShown(BOOL* value) { if(!value) return E_POINTER; *value=visible()?TRUE:FALSE; return S_OK; }
 HRESULT CandidateUI::GetUpdatedFlags(DWORD* value) {
     if(!value) return E_POINTER;
     *value=updatedFlags_;
@@ -108,12 +116,12 @@ HRESULT CandidateUI::SetSelection(UINT index) {
     return S_OK;
 }
 HRESULT CandidateUI::Finalize() {
-    if(!owner_ || !state_) return TF_E_DISCONNECTED;
+    if(!owner_ || !state_ || !focused_) return TF_E_DISCONNECTED;
     ComPtr<ITfTextInputProcessorEx> keepAlive=owner_;
     return owner_->choose(state_,selected_,false);
 }
 HRESULT CandidateUI::Abort() {
-    if(!owner_ || !state_) return TF_E_DISCONNECTED;
+    if(!owner_ || !state_ || !focused_) return TF_E_DISCONNECTED;
     ComPtr<ITfTextInputProcessorEx> keepAlive=owner_;
     return owner_->choose(state_,0,true);
 }
@@ -149,10 +157,10 @@ HRESULT CandidateUI::notifyUpdated(ITfUIElementMgr* manager,DWORD elementId) {
     if(SUCCEEDED(hr) && owner_ && revision==modelRevision_)updatedFlags_=0;
     return hr;
 }
-void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool /*layoutPending*/,CandidateUpdate update) {
+void CandidateUI::update(const RECT* caret,HWND ownerWindow,CandidateUpdate update) {
     if(!owner_ || !state_) return;
     if(update==CandidateUpdate::Content)updateContent();
-    if(shown_)reveal_.update(snapshot_,style_,GetTickCount64());
+    if(visible())reveal_.update(snapshot_,style_,GetTickCount64());
     // A host may lose all text geometry for a wrapped composition. Retain
     // the last physical anchor for this UI/context and keep publishing content.
     // Never convert the cached rectangle again (mixed-DPI hosts), and never
@@ -166,7 +174,7 @@ void CandidateUI::update(const RECT* caret,HWND ownerWindow,bool /*layoutPending
     }
     if(!hasCaret_){hideWindow();return;}
     CandidateDpiScope dpiScope;
-    if(!shown_) return;
+    if(!visible()) return;
     if(!window_) {
         WNDCLASSEXW klass{}; klass.cbSize=sizeof(klass); klass.lpfnWndProc=windowProc;
         klass.hInstance=Global::dllInstanceHandle; klass.lpszClassName=windowClass;
@@ -185,16 +193,16 @@ void CandidateUI::hideWindow(bool endPresentation) {
     const bool wasVisible=window_ && IsWindowVisible(window_);
     stopAnimation();itemRects_.clear();
     if(endPresentation)hasPresentedCandidates_=false;
-    if(window_)ShowWindow(window_,SW_HIDE);
+    if(window_){KillTimer(window_,4);ShowWindow(window_,SW_HIDE);}
     if(endPresentation || wasVisible)frameTrace_.flush();
 }
 void CandidateUI::schedulePaint() {
-    if(!window_ || !owner_ || !shown_)return;
+    if(!window_ || !owner_ || !visible())return;
     ++visualRevision_;itemRects_.clear();retryCount_=0;
     if(!refreshPending_)refreshPending_=PostMessageW(window_,refreshMessage,0,0)!=FALSE;
 }
 void CandidateUI::animate() {
-    if(!window_ || !owner_ || !shown_ || !hasCaret_){stopAnimation();return;}
+    if(!window_ || !owner_ || !visible() || !hasCaret_){stopAnimation();return;}
     if(refreshPending_)return; // New input wins over an old animation target.
     if(!transition_.Active()){KillTimer(window_,2);return;}
     const auto rect=transition_.Sample(GetTickCount64());
@@ -210,7 +218,7 @@ void CandidateUI::animate() {
 void CandidateUI::refreshReveal() {
     if(!window_)return;
     KillTimer(window_,1);
-    if(!owner_ || !state_ || !shown_)return;
+    if(!owner_ || !state_ || !visible())return;
     // Suppress a first-result placeholder, but preserve an existing frame
     // when auto-commit consumes all old candidates and leaves a pending suffix.
     // No timer or new pixels: completion drives the next update. Old hit targets
@@ -233,7 +241,7 @@ void CandidateUI::refreshReveal() {
     const auto remaining=reveal_.remaining(style_,now);
     if(remaining)SetTimer(window_,1,remaining,nullptr);
     itemRects_.clear();
-    if(!hasCaret_ || (presentation_.code.empty() && presentation_.items.empty())) {
+    if(!hasCaret_ || (presentation_.code.empty() && presentation_.items.empty() && presentation_.placeholder.empty())) {
         // No items during an active composition need not start a new session.
         // In particular, do not relatch first-presentation state on empty results.
         hideWindow(!hasCaret_ || snapshot_.raw.empty());return;
@@ -241,8 +249,8 @@ void CandidateUI::refreshReveal() {
     layoutAndPaint();
 }
 void CandidateUI::layoutAndPaint() {
-    if(!window_ || !renderer_ || layingOut_ || !shown_ || !hasCaret_ ||
-       (presentation_.code.empty() && presentation_.items.empty()))return;
+    if(!window_ || !renderer_ || layingOut_ || !visible() || !hasCaret_ ||
+       (presentation_.code.empty() && presentation_.items.empty() && presentation_.placeholder.empty()))return;
     const bool firstCandidateFrame=!hasPresentedCandidates_ && !presentation_.items.empty();
     if(firstCandidateFrame)stopAnimation();
     CandidateDpiScope scope;
@@ -255,21 +263,25 @@ void CandidateUI::layoutAndPaint() {
     auto drawing=renderer_;
     const float maxWidth=std::max(1.f,(monitor.rcWork.right-monitor.rcWork.left-2)*96.f/dpi_);
     const bool changed=!finalReady_ || dpi_!=cachedDpi_ || maxWidth!=cachedMaxWidth_ ||
-        presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.codeOnly!=cachedPresentation_.codeOnly;
+        presentation_.placeholder!=cachedPresentation_.placeholder || presentation_.code!=cachedPresentation_.code || presentation_.items!=cachedPresentation_.items || presentation_.annotationOffsets!=cachedPresentation_.annotationOffsets || presentation_.codeOnly!=cachedPresentation_.codeOnly;
     if(changed)drawing->layout(presentation_,maxWidth);
     width_=static_cast<int>(drawing->pixelWidth(dpi_));height_=static_cast<int>(drawing->pixelHeight(dpi_));
     CandidatePlacementEnvironment environment;
     environment.epoch=owner_->candidatePlacementEpoch();environment.dpi=dpi_;
     environment.monitor=reinterpret_cast<std::uintptr_t>(monitorId);environment.work=monitor.rcWork;
     environment.owner=reinterpret_cast<std::uintptr_t>(ownerWindow_);
+    bool rememberOrientation=true;
     if(ownerWindow_) {
         const auto root=GetAncestor(ownerWindow_,GA_ROOT);
         environment.root=reinterpret_cast<std::uintptr_t>(root);
-        if(!root || !GetWindowRect(ownerWindow_,&environment.ownerBounds) ||
-           !GetWindowRect(root,&environment.rootBounds)){hideWindow();return;}
+        rememberOrientation=root && GetWindowRect(ownerWindow_,&environment.ownerBounds) &&
+            GetWindowRect(root,&environment.rootBounds);
     }
     auto placementState=state_;
     auto nextOrientation=placementState->candidateOrientation;
+    // Auxiliary host rectangles only decide whether direction memory is safe.
+    // A valid caret/work area is sufficient to place the candidate window.
+    if(!rememberOrientation)nextOrientation.reset();
     const auto placed=nextOrientation.place(caret_,environment,width_,height_);
     if(!placed){hideWindow();return;}
     const auto position=*placed;
@@ -297,6 +309,7 @@ void CandidateUI::layoutAndPaint() {
     // Store the accepted target direction, never an animation's intermediate Y.
     // Focus/reentrant hide/failure must not contaminate the next composition.
     if(state_!=placementState || owner_->candidatePlacementEpoch()!=environment.epoch)return;
+    if(!rememberOrientation)nextOrientation.reset();
     placementState->candidateOrientation=nextOrientation;
     // paint() has published pixels and final geometry and, when necessary,
     // successfully shown the window. Only this current frame can latch state.
@@ -317,9 +330,10 @@ bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSiz
         const UINT first=static_cast<UINT>(snapshot_.page*engine_.pageSize());
         if(frameSize)drawing->render(dpi_,selected_>=first?selected_-first:UINT_MAX,scratchPixels_,frameSize);
         else if(!finalReady_)throw std::runtime_error("Candidate final frame unavailable");
+        else if(drawing->skinFrameChanged())drawing->render(dpi_,selected_>=first?selected_-first:UINT_MAX,finalPixels_);
         const auto& rendered=frameSize?scratchPixels_:finalPixels_;
         if(rendered.size()!=static_cast<std::size_t>(frameWidth)*frameHeight)throw std::runtime_error("Candidate surface/layout mismatch");
-        if(!window_ || !owner_ || !shown_ || !hasCaret_ || revision!=visualRevision_)return false;
+        if(!window_ || !owner_ || !visible() || !hasCaret_ || revision!=visualRevision_)return false;
         const SIZE size{frameWidth,frameHeight};
         if(!surface_.prepare(size,rendered))throw std::runtime_error("Candidate backing surface unavailable");
         RECT rect{};GetWindowRect(window_,&rect);
@@ -327,13 +341,14 @@ bool CandidateUI::paint(HDC target,const POINT* destination,const SIZE* frameSiz
         const auto window=window_;
         const bool appearing=!IsWindowVisible(window);
         published=surface_.publish(window,position);
-        if(!published || window_!=window || !owner_ || !shown_ || !hasCaret_ || revision!=visualRevision_)return false;
+        if(!published || window_!=window || !owner_ || !visible() || !hasCaret_ || revision!=visualRevision_)return false;
         if(!IsWindowVisible(window) &&
            !SetWindowPos(window,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW))return false;
         // Showing/publishing can reenter the host; a hidden or superseded frame
         // must not mark the new session as having presented candidates.
-        published=window_==window && owner_ && shown_ && hasCaret_ &&
+        published=window_==window && owner_ && visible() && hasCaret_ &&
             revision==visualRevision_ && IsWindowVisible(window);
+        if(published){const auto delay=drawing->skinDelay();if(delay)SetTimer(window,4,std::max(20u,delay),nullptr);else KillTimer(window,4);}
         if(published && frameTrace_.enabled()) {
             CandidateFrameTrace::Record r;
             r.geometry=geometryTrace_;
@@ -369,10 +384,21 @@ LRESULT CALLBACK CandidateUI::windowProc(HWND window,UINT message,WPARAM w,LPARA
         if(message==WM_TIMER && w==1) {KillTimer(window,1);self->schedulePaint();return 0;}
         if(message==WM_TIMER && w==2) {self->animate();return 0;}
         if(message==WM_TIMER && w==3) {KillTimer(window,3);if(!self->refreshPending_)self->refreshPending_=PostMessageW(window,refreshMessage,0,0)!=FALSE;return 0;}
+        if(message==WM_TIMER && w==4) {
+            KillTimer(window,4);
+            if(self->visible() && self->hasCaret_ && !self->refreshPending_ && IsWindowVisible(window)){
+                self->tracingTimerFrame_=true;
+                if(self->transition_.Active())self->animate();else self->paint(nullptr);
+                self->tracingTimerFrame_=false;
+            }
+            return 0;
+        }
         if(message==WM_DPICHANGED) {
             if(!self->layingOut_)self->schedulePaint();return 0;
         }
         if(message==WM_DISPLAYCHANGE || message==WM_SETTINGCHANGE) {self->schedulePaint();return 0;}
+        if(!self->visible() && (message==WM_MBUTTONUP || message==WM_RBUTTONDOWN ||
+            message==WM_MOUSEWHEEL || message==WM_LBUTTONDOWN))return 0;
         if(message==WM_MBUTTONUP) {if(self->owner_)self->owner_->candidateCycle();return 0;}
         if(message==WM_RBUTTONDOWN) {
             POINT point{};GetCursorPos(&point);

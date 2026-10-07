@@ -10,17 +10,9 @@ int main(int argc,char** argv) {
         auto path=std::filesystem::u8path(argv[1]);
         const int count=std::stoi(argv[2]);
         if(argc==4 && std::string(argv[3])=="cycle") {
-            bool horizontal=false,vertical=false;
-            tiger::updateConfigurationValues(path,{{u"竖排候选",u"否"},{u"隐藏候选",u"否"},{u"候选窗显示编码",u"是"}});
-            auto style=tiger::cycleCandidateMode(path,horizontal,vertical);
-            if(!style.vertical || style.hideCandidates || style.showCode)throw std::runtime_error("Horizontal to vertical differs");
-            tiger::updateConfigurationValues(path,{{u"候选窗显示编码",u"是"}});
-            style=tiger::cycleCandidateMode(path,horizontal,vertical);
-            if(!style.hideCandidates || !style.showCode)throw std::runtime_error("Vertical to code-only differs");
-            style=tiger::cycleCandidateMode(path,horizontal,vertical);
-            if(style.vertical || style.hideCandidates || !style.showCode)throw std::runtime_error("Horizontal show-code preference lost");
-            style=tiger::cycleCandidateMode(path,horizontal,vertical);
-            if(!style.vertical || style.hideCandidates || !style.showCode)throw std::runtime_error("Vertical show-code preference lost");
+            tiger::updateConfigurationValues(path,{{u"候选布局",u"2"}});
+            const int modes[]={2,4,5,6,7};
+            for(int i=0;i<10;++i){auto style=tiger::cycleCandidateMode(path);if(style.layoutMode!=modes[(i+1)%5])throw std::runtime_error("Five-mode cycle differs");}
             std::cout<<"cycle preferences passed\n";return 0;
         }
         if(argc==4 && std::string(argv[3])=="wheel") {
@@ -93,7 +85,7 @@ int main(int argc,char** argv) {
             if(!failed) throw std::runtime_error("Expected replacement failure");
             std::cout<<"blocked\n"; return 0;
         }
-        for(int i=0;i<count;++i) std::cout<<tiger::toggleHiddenCandidates(path)<<'\n';
+        for(int i=0;i<count;++i) std::cout<<tiger::toggleHiddenCandidates(path).hideCandidates<<'\n';
         if(!count) std::cout<<tiger::parseCandidateStyle(tiger::readUnicodeFile(path)).hideCandidates<<'\n';
     } catch(const std::exception& e) { std::cerr<<e.what()<<'\n';return 1; }
 }

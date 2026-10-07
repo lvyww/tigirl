@@ -10,7 +10,7 @@ public:
     void reset() { active_=candidates_=annotations_=false; start_=0; }
     void update(const Snapshot& snapshot,const CandidateStyle& style,std::uint64_t now) {
         const auto full=presentCandidates(snapshot,style);
-        if(full.code.empty() && full.items.empty()) { reset(); return; }
+        if(full.code.empty() && full.items.empty() && full.placeholder.empty()) { reset(); return; }
         if(!active_) { active_=true; start_=now; }
         const auto elapsed=now>=start_?now-start_:0;
         candidates_=candidates_ || snapshot.candidates.empty() || elapsed>=static_cast<unsigned>(style.candidateDelayMs);

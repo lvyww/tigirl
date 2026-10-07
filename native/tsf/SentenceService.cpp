@@ -104,6 +104,13 @@ void Service::completeSentenceNow(const std::shared_ptr<Context>& context,Engine
     catch(const std::exception& e){report(e.what());}
     next.applySentenceResult(*ticket,std::move(result));
 }
+bool Service::cacheSentenceResult(const std::shared_ptr<Context>& context,
+    const SentenceDecodeTicket& ticket,SentenceDecodeResult result) {
+    // A completed decode can be retained while unfocused, but must not edit
+    // the document or show candidates until the same context regains focus.
+    if(!context->engine.applySentenceResult(ticket,std::move(result)))return false;
+    ++context->revision;context->candidateContentDirty=true;return true;
+}
 void Service::pollSentence() {
     if(!active_ || !sentenceWorker_)return;
     if(keyDepth_){if(sentenceTimer_)sentenceTimer_->schedule(10);return;}
@@ -124,10 +131,15 @@ void Service::pollSentence() {
         for(auto& pair:contexts_) {
             auto current=pair.second;auto ticket=current->engine.sentenceRequest();
             if(!ticket || ticket->session!=completion.ticket.session)continue;
-            if(!foreground_ || focused_.Get()!=current->context.Get())break;
             if(!completion.error.empty())report(completion.error.c_str());
+            if(!isFocusedContext(current)) {
+                cacheSentenceResult(current,completion.ticket,std::move(completion.result));break;
+            }
             edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READWRITE,[this,current,completion=std::move(completion)](TfEditCookie cookie) mutable {
-                if(!active_ || !foreground_ || focused_.Get()!=current->context.Get() || state(current->context.Get(),false)!=current)return S_FALSE;
+                if(!active_ || state(current->context.Get(),false)!=current)return S_FALSE;
+                if(!isFocusedContext(current)) {
+                    cacheSentenceResult(current,completion.ticket,std::move(completion.result));return S_FALSE;
+                }
                 auto next=current->engine;synchronizeEngine(next);
                 if(!next.applySentenceResult(completion.ticket,std::move(completion.result)))return S_FALSE;
                 // Original asynchronous completion only publishes candidates.

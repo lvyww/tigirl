@@ -46,13 +46,24 @@ std::shared_ptr<SharedResources> sharedResources(const std::vector<std::filesyst
     if(cache->size()>=4)cache->clear();cache->emplace(std::move(key),result);return result;
 }
 }
-CandidateRenderer::CandidateRenderer(const CandidateStyle& style,const std::vector<std::filesystem::path>& files):style_(style) {
+CandidateRenderer::CandidateRenderer(const CandidateStyle& style,const std::vector<std::filesystem::path>& files,const std::filesystem::path& skinRoot,int skinPart):style_(style),skinPart_(skinPart) {
+    if(style.split() && !skinPart){
+        auto paneStyle=style;paneStyle.setLayoutMode(style.vertical?4:2);
+        codePane_=std::make_unique<CandidateRenderer>(paneStyle,files,skinRoot,1);
+        candidatePane_=std::make_unique<CandidateRenderer>(paneStyle,files,skinRoot,2);
+        return;
+    }
+    if(!skinPart && (style.layoutMode==5 || style.layoutMode==6 || style.layoutMode==7))skinPart_=2;
     auto shared=sharedResources(files);drawing_=shared->drawing;writing_=shared->writing;imaging_=shared->imaging;collection_=shared->collection;
-    auto family=wide(style.font);if(!family.empty() && family.front()==L'#')family.erase(0,1);
+    skinStarted_=GetTickCount64();
+    if(style.skinEnabled)skinResources_=skin::loadResources(skinRoot.empty()?skin::skinDirectory():skinRoot,style.theme,imaging_.Get(),style.skinRevision);
+    const bool authored=skinResources_ && !skinResources_->images.empty();
+    if(authored){scale_=static_cast<float>(style.fontSize/skinResources_->definition.fontSize);style_.fontSize=skinResources_->definition.fontSize;}
+    auto family=wide(style_.font);if(!family.empty() && family.front()==L'#')family.erase(0,1);
     if(family.empty())family=L"Microsoft YaHei UI";
     UINT32 index=0;BOOL exists=FALSE;checked(collection_->FindFamilyName(family.c_str(),&index,&exists));privateFamily_=exists!=FALSE;
     checked(writing_->CreateTextFormat(family.c_str(),privateFamily_?collection_.Get():nullptr,DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,static_cast<float>(style.fontSize),L"zh-CN",&format_));
+        DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,static_cast<float>(style_.fontSize),L"zh-CN",&format_));
     checked(format_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
     checked(format_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER));
     DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,0,0};
@@ -62,15 +73,39 @@ CandidateRenderer::CandidateRenderer(const CandidateStyle& style,const std::vect
 CandidateRenderer::Layout CandidateRenderer::makeLayout(std::u16string_view text,float width,float height) {
     Layout result;const auto value=wide(text);
     checked(writing_->CreateTextLayout(value.data(),static_cast<UINT32>(value.size()),format_.Get(),width,height,&result));
+    if(skinResources_ && !skinResources_->images.empty()){
+        const auto& definition=skinResources_->definition;
+        if(definition.characterSpacing>0){Microsoft::WRL::ComPtr<IDWriteTextLayout1> advanced;checked(result.As(&advanced));checked(advanced->SetCharacterSpacing(0,definition.characterSpacing,0,{0,static_cast<UINT32>(value.size())}));}
+
+    }
     return result;
 }
 void CandidateRenderer::layout(const CandidatePresentation& presentation,float maxWidth) {
+    if(!std::isfinite(maxWidth))throw std::invalid_argument("Invalid candidate width");
+    if(codePane_){
+        hasCodePane_=!presentation.code.empty();hasCandidatePane_=!presentation.items.empty() || !presentation.placeholder.empty();
+        CandidatePresentation code;code.code=presentation.code;
+        auto candidates=presentation;candidates.code.clear();
+        if(hasCodePane_)codePane_->layout(code,maxWidth);
+        if(hasCandidatePane_)candidatePane_->layout(candidates,maxWidth);
+        splitOffset_=hasCodePane_?codePane_->height():0;
+        width_=std::max(hasCodePane_?codePane_->width():1.f,hasCandidatePane_?candidatePane_->width():1.f);
+        height_=std::max(1.f,splitOffset_+(hasCandidatePane_?candidatePane_->height():0));
+        items_.clear();
+        if(hasCandidatePane_)for(auto r:candidatePane_->items()){r.top+=splitOffset_;r.bottom+=splitOffset_;items_.push_back(r);}
+        return;
+    }
+    if(skinResources_ && !skinResources_->images.empty()){
+        layoutSkin(presentation,maxWidth/scale_);scaledItems_.clear();
+        if(scale_!=1.f)for(const auto& r:items_)scaledItems_.push_back(D2D1::RectF(r.left*scale_,r.top*scale_,r.right*scale_,r.bottom*scale_));
+        return;
+    }
     maxWidth=std::max(1.f,maxWidth);
     const float size=static_cast<float>(style_.fontSize);
-    const bool codeOnly=presentation.codeOnly;
+    const bool codeOnly=false; // Layout stays fixed when candidates disappear.
     const float left=codeOnly?static_cast<float>(std::nearbyint(size*.4f)):(style_.vertical?12.f:8.f);
     const float rightPadding=codeOnly?left:8.f,top=codeOnly?2.f:8.f,bottom=codeOnly?2.f:(style_.vertical?7.f:8.f);
-    const float border=static_cast<float>(candidateTheme(style_.theme).borderWidth);
+    const float border=static_cast<float>(candidateTheme(u"默认").borderWidth);
     const float row=std::ceil(size*(!codeOnly && style_.vertical?1.5f:1.f));
     const float minimum=codeOnly?0.f:std::ceil(size*(style_.vertical?3.76f:2.88f)+15.f);
     const auto measureSpaces=[&](std::size_t count) {
@@ -95,6 +130,7 @@ void CandidateRenderer::layout(const CandidatePresentation& presentation,float m
         add(presentation.code,false);
         if(!style_.vertical && !presentation.items.empty())x+=measureSpaces(presentation.code.size()<7?7-presentation.code.size():0);
     }
+    if(!presentation.placeholder.empty())add(presentation.placeholder,false);
     for(std::size_t i=0;i<presentation.items.size();++i) {
         if(!style_.vertical && i)x+=measureSpaces(2);
         // Original horizontal text does not wrap. Keep off-screen items out of hit testing.
@@ -104,10 +140,10 @@ void CandidateRenderer::layout(const CandidatePresentation& presentation,float m
     width_=std::min(maxWidth,std::max(minimum+2*border,right+rightPadding+border));
     height_=y+bottom+border+((style_.vertical && !codeOnly)?0:row);
 }
-UINT CandidateRenderer::pixelWidth(UINT dpi) const { return static_cast<UINT>(std::max(1.,std::ceil(width_*dpi/96.))); }
-UINT CandidateRenderer::pixelHeight(UINT dpi) const { return static_cast<UINT>(std::max(1.,std::ceil(height_*dpi/96.))); }
+UINT CandidateRenderer::pixelWidth(UINT dpi) const { return static_cast<UINT>(std::max(1.,std::ceil(width_*scale_*dpi/96.))); }
+UINT CandidateRenderer::pixelHeight(UINT dpi) const { if(codePane_)return std::max(1u,(hasCodePane_?codePane_->pixelHeight(dpi):0)+(hasCandidatePane_?candidatePane_->pixelHeight(dpi):0));return static_cast<UINT>(std::max(1.,std::ceil(height_*scale_*dpi/96.))); }
 Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset,float frameWidth,float frameHeight) const {
-    const auto& theme=candidateTheme(style_.theme);
+    const auto& theme=candidateTheme(u"默认");
     const float left=inset,top=inset,right=std::max(inset,frameWidth-inset),bottom=std::max(inset,frameHeight-inset);
     float r[4];for(int i=0;i<4;++i)r[i]=std::clamp(static_cast<float>(theme.corners[i])-inset,0.f,std::max(0.f,std::min(right-left,bottom-top)/2));
     Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;checked(drawing_->CreatePathGeometry(&path));
@@ -123,35 +159,59 @@ Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset
 void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>& pixels,const SIZE* frameSize) {
     if(dpi<48 || dpi>960)throw std::invalid_argument("Invalid candidate DPI");
     const UINT width=frameSize?static_cast<UINT>(std::max(1L,frameSize->cx)):pixelWidth(dpi),height=frameSize?static_cast<UINT>(std::max(1L,frameSize->cy)):pixelHeight(dpi);
-    const float frameWidth=frameSize?width*96.f/dpi:width_,frameHeight=frameSize?height*96.f/dpi:height_;
+    const float frameWidth=frameSize?width*96.f/(dpi*scale_):width_,frameHeight=frameSize?height*96.f/(dpi*scale_):height_;
     if(static_cast<std::uint64_t>(width)*height>16000000)throw std::length_error("Candidate surface exceeds limit");
+    if(codePane_){
+        pixels.assign(static_cast<std::size_t>(width)*height,0);
+        const UINT offset=hasCodePane_?codePane_->pixelHeight(dpi):0;
+        auto copy=[&](CandidateRenderer& pane,UINT y){
+            std::vector<std::uint32_t> part;pane.render(dpi,selected,part);
+            const UINT w=pane.pixelWidth(dpi),h=pane.pixelHeight(dpi);
+            for(UINT row=0;row<h && y+row<height;++row)
+                std::copy_n(part.data()+static_cast<std::size_t>(row)*w,std::min(w,width),pixels.data()+static_cast<std::size_t>(y+row)*width);
+        };
+        if(hasCodePane_)copy(*codePane_,0);
+        if(hasCandidatePane_)copy(*candidatePane_,offset);
+        return;
+    }
     if(!target_ || width!=surfaceWidth_ || height!=surfaceHeight_) {
-        target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();
+        target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();skinBitmap_.Reset();annotationBrush_.Reset();
         checked(imaging_->CreateBitmap(width,height,GUID_WICPixelFormat32bppPBGRA,WICBitmapCacheOnLoad,&surface_));
         const auto properties=D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED),static_cast<float>(dpi),static_cast<float>(dpi));
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED),dpi*scale_,dpi*scale_);
         checked(drawing_->CreateWicBitmapRenderTarget(surface_.Get(),properties,&target_));surfaceWidth_=width;surfaceHeight_=height;
     }
-    target_->SetDpi(static_cast<float>(dpi),static_cast<float>(dpi));
+    target_->SetDpi(dpi*scale_,dpi*scale_);
     // Subpixel RGB coverage is unsuitable for per-pixel transparent windows.
     target_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     if(!brush_)checked(target_->CreateSolidColorBrush(D2D1::ColorF(0,0.f),&brush_));
     if(!clip_)checked(target_->CreateLayer(&clip_));
-    const auto& theme=candidateTheme(style_.theme);
+    const auto& theme=candidateTheme(u"默认");
     if(!shape_ || frameWidth!=geometryWidth_ || frameHeight!=geometryHeight_) {
         shape_=outline(0,frameWidth,frameHeight);border_=outline(static_cast<float>(theme.borderWidth)/2,frameWidth,frameHeight);
         geometryWidth_=frameWidth;geometryHeight_=frameHeight;
     }
+    if(skinImage_){
+        prepareSkinBitmap();
+        if(!annotationBrush_)checked(target_->CreateSolidColorBrush(color(skinResources_->definition.annotationColor),&annotationBrush_));
+        for(std::size_t i=0;i<layouts_.size();++i)if(annotations_[i].length)checked(layouts_[i]->SetDrawingEffect(annotationBrush_.Get(),annotations_[i]));
+    }
     target_->BeginDraw();target_->Clear(D2D1::ColorF(0,0.f));
-    target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape_.Get()),clip_.Get());
-    brush_->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush_.Get());
+    if(skinImage_)drawSkinBackground(frameWidth,frameHeight);
+    else {
+        target_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(),shape_.Get()),clip_.Get());
+        brush_->SetColor(color(theme.background));target_->FillRectangle(D2D1::RectF(0,0,frameWidth,frameHeight),brush_.Get());
+    }
     // The first candidate is the default choice, not a visually highlighted row.
     if(selected>0 && selected<items_.size()){brush_->SetColor(color(theme.selection));target_->FillRectangle(items_[selected],brush_.Get());}
-    brush_->SetColor(color(theme.border));target_->DrawGeometry(border_.Get(),brush_.Get(),static_cast<float>(theme.borderWidth));
-    brush_->SetColor(color(theme.foreground));
-    for(std::size_t i=0;i<layouts_.size();++i)target_->DrawTextLayout(D2D1::Point2F(rectangles_[i].left,rectangles_[i].top),layouts_[i].Get(),brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    target_->PopLayer();const auto hr=target_->EndDraw();
-    if(FAILED(hr)){target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();checked(hr);}
+    if(!skinImage_){brush_->SetColor(color(theme.border));target_->DrawGeometry(border_.Get(),brush_.Get(),static_cast<float>(theme.borderWidth));}
+    for(std::size_t i=0;i<layouts_.size();++i){
+        brush_->SetColor(color(skinImage_?inks_[i]:theme.foreground));
+        target_->DrawTextLayout(D2D1::Point2F(rectangles_[i].left,rectangles_[i].top),layouts_[i].Get(),brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    if(!skinImage_)target_->PopLayer();const auto hr=target_->EndDraw();
+    if(FAILED(hr)){target_.Reset();surface_.Reset();brush_.Reset();clip_.Reset();skinBitmap_.Reset();annotationBrush_.Reset();checked(hr);}
+    skinRenderedFrame_=skinBitmapFrame_;
     pixels.resize(static_cast<std::size_t>(width)*height);
     checked(surface_->CopyPixels(nullptr,width*4,static_cast<UINT>(pixels.size()*4),reinterpret_cast<BYTE*>(pixels.data())));
 }

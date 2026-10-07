@@ -35,7 +35,7 @@ struct Context {
     std::shared_ptr<SentenceDecoder> sentenceDecoder;
     std::uint64_t sentenceResourceRevision=0,sentenceQueuedGeneration=0,sentenceQueuedIdentity=0;
     DWORD editCookie=TF_INVALID_COOKIE,layoutCookie=TF_INVALID_COOKIE;
-    bool editing=false,observed=false,dataEditQueued=false;
+    bool editing=false,observed=false,dataEditQueued=false,candidateContentDirty=false;
     WPARAM observedVk=0;
     LPARAM observedFlags=0;
     LONG observedTime=0;
@@ -89,6 +89,9 @@ private:
     HRESULT end(const std::shared_ptr<Context>&,TfEditCookie cookie);
     void updateUI(const std::shared_ptr<Context>&,TfEditCookie cookie,CandidateUpdate update=CandidateUpdate::Content);
     void hideUI();
+    void closeUI();
+    bool isFocusedContext(const std::shared_ptr<Context>&);
+    void setForeground(bool foreground);
     void forget(const std::shared_ptr<Context>&);
     void refreshFocus(ITfContext*);
     void modeChanged(bool chinese);
@@ -96,10 +99,11 @@ private:
     void reloadSettings();
     bool userDataRootAvailable() const;
     void pollDataChanges();
-    void synchronizeEngine(Engine&);
+    bool synchronizeEngine(Engine&);
     void refreshSentenceResources(std::u16string_view settings);
     void queueSentence(const std::shared_ptr<Context>&);
     void pollSentence();
+    bool cacheSentenceResult(const std::shared_ptr<Context>&,const SentenceDecodeTicket&,SentenceDecodeResult);
     void completeSentenceNow(const std::shared_ptr<Context>&,Engine&);
     void reloadSchema(std::u16string name);
     struct PreparedSchema {
@@ -122,7 +126,6 @@ private:
     bool active_=false,foreground_=true,secure_=false;
     ModeCompartments modes_;
     ComPtr<LanguageBar> languageBar_;
-    bool horizontalCode_=false,verticalCode_=false;
     bool chinese_=true;
     std::uint64_t modeRevision_=0;
     ComPtr<ITfContext> focused_;

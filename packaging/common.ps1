@@ -52,8 +52,20 @@ function Assert-Package([string]$Directory) {
     }
     foreach($arch in @('x64','x86')){
         $dll=Get-PackageDll $Directory $arch;$probe="$Directory\verify_$arch.exe"
-        $loaded=(& $probe $dll)|ConvertFrom-Json
-        if($LASTEXITCODE -or !$loaded.loaded -or !$loaded.class_instance){throw "Load verification failed: $arch"}
+        $process=[Diagnostics.Process]::new()
+        try{
+            $process.StartInfo.FileName=$probe
+            $process.StartInfo.Arguments='"'+$dll+'"'
+            $process.StartInfo.UseShellExecute=$false
+            $process.StartInfo.CreateNoWindow=$true
+            $process.StartInfo.RedirectStandardOutput=$true
+            if(!$process.Start()){throw "Cannot start load verification: $arch"}
+            $output=$process.StandardOutput.ReadToEnd()
+            $process.WaitForExit()
+            if($process.ExitCode -ne 0){throw "Load verification process failed: $arch ($($process.ExitCode))"}
+            $loaded=$output|ConvertFrom-Json
+            if(!$loaded.loaded -or !$loaded.class_instance){throw "Load verification failed: $arch"}
+        }finally{$process.Dispose()}
     }
     return $manifest
 }

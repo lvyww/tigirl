@@ -1,6 +1,10 @@
 #define NOMINMAX
 #include "SettingsSkin.h"
+#include "SettingsContour.h"
 #include <stdexcept>
+#include <vector>
+#include <algorithm>
+#include <cstdint>
 #pragma comment(lib,"d2d1.lib")
 #pragma comment(lib,"windowscodecs.lib")
 using Microsoft::WRL::ComPtr;
@@ -8,8 +12,7 @@ namespace {
 void check(HRESULT hr){if(FAILED(hr))throw std::runtime_error("Cannot render settings skin");}
 D2D1_COLOR_F color(COLORREF c){return D2D1::ColorF(GetRValue(c)/255.f,GetGValue(c)/255.f,GetBValue(c)/255.f);}
 }
-void SettingsSkin::begin(HDC dc,const RECT& bounds,UINT dpi) {
-    if(!factory_)check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory_.GetAddressOf()));
+void SettingsSkin::loadOrnaments() {
     auto load=[](int id,ComPtr<IWICBitmap>& image){
         auto module=GetModuleHandleW(nullptr);auto resource=FindResourceW(module,MAKEINTRESOURCEW(id),RT_RCDATA);
         if(!resource)throw std::runtime_error("Missing tiger cream ornaments");
@@ -23,6 +26,10 @@ void SettingsSkin::begin(HDC dc,const RECT& bounds,UINT dpi) {
     };
     if(!source_)load(14,source_);
     if(!detachedSource_)load(15,detachedSource_);
+}
+void SettingsSkin::begin(HDC dc,const RECT& bounds,UINT dpi) {
+    if(!factory_)check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory_.GetAddressOf()));
+    loadOrnaments();
     if(!target_){
         auto properties=D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_SOFTWARE,D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_IGNORE));
         check(factory_->CreateDCRenderTarget(&properties,&target_));
@@ -41,7 +48,7 @@ void SettingsSkin::frame(HDC dc,const RECT& bounds,UINT dpi,bool contrast) {
     target_->Clear(contrast?color(GetSysColor(COLOR_BTNFACE)):D2D1::ColorF(0xfff3d9));
     ComPtr<ID2D1SolidColorBrush> brush;check(target_->CreateSolidColorBrush(contrast?color(GetSysColor(COLOR_WINDOWTEXT)):D2D1::ColorF(0x785638),&brush));
     const auto outline=D2D1::RoundedRect(D2D1::RectF(2,14,638,478),22,22);
-    target_->DrawRoundedRectangle(outline,brush.Get(),2);
+    if(contrast)target_->DrawRoundedRectangle(outline,brush.Get(),2);
     if(!contrast){
         // Draw clean frame sections at their original scale. Decorations are independent sprites.
         for(auto r:{D2D1::RectF(0,0,164,56),D2D1::RectF(240,0,640,56),
@@ -71,10 +78,30 @@ void SettingsSkin::mascot(HDC dc,const RECT& bounds,UINT dpi,bool contrast) {
     const float w=(bounds.right-bounds.left)*96.f/dpi,h=(bounds.bottom-bounds.top)*96.f/dpi;
     ornament(D2D1::RectF(0,0,w,h),D2D1::RectF(418,62,624,181));end();
 }
-HRGN SettingsSkin::region(UINT dpi) {
+HRGN SettingsSkin::region(UINT dpi,bool contrast) {
     auto p=[&](int n){return MulDiv(n,static_cast<int>(dpi),96);};
-    HRGN result=CreateRoundRectRgn(0,p(14),p(640),p(480),p(46),p(46));
-    for(int x:{2,586}){HRGN ear=CreateEllipticRgn(p(x),0,p(x+52),p(66));CombineRgn(result,result,ear,RGN_OR);DeleteObject(ear);}return result;
+    if(contrast)return CreateRoundRectRgn(0,p(14),p(640),p(480),p(46),p(46));
+    if(contourDpi_==dpi && !contourData_.empty()){
+        const auto data=reinterpret_cast<const RGNDATA*>(contourData_.data());
+        auto cached=ExtCreateRegion(nullptr,sizeof(RGNDATAHEADER)+data->rdh.nRgnSize,data);
+        if(!cached)throw std::runtime_error("Cannot copy settings frame contour");
+        return cached;
+    }
+    const int width=p(640),height=p(480);
+    std::vector<RECT> spans;spans.reserve(std::size(SettingsContour::spans));
+    for(const auto& source:SettingsContour::spans){
+        RECT r{MulDiv(source.left,width,SettingsContour::width),MulDiv(source.top,height,SettingsContour::height),
+            MulDiv(source.right,width,SettingsContour::width),MulDiv(source.bottom,height,SettingsContour::height)};
+        if(r.right>r.left && r.bottom>r.top)spans.push_back(r);
+    }
+    const auto bytes=sizeof(RGNDATAHEADER)+spans.size()*sizeof(RECT);
+    std::vector<std::uint32_t> storage((bytes+3)/4);auto data=reinterpret_cast<RGNDATA*>(storage.data());
+    data->rdh={sizeof(RGNDATAHEADER),RDH_RECTANGLES,static_cast<DWORD>(spans.size()),static_cast<DWORD>(spans.size()*sizeof(RECT)),{0,0,width,height}};
+    std::copy(spans.begin(),spans.end(),reinterpret_cast<RECT*>(data->Buffer));
+    auto result=ExtCreateRegion(nullptr,static_cast<DWORD>(bytes),data);
+    if(!result)throw std::runtime_error("Cannot create settings frame contour");
+    contourData_=std::move(storage);contourDpi_=dpi;
+    return result;
 }
 
 void SettingsSkin::surface(HDC dc,const RECT& bounds,UINT dpi,COLORREF fill,COLORREF border,float radius,float stroke) {

@@ -17,8 +17,10 @@ public:
     CandidateUI(Service* owner,std::shared_ptr<Context> state,CandidateStyle style,std::shared_ptr<PrivateFonts> fonts);
     ~CandidateUI();
     void detach();
+    // Temporary focus visibility is separate from the host's Show(FALSE).
+    void setFocused(bool focused);
     void setStyle(const CandidateStyle& style,std::shared_ptr<PrivateFonts> fonts);
-    void update(const RECT* caret,HWND ownerWindow,bool layoutPending=false,
+    void update(const RECT* caret,HWND ownerWindow,
         CandidateUpdate update=CandidateUpdate::Content);
     HRESULT notifyUpdated(ITfUIElementMgr* manager,DWORD elementId);
     const std::shared_ptr<Context>& context() const { return state_; }
@@ -85,7 +87,8 @@ private:
     UINT dpi_=0;
     UINT selected_=0;
     std::vector<UINT> pages_;
-    bool shown_=false,hasCaret_=false;
+    bool shown_=false,focused_=true,hasCaret_=false;
+    bool visible() const { return owner_ && shown_ && focused_; }
     HWND window_=nullptr;
     HWND ownerWindow_=nullptr; // latest TSF view owner, never the candidate HWND
     std::shared_ptr<CandidateRenderer> renderer_;

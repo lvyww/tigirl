@@ -39,7 +39,7 @@ int wmain(int argc,wchar_t** argv) {
         const std::filesystem::path root=argv[2];
         if(!root.is_absolute() || !std::filesystem::exists(root/L".appcontainer-config-test"))throw std::runtime_error("Isolated marked root required");
         const auto path=root/L"config.txt";
-        tiger::updateConfigurationValues(path,{{u"主题",u"海蓝"},{u"_preserve",u"unchanged"}});
+        tiger::updateConfigurationValues(path,{{u"皮肤",u"未安装测试皮肤.ssf"},{u"_preserve",u"unchanged"}});
         Handle process,token,duplicate;
         process.value=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,wcstoul(argv[1],nullptr,10));
         if(!process.value || !OpenProcessToken(process.value,TOKEN_QUERY|TOKEN_DUPLICATE,&token.value) ||
@@ -70,16 +70,16 @@ int wmain(int argc,wchar_t** argv) {
             CoTaskMemFree(shared);
             if(!same)throw std::runtime_error("Restricted shared-root lookup failed");
             auto config=tiger::readConfiguration(path);
-            if(tiger::configurationValue(config,u"主题")!=u"海蓝")throw std::runtime_error("Desktop theme not visible");
+            if(tiger::configurationValue(config,u"皮肤")!=u"未安装测试皮肤.ssf")throw std::runtime_error("Desktop theme not visible");
             ComPtr<MenuCapture> menu;menu.Attach(new MenuCapture);
             if(FAILED(button->InitMenu(menu.Get())) || menu->children.count(11)!=1)throw std::runtime_error("Cannot build restricted menu");
-            UINT themeId=0;for(const auto& entry:menu->children[11]->items)if(entry.second==L"赛博朋克")themeId=entry.first;
+            UINT themeId=0;for(const auto& entry:menu->children[11]->items)if(entry.second==L"默认.ssf")themeId=entry.first;
             if(!themeId || FAILED(button->OnMenuSelect(themeId)))throw std::runtime_error("Restricted menu theme selection failed");
-            if(tiger::configurationValue(tiger::readConfiguration(path),u"主题")!=u"赛博朋克")throw std::runtime_error("Menu did not save theme");
-            tiger::updateConfigurationValues(path,{{u"主题",u"清晨"}});
+            if(tiger::configurationValue(tiger::readConfiguration(path),u"皮肤")!=u"默认.ssf")throw std::runtime_error("Menu did not save theme");
+            tiger::updateConfigurationValues(path,{{u"皮肤",u"写回测试皮肤.ssf"}});
         }
         const auto config=tiger::readConfiguration(path);
-        if(tiger::configurationValue(config,u"主题")!=u"清晨" || tiger::configurationValue(config,u"_preserve")!=u"unchanged")throw std::runtime_error("AppContainer theme save differs");
+        if(tiger::configurationValue(config,u"皮肤")!=u"写回测试皮肤.ssf" || tiger::configurationValue(config,u"_preserve")!=u"unchanged")throw std::runtime_error("AppContainer theme save differs");
         std::cout<<"{\"status\":\"passed\",\"shared_root\":true,\"desktop_to_container\":true,\"container_to_desktop\":true,\"theme_menu\":true,\"atomic_replace\":true,\"unrelated_preserved\":true}\n";
         return 0;
     } catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

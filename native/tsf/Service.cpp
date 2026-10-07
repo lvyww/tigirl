@@ -79,7 +79,7 @@ void selectionAtEnd(ITfContext* context,ITfRange* range,TfEditCookie cookie) {
 }
 }
 Service::Service() { DllAddRef(); }
-Service::~Service() { if(addWordUI_) addWordUI_->close(); hideUI(); DllRelease(); }
+Service::~Service() { if(addWordUI_) addWordUI_->close(); closeUI(); DllRelease(); }
 ULONG Service::AddRef() { return InterlockedIncrement(&refs_); }
 ULONG Service::Release() { auto n=InterlockedDecrement(&refs_); if(!n) delete this; return n; }
 HRESULT Service::CreateInstance(IUnknown* outer,REFIID iid,void** object) {
@@ -119,6 +119,7 @@ HRESULT Service::ActivateEx(ITfThreadMgr* manager,TfClientId client,DWORD flags)
         fontDirectory_=resources/L"字体";
         lexicon_=std::make_shared<Lexicon>(dictionary);
         secure_=(flags&TF_TMAE_SECUREMODE)!=0;
+        candidateStyle_.skinEnabled=!secure_; // Never read external skins on a secure desktop.
         stage=L"Resolve user data directory";
         if(!secure_) {
             const auto root=userRoot(); userRoot_=root;
@@ -224,7 +225,7 @@ HRESULT Service::Deactivate() {
     if(languageBar_) { languageBar_->close(); languageBar_.Reset(); }
     modes_.close(); ++modeRevision_; chinese_=true;
     if(addWordUI_) { addWordUI_->close(); addWordUI_.reset(); }
-    active_=false; hideUI();
+    active_=false; closeUI();
     std::vector<std::shared_ptr<Context>> contexts;
     for(auto& item:contexts_) contexts.push_back(item.second);
     for(auto& context:contexts) {
@@ -368,12 +369,12 @@ HRESULT Service::apply(const std::shared_ptr<Context>& context,Engine next,KeyRe
         } catch(const std::exception& error) { report(error.what()); MessageBeep(MB_ICONWARNING); }
     }
     if(result.toggleHiddenCandidates && active_ && !secure_) {
-        try { candidateStyle_.hideCandidates=toggleHiddenCandidates(settingsPath_); }
+        try { candidateStyle_=toggleHiddenCandidates(settingsPath_); }
         catch(const std::exception& error) {
-            candidateStyle_.hideCandidates=!candidateStyle_.hideCandidates;
+            candidateStyle_.setLayoutMode(candidateStyle_.layoutMode==7?6:7);
             report(error.what()); MessageBeep(MB_ICONWARNING);
         }
-        hideUI();
+        closeUI();
     }
     if(active_) updateUI(context,cookie);
     if(result.openAddWord && active_ && !secure_ && store_) {
@@ -473,13 +474,18 @@ HRESULT Service::candidateMenu(POINT point,HWND window) {
     if(!active_ || secure_ || !languageBar_)return S_FALSE;
     ComPtr<ITfTextInputProcessorEx> alive=this;
     auto bar=languageBar_;
-    return bar->showMenu(point,window);
+    const auto hr=bar->showMenu(point,window);
+    if(hr==S_OK && active_ && !secure_ && !settingsPath_.empty())try{
+        candidateStyle_=parseCandidateStyle(readConfiguration(settingsPath_));
+        if(ui_)ui_->setStyle(candidateStyle_,fonts_);
+    }catch(const std::exception& error){report(error.what());}
+    return hr;
 }
 HRESULT Service::candidateCycle() {
     if(!active_ || secure_ || !ui_ || settingsPath_.empty())return S_FALSE;
     ComPtr<ITfTextInputProcessorEx> alive=this;
     try {
-        candidateStyle_=cycleCandidateMode(settingsPath_,horizontalCode_,verticalCode_);
+        candidateStyle_=cycleCandidateMode(settingsPath_);
         if(ui_)ui_->setStyle(candidateStyle_,fonts_);
         return S_OK;
     }catch(const std::exception& error){report(error.what());return E_FAIL;}
@@ -494,17 +500,35 @@ HRESULT Service::candidateWheel(int delta) {
     }catch(const std::exception& error){report(error.what());return E_FAIL;}
 }
 void Service::hideUI() {
-    if(ui_) ui_->detach();
-    if(uiManager_ && uiId_!=TF_INVALID_UIELEMENTID) uiManager_->EndUIElement(uiId_);
-    uiId_=TF_INVALID_UIELEMENTID; ui_.Reset();
+    auto ui=ui_;
+    if(ui)ui->setFocused(false);
+}
+void Service::closeUI() {
+    auto ui=ui_;auto manager=uiManager_;const auto id=uiId_;
+    // EndUIElement may reenter. Release ownership before notifying the host,
+    // so this old element cannot tear down a newly created one.
+    ui_.Reset();uiId_=TF_INVALID_UIELEMENTID;
+    if(ui)ui->detach();
+    if(manager && id!=TF_INVALID_UIELEMENTID)manager->EndUIElement(id);
+}
+bool Service::isFocusedContext(const std::shared_ptr<Context>& context) {
+    return active_ && foreground_ && context && focused_.Get()==context->context.Get() &&
+        state(context->context.Get(),false)==context;
 }
 void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cookie,CandidateUpdate update) {
-    if(!active_ || !foreground_ || !context->engine.composing() || (focused_ && focused_.Get()!=context->context.Get())) {
-        hideUI(); return;
+    // A stale/background callback owns no visible UI. It must not hide a
+    // different context's window. Focus callbacks handle temporary visibility.
+    if(!isFocusedContext(context))return;
+    if(!context->engine.composing() || !context->composition) {
+        if(ui_ && ui_->context()==context)closeUI();
+        return;
     }
     const bool created=!ui_ || ui_->context()!=context;
     if(created) {
-        hideUI(); ui_.Attach(new CandidateUI(this,context,candidateStyle_,fonts_));
+        closeUI();
+        // EndUIElement can synchronously install a different current element.
+        if(ui_ || !isFocusedContext(context) || !context->composition)return;
+        ui_.Attach(new CandidateUI(this,context,candidateStyle_,fonts_));
     }
     auto ui=ui_; // Begin/UpdateUIElement can reenter and detach this element.
     if(created) {
@@ -521,7 +545,7 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
         update=CandidateUpdate::Layout;
     }
     ComPtr<ITfContextView> view; ComPtr<ITfRange> range;
-    RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false,layoutPending=false;
+    RECT caret{}; BOOL clipped=FALSE; HWND owner=nullptr; bool hasCaret=false;
     CandidateFrameTrace::Geometry geometry;
     const bool tracing=ui->tracingGeometry();
     if(tracing){
@@ -552,13 +576,12 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
                 const auto layout=view->GetTextExt(cookie,range.Get(),&caret,&clipped);
                 if(tracing)geometry.textResult=layout;
                 hasCaret=SUCCEEDED(layout) && CandidateOrientation::usableCaret(caret);
-                layoutPending=layout==TS_E_NOLAYOUT;
                 // Some hosts cannot lay out a zero-length range at a wrapped
                 // preedit end. Query only its last character, never the bounding
                 // box of the whole multi-line composition. Keep the same host
                 // DPI scope and use the trailing edge of this visible character.
                 // Our embedded encoding is LTR; do not cross an empty composition.
-                if(!hasCaret && hasText && (SUCCEEDED(layout) || layoutPending)) {
+                if(!hasCaret && hasText && (SUCCEEDED(layout) || layout==TS_E_NOLAYOUT)) {
                     LONG shifted=0;
                     if(SUCCEEDED(range->ShiftStart(cookie,-1,&shifted,nullptr)) && shifted==-1) {
                         RECT tail{};BOOL tailClipped=FALSE;
@@ -566,8 +589,8 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
                         if(tracing){geometry.tailResult=tailResult;geometry.tail=tail;geometry.tailClipped=tailClipped!=FALSE;}
                         if(SUCCEEDED(tailResult) && !tailClipped && CandidateOrientation::usableCaret(tail)) {
                             caret={tail.right,tail.top,tail.right,tail.bottom};clipped=FALSE;
-                            hasCaret=true;layoutPending=false;
-                        } else layoutPending=layoutPending || tailResult==TS_E_NOLAYOUT;
+                            hasCaret=true;
+                        }
                     }
                 }
             }
@@ -591,8 +614,12 @@ void Service::updateUI(const std::shared_ptr<Context>& context,TfEditCookie cook
         }
         ui->setGeometryTrace(geometry);
     }
-    if(!active_ || ui_.Get()!=ui.Get() || ui->context()!=context)return;
-    ui->update(hasCaret?&caret:nullptr,owner,layoutPending,update);
+    if(!isFocusedContext(context) || !context->composition || ui_.Get()!=ui.Get() || ui->context()!=context)return;
+    if(context->candidateContentDirty && !created)update=CandidateUpdate::Content;
+    const auto revision=context->revision;
+    ui->setFocused(true);
+    ui->update(hasCaret?&caret:nullptr,owner,update);
+    if(context->revision==revision)context->candidateContentDirty=false;
     if(ui_.Get()==ui.Get() && FAILED(ui->notifyUpdated(uiManager_.Get(),uiId_)))
         report("Candidate model notification failed");
 }
@@ -655,7 +682,6 @@ void Service::reloadSettings() {
                 dataDirty_=true;++modeRevision_;chinese_=config.defaultChinese;
             }
             config_=std::move(config); candidateStyle_=std::move(style);
-            if(!candidateStyle_.hideCandidates)(candidateStyle_.vertical?verticalCode_:horizontalCode_)=candidateStyle_.showCode;
             refreshSentenceResources(text);
         }
         catch(const std::exception& error) {
@@ -680,16 +706,18 @@ void Service::reloadSettings() {
     try { config_.selection=SelectionKeys::load(selectionPath_).dispatch(); }
     catch(const std::exception& error) { report(error.what()); }
 }
-void Service::synchronizeEngine(Engine& engine) {
+bool Service::synchronizeEngine(Engine& engine) {
     const auto source=sentenceResources_ && sentenceLoadedSource_?sentenceLoadedSource_:lexicon_;
-    if(engine.lexicon()->dictionary()!=source->dictionary())engine.switchSchema(source,config_);
+    bool changed=engine.lexicon()->dictionary()!=source->dictionary();
+    if(changed)engine.switchSchema(source,config_);
     else {
-        engine.refreshConfiguration(config_);
-        if(engine.lexicon()!=source)engine.setLexicon(source);
+        changed=engine.refreshConfiguration(config_);
+        if(engine.lexicon()!=source){engine.setLexicon(source);changed=true;}
     }
     engine.enableSentenceInput(sentenceResources_ && sentenceLoadedSource_ &&
         (sentenceLoadedSource_==source || sentenceLoadedSource_->equivalent(*source)),sentenceLoadedRevision_,
         sentenceSettings_.autoCommit,sentenceSettings_.minimumRetainedRaw);
+    return changed;
 }
 void Service::pollDataChanges() {
     if(!active_ || secure_ || keyDepth_ || refreshingData_)return;
@@ -795,74 +823,85 @@ void Service::modeChanged(bool chinese) {
     }
 }
 void Service::refreshFocus(ITfContext* context) {
-    const bool changed=focused_.Get()!=context;
-    if(changed)++modeRevision_;
-    focused_=context;
-    if(!context && languageBar_)languageBar_->update(chinese_,false);
-    hideUI();
-    if(!active_ || !context) return;
     try {
+        const bool changed=focused_.Get()!=context;
+        if(changed) {
+            auto previous=state(focused_.Get(),false);
+            ++modeRevision_;focused_=context;hideUI();
+            if(previous){previous->engine.focusChanged();previous->observed=false;++previous->revision;}
+        }
+        if(!context && languageBar_)languageBar_->update(chinese_,false);
+        if(!active_ || !context)return;
         if(languageBar_) {
             ComPtr<ITfContextView> view;HWND window=nullptr;
             if(SUCCEEDED(context->GetActiveView(&view)) && SUCCEEDED(view->GetWnd(&window)))languageBar_->menuParent(window);
         }
         reloadSettings();
-        if(store_ && userDataRootAvailable()) lexicon_=store_->refresh();
+        if(store_ && userDataRootAvailable()) {
+            auto refreshed=store_->refresh();
+            if(!lexicon_ || !refreshed->equivalent(*lexicon_))lexicon_=std::move(refreshed);
+        }
         auto current=state(context,true);
-        // Focus state changes immediately. A later edit grant must not clear
-        // modifiers pressed after this notification.
-        if(changed) {current->engine.focusChanged();current->observed=false;++current->revision;}
+        if(changed){current->engine.focusChanged();current->observed=false;++current->revision;}
         const bool switched=current->engine.lexicon()->dictionary()!=lexicon_->dictionary();
         const bool reload=current->engine.requiresConfigurationReload(config_);
+        const auto before=current->engine.sentenceRequest();
         auto next=current->engine;
-        synchronizeEngine(next);
-        if((switched || reload) && current->composition) {
+        bool contentChanged=synchronizeEngine(next);
+        const auto after=next.sentenceRequest();
+        contentChanged=contentChanged || bool(before)!=bool(after) || (before && after &&
+            (before->session!=after->session || before->generation!=after->generation || before->resources!=after->resources));
+        if((switched || reload || current->candidateContentDirty) && current->composition) {
             edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READWRITE,[this,current](TfEditCookie cookie) {
-                if(!active_ || !lexicon_ || !foreground_ || focused_.Get()!=current->context.Get() ||
-                    state(current->context.Get(),false)!=current)return S_FALSE;
-                auto refreshed=current->engine;
-                synchronizeEngine(refreshed);
+                if(!isFocusedContext(current) || !lexicon_)return S_FALSE;
+                auto refreshed=current->engine;synchronizeEngine(refreshed);
                 return apply(current,std::move(refreshed),{},cookie);
             });
             return;
         }
-        current->engine=std::move(next); ++current->revision;
-        publishMode(current);
-        if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current](TfEditCookie cookie) { updateUI(current,cookie); return S_OK; });
+        current->engine=std::move(next);
+        if(contentChanged){++current->revision;current->candidateContentDirty=true;}
+        if(ui_ && ui_->context()==current)ui_->setStyle(candidateStyle_,fonts_);
+        publishMode(current);queueSentence(current);
+        auto composition=current->composition;
+        if(composition)edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current,composition](TfEditCookie cookie) {
+            if(!isFocusedContext(current) || current->composition.Get()!=composition.Get())return S_FALSE;
+            updateUI(current,cookie,CandidateUpdate::Layout);return S_OK;
+        });
     } catch(const std::exception& error) { report(error.what()); }
       catch(HRESULT) { report("Focus context is unavailable"); }
 }
 HRESULT Service::OnSetFocus(ITfDocumentMgr* doc,ITfDocumentMgr*) {
     ComPtr<ITfContext> context;
-    if(doc) doc->GetTop(&context);
-    refreshFocus(context.Get()); return S_OK;
+    if(doc)doc->GetTop(&context);
+    refreshFocus(context.Get());return S_OK;
 }
-HRESULT Service::OnSetFocus(BOOL foreground) {
-    foreground_=foreground!=FALSE;
+void Service::setForeground(bool foreground) {
+    if(!active_)return;
+    const bool changed=foreground_!=foreground;
+    foreground_=foreground;
     if(!foreground_) {
-        ++modeRevision_; hideUI(); if(languageBar_)languageBar_->update(chinese_,false);
-        for(auto& item:contexts_) {item.second->engine.focusChanged();item.second->observed=false;}
+        if(!changed)return; // key/thread focus loss can describe the same event
+        ++modeRevision_;hideUI();
+        if(languageBar_)languageBar_->update(chinese_,false);
+        for(auto& item:contexts_) {
+            item.second->engine.focusChanged();
+            item.second->observed=false;++item.second->revision;
+        }
+        return;
     }
-    return S_OK;
-}
-HRESULT Service::OnSetThreadFocus() {
-    foreground_=true;
     ComPtr<ITfDocumentMgr> doc;
-    if(manager_) manager_->GetFocus(&doc);
-    return OnSetFocus(doc.Get(),nullptr);
+    if(manager_)manager_->GetFocus(&doc);
+    OnSetFocus(doc.Get(),nullptr);
 }
-HRESULT Service::OnKillThreadFocus() {
-    ++modeRevision_;
-    foreground_=false; hideUI();
-    if(languageBar_)languageBar_->update(chinese_,false);
-    for(auto& item:contexts_) { item.second->engine.focusChanged(); item.second->observed=false; }
-    return S_OK;
-}
+HRESULT Service::OnSetFocus(BOOL foreground) {setForeground(foreground!=FALSE);return S_OK;}
+HRESULT Service::OnSetThreadFocus() {setForeground(true);return S_OK;}
+HRESULT Service::OnKillThreadFocus() {setForeground(false);return S_OK;}
 HRESULT Service::OnPopContext(ITfContext* context) {
     try {
         auto current=state(context,false);
         if(!current) return S_OK;
-        if(ui_ && ui_->context()==current) hideUI();
+        if(ui_ && ui_->context()==current) closeUI();
         if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READWRITE,[this,current](TfEditCookie cookie) { return end(current,cookie); });
         forget(current);
         if(focused_.Get()==context) { focused_.Reset(); if(languageBar_)languageBar_->update(chinese_,false); }
@@ -887,7 +926,7 @@ HRESULT Service::OnCompositionTerminated(TfEditCookie cookie,ITfComposition* com
             property->Clear(cookie,range.Get());
         current->composition.Reset(); current->engine.cancel(); ++current->revision;
         queueSentence(current);
-        if(ui_ && ui_->context()==current) hideUI();
+        if(ui_ && ui_->context()==current) closeUI();
         break;
     }
     return S_OK;
@@ -916,7 +955,7 @@ HRESULT Service::OnEndEdit(ITfContext* context,TfEditCookie cookie,ITfEditRecord
                 const auto hr=end(current,editCookie);
                 if(SUCCEEDED(hr)) {
                     current->engine.cancel(); ++current->revision;
-                    if(ui_ && ui_->context()==current) hideUI();
+                    if(ui_ && ui_->context()==current) closeUI();
                 }
                 return hr;
             });
@@ -928,22 +967,22 @@ HRESULT Service::OnLayoutChange(ITfContext* context,TfLayoutCode code,ITfContext
     try {
         auto current=state(context,false);
         if(!current || current->editing) return S_OK;
-        if(code==TF_LC_DESTROY) { if(ui_ && ui_->context()==current) hideUI(); return S_OK; }
-        if(current->composition) edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current](TfEditCookie cookie) {
-            // Queued layout work must not recreate an ended UI or hide a new
-            // focused context's candidates after focus/pop/deactivation.
-            if(!active_ || !foreground_ || !current->composition ||
-                focused_.Get()!=current->context.Get() || state(current->context.Get(),false)!=current)return S_FALSE;
+        if(code==TF_LC_DESTROY) { if(ui_ && ui_->context()==current) closeUI(); return S_OK; }
+        auto composition=current->composition;
+        if(composition)edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READ,[this,current,composition](TfEditCookie cookie) {
+            if(!isFocusedContext(current) || current->composition.Get()!=composition.Get())return S_FALSE;
             updateUI(current,cookie,CandidateUpdate::Layout);return S_OK;
         });
         return S_OK;
     } catch(...) { return E_FAIL; }
 }
 HRESULT Service::choose(const std::shared_ptr<Context>& current,UINT index,bool abort) {
-    if(!active_ || !current || !current->engine.composing()) return TF_E_DISCONNECTED;
-    const auto revision=current->revision;
-    return edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READWRITE,[this,current,index,abort,revision](TfEditCookie cookie) {
-        if(!active_ || current->revision!=revision) return S_FALSE;
+    if(!isFocusedContext(current) || !current->composition || !current->engine.composing())return TF_E_DISCONNECTED;
+    const auto revision=current->revision,focusRevision=modeRevision_;
+    auto composition=current->composition;
+    return edit(current,TF_ES_ASYNCDONTCARE|TF_ES_READWRITE,[this,current,index,abort,revision,focusRevision,composition](TfEditCookie cookie) {
+        if(!isFocusedContext(current) || current->revision!=revision || modeRevision_!=focusRevision ||
+            current->composition.Get()!=composition.Get())return S_FALSE;
         Engine next=current->engine; KeyResult result;
         if(abort) { next.cancel(); result.handled=true; result.cancelComposition=true; }
         else {

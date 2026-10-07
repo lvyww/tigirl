@@ -2,9 +2,18 @@
 
 The pending native build reads `%LOCALAPPDATA%\Tigirl\config.txt` on TSF
 activation and document focus. It keeps the daily TigerClaw configuration separate.
-A missing file uses defaults. New contexts use 默认中文; reloading an existing
-context preserves the user's current Chinese/English mode and resets its page.
-Normal key preview/dispatch does not read the settings file.
+A missing file uses defaults. A newly activated service starts in 默认中文.
+New contexts inherit the current thread mode; returning to an existing context
+restores that context's Chinese/English mode. Ordinary configuration refreshes
+preserve the current mode; saving changed settings reapplies the configured
+default through its reload request. Saving an unchanged dialog is a no-op. Normal key preview/dispatch does not read
+the settings file.
+
+Windows can notify an unset input-mode compartment while restoring thread focus.
+The service republishes the latest requested mode for this notification. Explicit
+Chinese/English values continue to change the mode normally. See
+[the default Chinese startup regression](../docs/DEFAULT_CHINESE_STARTUP.md)
+for the startup regression and validation.
 
 A host may set `NATIVE_TIGER_USER_ROOT` to an absolute Windows directory before
 activating the TIP. This redirects its configuration, selection bindings and

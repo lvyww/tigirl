@@ -10,7 +10,7 @@
 #include "../ConfigStore.h"
 #include "../Settings.h"
 #include "../SchemaCatalog.h"
-#include "../CandidateTheme.h"
+#include "SsfResources.h"
 #include "../OrdinalCase.h"
 #include <algorithm>
 #include <cstdio>
@@ -110,13 +110,16 @@ void LanguageBar::refreshMenu() {
     const auto current=currentSchemaSetting(text);
     auto names=schemaNames(root_);
     auto wide=[](std::u16string_view value){return std::wstring(reinterpret_cast<const wchar_t*>(value.data()),value.size());};
-    MenuEntry schemas{10,L"方案"},themes{11,L"主题"};
+    MenuEntry schemas{10,L"方案"},themes{11,L"皮肤"};
     UINT id=100;
     for(const auto& name:names)schemas.children.push_back({id++,wide(name),L"use",wide(name),ordinalCompareIgnoreCase(name,current.empty()?u"虎码字词":current)==0});
     const auto theme=parseCandidateStyle(text).theme;
-    for(const auto name:candidateThemeNames)themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
+    for(const auto& name:skin::skinFiles(skin::skinDirectory()))themes.children.push_back({id++,wide(name),L"theme",wide(name),name==theme});
+    themes.children.push_back({});
+    themes.children.push_back({id++,L"打开皮肤目录",L"skin-folder"});
+    themes.children.push_back({id++,L"刷新皮肤列表",L"skin-refresh"});
     menu_={{7,L"虎娘 GitHub 页面",L"official"},{},
-        {3,L"方案文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
+        {3,L"用户文件夹",L"folder"},{6,L"导出码表",L"export"},{4,L"重载码表",L"reload"},
         {5,L"加词"},std::move(schemas),std::move(themes),{2,L"输入设置"}};
 }
 HRESULT LanguageBar::InitMenu(ITfMenu* menu) {
@@ -158,11 +161,15 @@ HRESULT LanguageBar::OnMenuSelect(UINT id) {
         }
         if(action==L"theme") {
             const std::u16string theme(reinterpret_cast<const char16_t*>(value.data()),value.size());
-            if(std::find(candidateThemeNames.begin(),candidateThemeNames.end(),theme)==candidateThemeNames.end())return E_INVALIDARG;
+            if(!skin::validSkinFile(theme))return E_INVALIDARG;
             // A UWP host cannot reliably launch the desktop manager. Theme
             // changes are data-only and use the same atomic writer here.
-            updateConfigurationValues(root_/L"config.txt",{{u"主题",theme}});
+            updateConfigurationValues(root_/L"config.txt",{{u"皮肤",theme}});
             return S_OK;
+        }
+        if(action==L"skin-refresh"){
+            const auto stamp=std::to_wstring(GetTickCount64())+L":"+std::to_wstring(GetCurrentProcessId());
+            updateConfigurationValues(root_/L"config.txt",{{u"皮肤刷新",std::u16string(stamp.begin(),stamp.end())}});return S_OK;
         }
         return launchManagement(module_,id==2?L"settings":action,value);
     }catch(...){return E_FAIL;}

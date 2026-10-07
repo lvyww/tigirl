@@ -106,6 +106,27 @@ int wmain(int argc,wchar_t** argv) {
             DWORD flags=0;check(list->GetUpdatedFlags(&flags));
             require(flags==0,"Layout left spurious model change flags");
         }
+        // Duplicate document/foreground notifications must not rebuild the
+        // UI element or discard the host's custom selection/paging.
+        const auto elementId=ui->id;
+        ComPtr<ITfThreadFocusSink> threadFocus;check(service.As(&threadFocus));
+        for(unsigned i=0;i<3;++i) {
+            check(focus->OnSetFocus(doc.manager.Get(),doc.manager.Get()));
+            check(keys->OnSetFocus(TRUE));check(threadFocus->OnSetThreadFocus());drainLayout();
+            UINT selected=0,page=0;check(list->GetSelection(&selected));check(list->GetCurrentPage(&page));
+            require(ui->id==elementId && selected==5 && page==2,"Duplicate focus rebuilt UI or reset host state");
+            require(ui->updates==updates,"Duplicate focus republished the candidate model");
+        }
+        // Route a shell chord explicitly, without opening the real screenshot
+        // tool or injecting a global key into the user's applications.
+        BYTE shellKeys[256]{};shellKeys[VK_LWIN]=shellKeys[VK_SHIFT]=shellKeys[VK_LSHIFT]=0x80;
+        require(SetKeyboardState(shellKeys)!=FALSE,"Cannot set test shell chord");
+        BOOL eaten=TRUE;check(keys->OnTestKeyDown(doc.context.Get(),'S',1,&eaten));
+        require(!eaten,"Win+Shift+S was consumed");
+        check(keys->OnKeyDown(doc.context.Get(),'S',1,&eaten));
+        BYTE noKeys[256]{};require(SetKeyboardState(noKeys)!=FALSE,"Cannot clear test shell chord");
+        drainLayout();require(doc.store->text==code && compositionCount(doc)==1 && ui->id==elementId,
+            "Win+Shift+S cleared composition or candidate element");
         doc.store->layoutReady=true;
         // Model a wrapped preedit whose insertion point has no rectangle while
         // its final character is visible. Exercise the real range/edit session,
@@ -136,6 +157,35 @@ int wmain(int argc,wchar_t** argv) {
         check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout(180);
         require(ownCandidateWindow() && IsWindowVisible(ownCandidateWindow()),"Recovered caret did not restore native candidates");
         require(doc.store->tailBoundsQueries==queries,"Valid caret unnecessarily used trailing-character fallback");
+        const auto retainedWindow=ownCandidateWindow();
+        for(unsigned i=0;i<3;++i) {
+            check(keys->OnSetFocus(FALSE));check(threadFocus->OnKillThreadFocus());
+            require(IsWindow(retainedWindow) && !IsWindowVisible(retainedWindow) && ui->id==elementId,
+                "Temporary focus loss destroyed the HWND or UI element");
+            require(list->Finalize()==TF_E_DISCONNECTED && list->Abort()==TF_E_DISCONNECTED,
+                "Background candidate accepted commit or cancellation");
+            doc.store->layoutReady=false;
+            check(keys->OnSetFocus(TRUE));check(threadFocus->OnSetThreadFocus());drainLayout(150);
+            UINT selected=0,page=0;check(list->GetSelection(&selected));check(list->GetCurrentPage(&page));
+            require(ownCandidateWindow()==retainedWindow && IsWindowVisible(retainedWindow) && ui->id==elementId,
+                "Focus recovery failed to reuse the HWND and cached geometry");
+            require(selected==5 && page==2 && doc.store->text==code && compositionCount(doc)==1,
+                "Focus recovery changed text or selection");
+            doc.store->layoutReady=true;
+        }
+        // A host may change its visibility policy while this thread is hidden.
+        check(threadFocus->OnKillThreadFocus());check(nativeElement->Show(FALSE));
+        check(threadFocus->OnSetThreadFocus());drainLayout();
+        BOOL shown=TRUE;check(nativeElement->IsShown(&shown));
+        require(!shown && !IsWindowVisible(retainedWindow),"Recovery overrode host Show(FALSE)");
+        check(nativeElement->Show(TRUE));check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
+        // A deferred click belongs to the focus generation in which it was made.
+        doc.store->deferLocks=true;check(list->Finalize());
+        require(doc.store->pendingLock!=0,"Finalize did not defer");
+        check(threadFocus->OnKillThreadFocus());
+        doc.store->deferLocks=false;check(doc.store->grantPendingLock());drainLayout();
+        require(doc.store->text==code && compositionCount(doc)==1,"Late unfocused finalize changed document text");
+        check(threadFocus->OnSetThreadFocus());drainLayout();
         check(nativeElement->Show(FALSE));
         check(list->Finalize()); drainLayout();
         require(doc.store->text==expected && compositionCount(doc)==0,"Finalization committed the wrong candidate");
@@ -158,6 +208,25 @@ int wmain(int argc,wchar_t** argv) {
         require(!tap(VK_RETURN) && doc.store->text==expected,"Idle Enter did not remain pass-through");
         check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));drainLayout();
         require(ui->id==TF_INVALID_UIELEMENTID,"Late layout resurrected an aborted UI");
+        // Queue an old context's layout read, then create candidates in a new
+        // context. Granting that old read must not hide the new candidate UI.
+        typeCode();doc.store->deferLocks=true;
+        check(layout->OnLayoutChange(doc.context.Get(),TF_LC_CHANGE,nullptr));
+        require(doc.store->pendingLock!=0,"Old layout did not defer");
+        auto other=document(manager.Get(),appClient,window);
+        check(manager->SetFocus(other.manager.Get()));check(focus->OnSetFocus(other.manager.Get(),doc.manager.Get()));
+        for(auto c:code) {
+            BOOL handled=FALSE;const UINT vk=static_cast<UINT>(c-L'a'+L'A');
+            check(keys->OnTestKeyDown(other.context.Get(),vk,1,&handled));require(handled!=FALSE,"Other context key not handled");
+            check(keys->OnKeyDown(other.context.Get(),vk,1,&handled));
+            check(keys->OnTestKeyUp(other.context.Get(),vk,0xc0000001,&handled));
+            if(handled)check(keys->OnKeyUp(other.context.Get(),vk,0xc0000001,&handled));
+        }
+        drainLayout();const auto otherId=ui->id;auto otherList=candidates();
+        require(otherId!=TF_INVALID_UIELEMENTID && other.store->text==code,"Other context candidates missing");
+        doc.store->deferLocks=false;check(doc.store->grantPendingLock());drainLayout();
+        require(ui->id==otherId && other.store->text==code,"Old layout callback hid or changed the new context");
+        check(otherList->Abort());drainLayout();check(other.manager->Pop(TF_POPF_ALL));
         verifyModule(module);
         check(service->Deactivate());
         check(doc.manager->Pop(TF_POPF_ALL));
@@ -166,6 +235,7 @@ int wmain(int argc,wchar_t** argv) {
         std::cout<<"{\"status\":\"passed\",\"layout_changes\":12,\"real_tsf_edit_sessions\":true,"
             "\"wrapped_caret_recovery\":true,\"custom_paging_preserved\":true,\"sixth_candidate_committed\":true,"
             "\"content_update\":true,\"abort\":true,\"late_finalize\":true,"
+            "\"focus_hwnd_retained\":true,\"shell_shortcut_preserved\":true,\"stale_layout_isolated\":true,"
             "\"keystroke_subscription_mocked\":true,\"physical_input_tested\":false,"
             "\"profile_registered\":false,\"model_required\":false}\n";
         // Do not force-unload a DLL while COM objects are still in scope.
