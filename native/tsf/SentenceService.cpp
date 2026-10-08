@@ -20,7 +20,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     auto model=sentenceSettings_.modelPath.empty()?dictionaryPath_.parent_path()/L"Models"/L"sentence-fivegram-mobile.bin":std::filesystem::path(sentenceSettings_.modelPath);
     const int common=sentenceSettings_.commonCharacterLimit;
     SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
-    options.canonicalCodeReward=2;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;
+    options.canonicalCodeReward=0;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;
     options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
     options.allowDuplicateSingleCharacters=sentenceSettings_.allowDuplicateSingleCharacters;
     options.preserveTruncatedEarlyCommitEvidence=true;

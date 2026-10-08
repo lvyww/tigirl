@@ -93,6 +93,7 @@ struct SentenceDecoderOptions {
     bool isolationUseLogRank=false;
     bool scoreSentenceBoundaries=true;
     double emittedCharacterReward=0,wholeInputSingleCharacterReward=0;
+    // Kept for source compatibility; primary-code scoring is no longer applied.
     double canonicalCodeReward=0,canonicalIsolationFactor=1,lexicalPriorWeight=0;
     int canonicalIsolationMinCodeLength=4,lexicalCandidateLimit=5;
     bool allowDuplicateSingleCharacters=false;

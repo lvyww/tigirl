@@ -22,7 +22,7 @@ def main():
     p.add_argument('--cxx', default=os.environ.get('CXX', 'g++'))
     p.add_argument('--sanitize', action='store_true')
     p.add_argument('--keep', type=Path)
-    p.add_argument('--case', default='all', choices=['all','correctness','ranking','caching','fuzz','learning','journal','mapped','history','cancellation'])
+    p.add_argument('--case', default='all', choices=['all','correctness','whole_reward','ranking','caching','fuzz','learning','journal','mapped','history','cancellation'])
     args = p.parse_args()
     cxx = shutil.which(args.cxx)
     if not cxx: p.error('compiler unavailable')

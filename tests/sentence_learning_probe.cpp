@@ -256,7 +256,9 @@ static void fusionCommitTests(const std::filesystem::path& folder) {
     auto lex=std::make_shared<SentenceLexicon>(save(prepared,folder/"fusion-ujkf.tcd"));
     SentenceDecoderOptions options;options.allowDuplicateSingleCharacters=true;
     options.isolationRankThreshold=0;options.emittedCharacterReward=2;
-    options.wholeInputSingleCharacterReward=5;options.canonicalCodeReward=2;
+    // Keep a composed-first ambiguity for the existing fusion-learning tests.
+    // Production uses wholeInputSingleCharacterReward=5 and now starts with 捡.
+    options.wholeInputSingleCharacterReward=0;options.canonicalCodeReward=0;
     SentenceDecoder decoder(lex,{},options);
     const std::u16string mode=u"test-v1";
     const auto path=folder/"fusion-commit.txt";SentenceLearningStore store(path);store.refresh();

@@ -20,10 +20,10 @@ static fs::path root;
 static fs::path lexicalPath;
 static int serial=0,checks=0;
 static void check(bool value,const char* message){++checks;if(!value)throw std::runtime_error(message);}
-static auto lex(std::vector<ImportedLexiconEntry> source) {
+static auto lex(std::vector<ImportedLexiconEntry> source,SentenceLexicon::Characters common={},SentenceLexicon::Characters white={}) {
     auto bytes=serializeImportedLexicon(prepareSentenceLexicon(source));auto path=root/("lex-"+std::to_string(++serial)+".tcs");
     {std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
-    return std::make_shared<SentenceLexicon>(Dictionary::Open(path));
+    return std::make_shared<SentenceLexicon>(Dictionary::Open(path),std::move(common),std::move(white));
 }
 static SentenceDecoderOptions options(int beam=2000) {
     SentenceDecoderOptions o;o.beamWidth=beam;o.isolationLambda=0;o.rankPenalty=0;o.allowDuplicateSingleCharacters=true;return o;
@@ -44,7 +44,7 @@ struct FlatModel:SentenceLanguageModel {
 };
 struct RankingConflictModel:SentenceLanguageModel {
     double logProbability(std::u16string_view,std::u16string_view,std::u16string_view target,bool=true) const override {
-        return target==u"鼎"?-7.0:0.0;
+        return target==u"中"?-7.0:0.0;
     }
     bool hasObservedBigram(std::u16string_view,std::u16string_view) const override{return false;}
 };
@@ -111,31 +111,81 @@ static void correctness() {
      check(d.competingBoundaryEnd(u"jreynvtahx",4,7,1)==7,"C6 second element must not delay one-element boundary");
      check(d.competingBoundaryEnd(u"jreynvtahx",4,9,2)==10,"C6 two-element paths must align at nvt|ahx");}
 }
+static void wholeSingleReward() {
+    const std::vector<ImportedLexiconEntry> entries={
+        {u"a",{u"甲"}},{u"ab",{u"甲"}},{u"abcd",{u"甲"}},
+        {u"bc",{u"乙"}},{u"bcde",{u"乙"}},{u"mn",{u"甲乙"}},
+        {u"rs",{u"己",u"庚"}},{u"rsuv",{u"庚"}},
+        {u"xy",{u"\U00020000"}},{u"xyzz",{u"\U00020000"}}};
+    struct Layout {SentenceLexicon::Characters common,white;};
+    const std::vector<Layout> layouts={{{},{}},{{u"甲",u"乙"},{}},
+        {{u"甲",u"乙"},{u"甲"}},{{u"甲",u"乙",u"\U00020000"},{}}};
+    struct Case {const char16_t* code;const char16_t* text;bool nonoptimal,whole,filtered;};
+    const std::vector<Case> cases={
+        {u"a",u"甲",false,true,false},{u"ab",u"甲",true,true,false},
+        {u"abcd",u"甲",true,true,true},{u"bc",u"乙",false,true,false},
+        {u"bcde",u"乙",true,true,true},{u"mn",u"甲乙",false,false,false},
+        {u"abrs",u"甲己",false,false,false},{u"bc1",u"乙",false,false,false},
+        {u"rs2",u"庚",false,false,false},{u"rsuv",u"庚",true,true,false},
+        {u"xy",u"\U00020000",false,true,false},{u"xyzz",u"\U00020000",true,true,true}};
+    for(const auto& layout:layouts) {
+        auto l=lex(entries,layout.common,layout.white);
+        auto base=options(100);base.emittedCharacterReward=2;
+        auto reward=base;reward.wholeInputSingleCharacterReward=5;reward.canonicalCodeReward=2;
+        SentenceDecoder plain(l,std::make_shared<FlatModel>(),base),boosted(l,std::make_shared<FlatModel>(),reward);
+        for(const auto& c:cases) {
+            const bool restricted=layout.common.count(c.text) && !layout.white.count(c.text);
+            auto a=plain.decodeFull(c.code,20,true),b=boosted.decode(c.code,20,true);
+            auto find=[&](const auto& result){return std::find_if(result.candidates.begin(),result.candidates.end(),[&](const auto& value){return value.text==c.text;});};
+            auto x=find(a),y=find(b);
+            if(c.filtered && restricted) {
+                check(x==a.candidates.end() && y==b.candidates.end(),"W1 reward cannot bypass existing primary-code filtering");
+                continue;
+            }
+            check(x!=a.candidates.end() && y!=b.candidates.end(),"W2 legal candidate remains available");
+            const double expected=c.whole && !(c.nonoptimal && restricted)?5:0;
+            check(std::abs(y->finalScore-x->finalScore-expected)<1e-12,"W3 whole single reward gate");
+            check(x->confidenceScore==y->confidenceScore && y->codeScore==0,"W4 reward excludes confidence and removed code score");
+            for(auto boundary=y->boundary;boundary;boundary=boundary->previous)
+                check(boundary->codeScore==0,"W5 boundaries cannot retain primary-code bonus");
+            check(equal(b,boosted.decodeFull(c.code,20,true)),"W6 incremental/full reward parity");
+        }
+    }
+    // New production-like default: the whole nonoptimal single edge beats a
+    // composed ambiguity, and appending a suffix removes the whole-input bonus.
+    auto l=lex({{u"uj",{u"拾"}},{u"kf",{u"滑"}},{u"ujk",{u"捡"}},{u"ujkf",{u"捡"}},{u"bc",{u"乙"}}});
+    auto o=options();o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;
+    SentenceDecoder d(l,{},o);
+    check(d.decode(u"ujkf").candidates.front().text==u"捡","W7 unrestricted nonoptimal 捡 receives whole-input reward");
+    const auto extended=d.decode(u"ujkfbc",20,true);
+    check(equal(extended,d.decodeFull(u"ujkfbc",20,true)),"W8 appending removes whole reward without cache leakage");
+    check(d.decode(u"ujkf").candidates.front().text==u"捡","W9 backspace restores whole reward");
+}
 static void rankingPriors() {
     auto model=std::make_shared<FlatModel>();
     auto codeLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"cd",{u"乙"}},{u"abcd",{u"鼎"}}});
     auto baseOptions=options(100);SentenceDecoder baseline(codeLexicon,model,baseOptions);
     auto shapedOptions=baseOptions;shapedOptions.canonicalCodeReward=2;SentenceDecoder shaped(codeLexicon,model,shapedOptions);
     auto plain=baseline.decodeFull(u"abcd"),ranked=shaped.decodeFull(u"abcd");
-    check(plain.candidates.front().text==u"甲乙" && ranked.candidates.front().text==u"鼎","R1 primary-code evidence reranks final candidates");
+    check(equal(plain,ranked) && plain.candidates.front().text==u"甲乙","R1 obsolete primary-code option cannot rerank candidates");
     check(plain.expandedStates==ranked.expandedStates && plain.candidates.size()==ranked.candidates.size(),"R1 Beam work/candidate set unchanged");
     for(const auto& original:plain.candidates) {
         auto changed=std::find_if(ranked.candidates.begin(),ranked.candidates.end(),[&](const auto& value){return value.text==original.text;});
-        check(changed!=ranked.candidates.end() && changed->confidenceScore==original.confidenceScore,"R1 confidence excludes code evidence");
+        check(changed!=ranked.candidates.end() && changed->codeScore==0 && changed->confidenceScore==original.confidenceScore,"R1 no code evidence or confidence change");
     }
 
-    // The old policy accumulated confidence for 甲乙 and committed it on the
-    // third generation even though canonical-code evidence displayed 鼎丁.
-    // Reproduce the conflict through the real decoder and session boundary.
+    // Retain the real decoder/session conflict regression after removing the
+    // primary-code bonus. An intentionally large TEST lexical weight makes
+    // final order disagree with confidence; production keeps its 0.1 weight.
     auto conflictLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"uv",{u"乙"}},{u"cd",{u"乙"}},
-        {u"abcd",{u"鼎"}},{u"ef",{u"丁",u"丙"}},{u"efg",{u"丁",u"丙"}},{u"efgh",{u"丁",u"丙"}}});
-    auto conflictOptions=options(100);conflictOptions.canonicalCodeReward=2;
-    SentenceDecoder conflictDecoder(conflictLexicon,std::make_shared<RankingConflictModel>(),conflictOptions);
+        {u"abcd",{u"中国"}},{u"ef",{u"丁",u"丙"}},{u"efg",{u"丁",u"丙"}},{u"efgh",{u"丁",u"丙"}}});
+    auto conflictOptions=options(100);conflictOptions.lexicalPriorWeight=100;
+    SentenceDecoder conflictDecoder(conflictLexicon,std::make_shared<RankingConflictModel>(),conflictOptions,{},SentenceLexicalPrior::Open(lexicalPath));
     SentenceSession conflictSession;conflictSession.start(u"abcdef",1);
     for(const auto* raw:{u"abcdef",u"abcdefg",u"abcdefgh"}) {
         if(conflictSession.raw()!=raw)check(conflictSession.append(raw[std::char_traits<char16_t>::length(raw)-1]),"R1 conflict append");
         auto result=conflictDecoder.decodeFull(raw,20,true);
-        check(!result.candidates.empty() && result.candidates.front().text==u"鼎丁","R1 final prior top is displayed");
+        check(!result.candidates.empty() && result.candidates.front().text==u"中国丁","R1 final prior top is displayed");
         const auto supported=std::find_if(result.earlyCommitEvidence.prefixes.begin(),result.earlyCommitEvidence.prefixes.end(),
             [](const auto& prefix){return prefix.text==u"甲乙" && prefix.rawLength==4;});
         check(supported!=result.earlyCommitEvidence.prefixes.end() && supported->share>=.995 && supported->share<.99999,
@@ -172,13 +222,13 @@ static void rankingPriors() {
     check(noModel.decodeFull(u"abcd").candidates.front().text==u"甲乙","R4 ranking priors disabled without n-gram model");
 
     auto lockedLexicon=lex({{u"xy",{u"甲"}},{u"ab",{u"甲"}},{u"cd",{u"乙"}},{u"abcd",{u"鼎"}},{u"ef",{u"丁"}}});
-    auto source=ranked.candidates.front();auto lockedPrefix=std::make_shared<SentenceLockedPrefix>();
+    auto source=*std::find_if(ranked.candidates.begin(),ranked.candidates.end(),[](const auto& c){return c.text==u"鼎";});auto lockedPrefix=std::make_shared<SentenceLockedPrefix>();
     lockedPrefix->rawCode=u"abcd";lockedPrefix->text=u"鼎";lockedPrefix->boundary=source.boundary;
     SentenceDecoder lockedDecoder(lockedLexicon,model,shapedOptions);
     auto lockedResult=lockedDecoder.decode(u"abcdef",20,false,u"",lockedPrefix);
     auto lockedCandidate=std::find_if(lockedResult.candidates.begin(),lockedResult.candidates.end(),[](const auto& value){return value.text==u"鼎丁";});
-    check(lockedCandidate!=lockedResult.candidates.end() && std::abs(lockedCandidate->codeScore-12)<1e-12,
-        "R5 locked prefix preserves ranking-only code evidence");
+    check(lockedCandidate!=lockedResult.candidates.end() && lockedCandidate->codeScore==0,
+        "R5 locked prefix cannot restore removed code evidence");
 }
 static auto locked() {
     auto lock=std::make_shared<SentenceLockedPrefix>();lock->rawCode=u"aa";lock->text=u"甲";
@@ -346,7 +396,7 @@ static void cancellation() {
 int main(int argc,char** argv) {
     try{if(argc<2)return 2;root=argv[1];lexicalPath=argc>3?fs::path(argv[3]):fs::path{};fs::create_directories(root);std::cout<<std::setprecision(17);
         const std::string selected=argc>2?argv[2]:"all";
-        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"correctness",correctness},{"ranking",rankingPriors},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
+        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"correctness",correctness},{"whole_reward",wholeSingleReward},{"ranking",rankingPriors},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
             if(selected=="all" || selected==test.first){test.second();std::cout<<"{\"group\":\""<<test.first<<"\",\"status\":\"passed\"}\n"<<std::flush;}
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"production_model\":false,\"physical_input\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}

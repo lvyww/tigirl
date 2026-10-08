@@ -411,7 +411,8 @@ SentenceDecoder::SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
     options_.rankPenalty=std::max(0.0,options_.rankPenalty);
     options_.emittedCharacterReward=std::max(0.0,options_.emittedCharacterReward);
     options_.wholeInputSingleCharacterReward=std::max(0.0,options_.wholeInputSingleCharacterReward);
-    options_.canonicalCodeReward=model_?std::max(0.0,options_.canonicalCodeReward):0;
+    // Ignore legacy callers: a primary-code edge no longer earns a ranking bonus.
+    options_.canonicalCodeReward=0;
     options_.canonicalIsolationFactor=model_?std::clamp(options_.canonicalIsolationFactor,0.0,1.0):1;
     options_.canonicalIsolationMinCodeLength=std::max(2,options_.canonicalIsolationMinCodeLength);
     options_.lexicalPriorWeight=model_?std::max(0.0,options_.lexicalPriorWeight):0;
@@ -560,11 +561,11 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                     next.previous2=next.previous1;next.previous1=target;
                 }
                 if(selected==0)next.score-=options_.rankPenalty*c.logRank;
-                double wholeReward=whole && selected==0 && c.optimalSingleCharacterCode && c.textElements.size()==1?options_.wholeInputSingleCharacterReward:0;
+                double wholeReward=whole && selected==0 && c.textElements.size()==1 &&
+                    (c.optimalSingleCharacterCode || !lexicon_->restrictedWholeSingleReward(c.text))?
+                    options_.wholeInputSingleCharacterReward:0;
                 next.score+=wholeReward;next.mass=item.mass+(next.score-item.score-supplementAdded-wholeReward);
-                const double codeReward=selected==0 && c.primarySingleCharacterCode && c.textElements.size()==1?
-                    options_.canonicalCodeReward*codeLength:0;
-                next.codeScore=item.codeScore+codeReward;
+                next.codeScore=0;
                 next.textLength=item.textLength+static_cast<int>(c.text.size());next.textHash=appendTextHash(item.textHash,c.text);
                 next.supplementScore+=supplementAdded;next.rank=std::max(item.rank,static_cast<int>(c.rank));
                 const bool directEdge=item.boundary<0 && position==0 && whole;

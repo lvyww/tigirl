@@ -137,7 +137,7 @@ void evaluate(const std::filesystem::path& modelPath,const std::filesystem::path
     auto supplement=std::make_shared<MappedSentenceSupplement>(save(SentenceSupplementMatcher(entries).serializeGraph(),work/"supplement.tcd"));
     auto lexical=SentenceLexicalPrior::Open(fixture/"tiger_sentence.lexical.bin");
     auto model=SentenceFivegram::Open(modelPath);auto prior=SentenceNgram::Open(priorPath);auto old=std::make_shared<OldPrior>(model,prior);
-    SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=true;options.canonicalCodeReward=2;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
+    SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=true;options.canonicalCodeReward=0;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
     SentenceDecoder unified(lexicon,model,options,supplement,lexical),control(lexicon,old,options,supplement,lexical);
     std::ifstream input(cases);std::ofstream out(output);require(bool(input)&&bool(out),"evaluation paths unavailable");out<<"id\tsource\tcode\ttarget\tcontrol\tunified\tcontrol_rank\tunified_rank\tcontrol_ms\tunified_ms\n";
     unsigned rows=0;

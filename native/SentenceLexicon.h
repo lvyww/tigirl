@@ -35,6 +35,9 @@ public:
     std::uint32_t sourceCodeCount() const { return dictionary_->count(Section::Comment); }
     std::u16string_view sourceCode(std::uint32_t index) const;
     const std::shared_ptr<const Dictionary>& dictionary() const {return dictionary_;}
+    // Reward eligibility shares the exact user-selected common set and whitelist.
+    // This does not change the existing primary-code lexicon filter.
+    bool restrictedWholeSingleReward(std::u16string_view text) const {return common_.count(text) && !whitelist_.count(text);}
 private:
     bool allowed(std::u16string_view code,std::u16string_view text) const;
     bool hasAllowed(const Dictionary::Entry& entry) const;
