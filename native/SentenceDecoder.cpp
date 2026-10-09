@@ -50,6 +50,33 @@ struct State {
     int supplementState=0,rank=1;
     int boundary=-1;
 };
+// Input is already in the decoder's ordinary total order. Enforce the
+// Direct rank chain before pruning, using numeric suffix maxima to compete
+// with composed paths; a pairwise mixed comparator would not be transitive.
+void orderLearnedDirectStates(std::vector<State>& values) {
+    std::vector<std::size_t> direct,composed;
+    for(std::size_t i=0;i<values.size();++i)
+        ((values[i].source&SentenceSourceDirect)?direct:composed).push_back(i);
+    if(direct.empty())return;
+    std::stable_sort(direct.begin(),direct.end(),[&](auto a,auto b) {
+        return values[a].directRank!=values[b].directRank
+            ? values[a].directRank<values[b].directRank : a<b;
+    });
+    std::vector<double> maximum(direct.size()+1,-std::numeric_limits<double>::infinity());
+    for(std::size_t i=direct.size();i>0;--i)maximum[i-1]=std::max(maximum[i],values[direct[i-1]].score);
+    std::vector<std::size_t> order;order.reserve(values.size());
+    std::size_t di=0,ci=0;
+    while(di<direct.size() && ci<composed.size()) {
+        const bool takeDirect=maximum[di]!=values[composed[ci]].score
+            ? maximum[di]>values[composed[ci]].score : direct[di]<composed[ci];
+        order.push_back(takeDirect?direct[di++]:composed[ci++]);
+    }
+    while(di<direct.size())order.push_back(direct[di++]);
+    while(ci<composed.size())order.push_back(composed[ci++]);
+    std::vector<State> ranked;ranked.reserve(values.size());
+    for(auto i:order)ranked.push_back(std::move(values[i]));
+    values=std::move(ranked);
+}
 struct Bucket {
     bool truncated=false,frozen=false;
     std::vector<State> values;
@@ -82,10 +109,18 @@ struct Bucket {
     template<class Order>void limit(int width,Order order) {
         if(frozen)return;
         frozen=true;
+        const bool learnedDirect=std::any_of(values.begin(),values.end(),[](const State& v){return v.learningScore>0;}) &&
+            std::any_of(values.begin(),values.end(),[](const State& v){return (v.source&SentenceSourceDirect)!=0;});
+        if(learnedDirect) {
+            std::sort(values.begin(),values.end(),order);
+            orderLearnedDirectStates(values);
+        }
         if(values.size()>static_cast<std::size_t>(width)) {
             truncated=true;
-            std::nth_element(values.begin(),values.begin()+width,values.end(),order);
-            std::sort(values.begin(),values.begin()+width,order);
+            if(!learnedDirect) {
+                std::nth_element(values.begin(),values.begin()+width,values.end(),order);
+                std::sort(values.begin(),values.begin()+width,order);
+            }
             // Four extra legal states may finish a learned multi-edge span.
             // Potential is never added to score/mass and disappears if the
             // remaining raw code cannot complete that span.
@@ -99,7 +134,7 @@ struct Bucket {
             std::size_t retained=width;
             while(retained<static_cast<std::size_t>(width)+extra && values[retained].learningPotential>0)++retained;
             values.resize(retained);
-        }else std::sort(values.begin(),values.end(),order);
+        }else if(!learnedDirect)std::sort(values.begin(),values.end(),order);
         // Compact only grossly oversized frozen buckets. Never change the beam,
         // tie order or candidate mass; avoid reallocating modest working slack.
         if(values.capacity()>values.size()*4 && values.capacity()-values.size()>4096) {
@@ -574,7 +609,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                 next.directRank=directEdge?static_cast<int>(c.rank):std::numeric_limits<int>::max();
                 next.learningPotential=0;
                 double chosenLearningReward=0;int chosenLearningRawStart=0,chosenLearningTextStart=0;
-                if(!directEdge && learning_ && !learning_->empty()) {
+                if(learning_ && !learning_->empty()) {
                     const auto nextText=lattice.materialize(item.boundary,c.text);
                     // Consider only suffixes with real raw/text boundaries. A DP
                     // maximum prevents overlapping learnt fragments being counted twice.
@@ -592,7 +627,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
                         if(reward>0) {
                             lattice.learningAffected=true;
                             const double candidateLearning=(startBoundary?startBoundary->learningScore:0)+reward;
-                            const double candidateBonus=std::max(item.learningEarlyCommitBonus,learningEarlyContribution(learning_->confidenceScore(learningMode_,raw.substr(rawStart,consumed-rawStart),fragment,context)));
+                            const double candidateBonus=directEdge?0:std::max(item.learningEarlyCommitBonus,learningEarlyContribution(learning_->confidenceScore(learningMode_,raw.substr(rawStart,consumed-rawStart),fragment,context)));
                             if(candidateLearning>next.learningScore ||
                                (candidateLearning==next.learningScore && candidateBonus>next.learningEarlyCommitBonus)) {
                                 next.learningScore=candidateLearning;next.learningEarlyCommitBonus=candidateBonus;
@@ -614,7 +649,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
     }
     return expanded;
 }
-void SentenceDecoder::applyFusionOrdering(std::u16string_view raw,std::vector<SentenceCandidate>& candidates) const {
+void SentenceDecoder::applyDirectOrdering(std::vector<SentenceCandidate>& candidates) const {
     if(candidates.size()<2)return;
     std::map<std::u16string,std::size_t,std::less<>> base;
     for(std::size_t i=0;i<candidates.size();++i)base.try_emplace(candidates[i].text,i);
@@ -628,22 +663,18 @@ void SentenceDecoder::applyFusionOrdering(std::u16string_view raw,std::vector<Se
         if(composed.empty())candidates=std::move(direct);
         return;
     }
+    const bool learned=std::any_of(candidates.begin(),candidates.end(),[](const auto& c){return c.learningScore>0;});
+    std::vector<double> maximum(direct.size()+1,-std::numeric_limits<double>::infinity());
+    for(std::size_t i=direct.size();i>0;--i)maximum[i-1]=std::max(maximum[i],direct[i-1].finalScore);
     std::vector<SentenceCandidate> merged;merged.reserve(candidates.size());
     std::size_t di=0,ci=0;
     while(di<direct.size() && ci<composed.size()) {
         const auto& d=direct[di];const auto& c=composed[ci];
-        double directPrefix=0,composedPrefix=0;
-        for(std::size_t i=di;i<direct.size();++i)
-            directPrefix=std::max(directPrefix,SentenceFusionPreference::signedScore(
-                learning_,learningMode_,raw,direct[i].text,c.text));
-        for(std::size_t i=ci;i<composed.size();++i)
-            composedPrefix=std::max(composedPrefix,-SentenceFusionPreference::signedScore(
-                learning_,learningMode_,raw,d.text,composed[i].text));
-        bool takeDirect;
-        if(directPrefix>0 || composedPrefix>0) {
-            if(std::abs(directPrefix-composedPrefix)>1e-12)takeDirect=directPrefix>composedPrefix;
-            else takeDirect=base[d.text]<base[c.text];
-        } else takeDirect=base[d.text]<base[c.text];
+        // Numerical fragment rewards decide cross-source competition. A
+        // winning later Direct carries its table-rank prefix; table order itself
+        // remains fixed. Empty-learning behavior retains the existing order.
+        const bool takeDirect=learned && maximum[di]!=c.finalScore
+            ? maximum[di]>c.finalScore : base[d.text]<base[c.text];
         merged.push_back(takeDirect?direct[di++]:composed[ci++]);
     }
     while(di<direct.size())merged.push_back(direct[di++]);
@@ -664,8 +695,8 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         const double confidenceAdjustment=eosScore-isolation(lattice,text);
         SentenceCandidate c;c.text=std::move(text);c.baseScore=state.score-state.learningScore+adjustment;
         const bool direct=(state.source&SentenceSourceDirect)!=0;
-        c.learningScore=direct?0:state.learningScore;
-        c.finalScore=direct?c.baseScore:c.baseScore+state.learningScore;
+        c.learningScore=state.learningScore;
+        c.finalScore=c.baseScore+c.learningScore;
         c.confidenceScore=state.mass+confidenceAdjustment;
         const double personalization=std::min(personalizedEarlyCap,
             supplementEarlyContribution(state.supplementScore)+(direct?0:state.learningEarlyCommitBonus));
@@ -709,15 +740,14 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     }
     result.confidenceCandidates=cached->second;
     const auto& all=*result.confidenceCandidates;
-    result.candidates.assign(all.begin(),all.begin()+std::min(all.size(),static_cast<std::size_t>(std::max(1,candidateLimit))));
-    for(auto& c:result.candidates) {
-        auto it=lattice.segments.find(c.boundary.get());
-        if(it==lattice.segments.end())it=lattice.segments.emplace(c.boundary.get(),segmented(raw,c.boundary)).first;
-        c.segmentedCode=it->second;
-    }
+    const auto displayLimit=static_cast<std::size_t>(std::max(1,candidateLimit));
+    const bool learnedMenu=std::any_of(all.begin(),all.end(),[](const auto& c){return c.learningScore>0;});
+    // A learned Direct may carry higher table ranks. Keep those paths until
+    // after the numerical source merge, even with a one-slot display.
+    result.candidates.assign(all.begin(),all.begin()+(learnedMenu?all.size():std::min(all.size(),displayLimit)));
     if(result.candidates.size()>1 && lexicalPrior_ && options_.lexicalPriorWeight>0) {
         std::map<std::u16string,bool,std::less<>> lookupCache;
-        const auto lexicalLimit=std::min(result.candidates.size(),static_cast<std::size_t>(options_.lexicalCandidateLimit));
+        const auto lexicalLimit=std::min({result.candidates.size(),displayLimit,static_cast<std::size_t>(options_.lexicalCandidateLimit)});
         for(std::size_t i=0;i<lexicalLimit;++i) {
             auto& candidate=result.candidates[i];candidate.lexicalScore=lexicalPrior_->score(candidate.text,&lookupCache)*options_.lexicalPriorWeight;
             candidate.baseScore+=candidate.lexicalScore;candidate.finalScore+=candidate.lexicalScore;
@@ -732,7 +762,13 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             return a.text<b.text;
         });
     }
-    applyFusionOrdering(raw,result.candidates);
+    applyDirectOrdering(result.candidates);
+    if(result.candidates.size()>displayLimit)result.candidates.resize(displayLimit);
+    for(auto& c:result.candidates) {
+        auto it=lattice.segments.find(c.boundary.get());
+        if(it==lattice.segments.end())it=lattice.segments.emplace(c.boundary.get(),segmented(raw,c.boundary)).first;
+        c.segmentedCode=it->second;
+    }
     result.learningAffected=lattice.learningAffected;result.learningMode=learningMode_;result.learningSnapshot=learning_;result.supplemental=supplement_;
     result.earlyCommitEvidence.confidenceTruncated=completed.truncated;
     if(includeEarlyCommitEvidence && (!completed.truncated || options_.preserveTruncatedEarlyCommitEvidence)) {

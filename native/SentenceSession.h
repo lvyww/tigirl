@@ -59,7 +59,6 @@ public:
 private:
     void edited();
     void captureLearning(int index);
-    void captureFusionLearning(int index);
     std::vector<SentenceLearningEvent> learningThrough(std::u16string_view text,int rawEnd);
     std::optional<SentenceCandidate> learningBaseline_;
     std::vector<SentenceLearningEvent> pendingLearning_,readyLearning_;

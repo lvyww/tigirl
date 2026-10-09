@@ -96,7 +96,6 @@ std::u16string SentenceSession::candidateText(int index) const {
 std::optional<std::u16string> SentenceSession::commitCandidate(int index) {
     // The adapter must wait for the current generation before selection.
     if(!current() || index<0 || index>=static_cast<int>(result_->candidates.size()))return {};
-    captureFusionLearning(index);
     captureLearning(index);
     auto chosen=result_->candidates[index];auto events=learningThrough(chosen.text,static_cast<int>(raw_.size()));
     auto text=candidateText(index);clear();readyLearning_=std::move(events);return text;
@@ -105,7 +104,6 @@ std::u16string SentenceSession::commitWithSuffix(std::u16string_view suffix) {
     auto text=current() && selected_<static_cast<int>(result_->candidates.size())?candidateText(selected_):liveRaw();
     std::vector<SentenceLearningEvent> events;
     if(current() && selected_<static_cast<int>(result_->candidates.size())) {
-        captureFusionLearning(selected_);
         captureLearning(selected_);const auto chosen=result_->candidates[selected_];
         events=learningThrough(chosen.text,static_cast<int>(raw_.size()));
     }
@@ -151,7 +149,7 @@ std::optional<std::u16string> SentenceSession::appendAutomatic(char16_t code,boo
     const auto normalized=static_cast<char16_t>(code==0x0130?code:unicode::toLower(code));
     const bool letter=normalized>=u'a' && normalized<=u'z';
     const bool confirm=tabPending_ && letter;
-    if(confirm){captureFusionLearning(selected_);captureLearning(selected_);}tabPending_=false;
+    if(confirm)captureLearning(selected_);tabPending_=false;
     if(confirm && current() && selected_<static_cast<int>(result_->candidates.size())) {
         const auto selected=result_->candidates[selected_];
         if(selected.boundary && selected.boundary->rawLength>committedRaw_ &&
@@ -241,11 +239,30 @@ std::vector<SentenceLearningEvent> SentenceSession::takeLearning() {
     auto result=std::move(readyLearning_);readyLearning_.clear();return result;
 }
 void SentenceSession::captureLearning(int index) {
-    if(!tabPending_ || !learningBaseline_ || !current() || result_->learningMode.empty() ||
+    if(!current() || result_->learningMode.empty() ||
        index<0 || index>=static_cast<int>(result_->candidates.size()))return;
+    // A direct click/selection-key commit is the same explicit feedback as a
+    // confirmed Tab selection. Ordinary first-candidate use creates no event.
+    if(!tabPending_ || !learningBaseline_) {
+        if(index<=0)return;
+        learningBaseline_=result_->candidates.front();tabPending_=true;
+    }
     const auto chosen=result_->candidates[index];
-    if(learningBaseline_->source!=SentenceSourceComposed || chosen.source!=SentenceSourceComposed) {
-        learningBaseline_.reset();return;
+    const auto exact=[](const SentenceCandidate& c) {
+        return (c.source&SentenceSourceDirect)!=0 || c.source==SentenceSourceComposed;
+    };
+    if(!exact(*learningBaseline_) || !exact(chosen)) {learningBaseline_.reset();return;}
+    const SentenceCandidate* before=&*learningBaseline_;
+    if((before->source&SentenceSourceDirect) && (chosen.source&SentenceSourceDirect)) {
+        // Preserve Direct/Direct table order. A crossed Composed opponent still
+        // authorizes ordinary cross-source learning even with a Direct first item.
+        before=nullptr;
+        for(int i=0;i<index;++i) {
+            const auto& ahead=result_->candidates[i];
+            if(ahead.source==SentenceSourceComposed && (!before || ahead.finalScore>before->finalScore))
+                before=&ahead;
+        }
+        if(!before){learningBaseline_.reset();return;}
     }
     auto boundaries=[](const SentenceCandidate& candidate) {
         std::vector<SentenceLearningBoundary> result;
@@ -253,41 +270,15 @@ void SentenceSession::captureLearning(int index) {
         std::reverse(result.begin(),result.end());return result;
     };
     int floor=std::max(committedRaw_,activeLock()?static_cast<int>(activeLock()->rawCode.size()):0);
-    const auto beforeBoundaries=boundaries(*learningBaseline_),chosenBoundaries=boundaries(chosen);
-    auto events=sentenceLearningDiff(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,floor);
-    for(auto& e:events)e.mode=result_->learningMode;
-    auto reinforced=sentenceLearningReinforceExisting(raw_,learningBaseline_->text,chosen.text,beforeBoundaries,chosenBoundaries,
+    const auto beforeBoundaries=boundaries(*before),chosenBoundaries=boundaries(chosen);
+    auto events=sentenceLearningSelectionEvents(raw_,before->text,chosen.text,beforeBoundaries,chosenBoundaries,
         floor,result_->learningMode,result_->learningSnapshot,
         [supplement=result_->supplemental](std::u16string_view text){return supplement && supplement->contains(text);});
-    for(auto& e:reinforced) {
-        const bool duplicate=std::any_of(events.begin(),events.end(),[&](const auto& old) {
-            return old.mode==e.mode && old.code==e.code && old.text==e.text;
-        });
-        if(!duplicate)events.push_back(std::move(e));
-    }
-    sentenceLearningPlanLevels(events,result_->learningSnapshot,raw_,learningBaseline_->text,chosen.text,
-        beforeBoundaries,chosenBoundaries,learningBaseline_->finalScore-learningBaseline_->learningScore,
+    sentenceLearningPlanLevels(events,result_->learningSnapshot,raw_,before->text,chosen.text,
+        beforeBoundaries,chosenBoundaries,before->finalScore-before->learningScore,
         chosen.finalScore-chosen.learningScore);
     for(auto& e:events)pendingLearning_.push_back(std::move(e));
     learningBaseline_.reset();
-}
-void SentenceSession::captureFusionLearning(int index) {
-    if(!current() || result_->learningMode.empty() || index<=0 ||
-       index>=static_cast<int>(result_->candidates.size()))return;
-    const auto& selected=result_->candidates[index];
-    const bool selectedDirect=(selected.source&SentenceSourceDirect)!=0;
-    const bool selectedComposed=selected.source==SentenceSourceComposed;
-    if(!selectedDirect && !selectedComposed)return;
-    const int rawEnd=selected.boundary?selected.boundary->rawLength:static_cast<int>(raw_.size());
-    for(int i=0;i<index;++i) {
-        const auto& ahead=result_->candidates[i];
-        if(selectedDirect && ahead.source==SentenceSourceComposed)
-            pendingLearning_.push_back(SentenceFusionPreference::event(
-                result_->learningMode,raw_,selected.text,ahead.text,true,rawEnd));
-        else if(selectedComposed && (ahead.source&SentenceSourceDirect)!=0)
-            pendingLearning_.push_back(SentenceFusionPreference::event(
-                result_->learningMode,raw_,ahead.text,selected.text,false,rawEnd));
-    }
 }
 
 std::vector<SentenceLearningEvent> SentenceSession::learningThrough(std::u16string_view text,int rawEnd) {
@@ -295,9 +286,8 @@ std::vector<SentenceLearningEvent> SentenceSession::learningThrough(std::u16stri
     auto i=pendingLearning_.begin();
     while(i!=pendingLearning_.end()) {
         if(i->rawEnd>rawEnd){++i;continue;}
-        const bool fusion=i->mode==SentenceFusionPreference::mode(result_->learningMode);
-        if(fusion || (i->textEnd<=static_cast<int>(text.size()) &&
-           text.substr(i->textStart,i->textEnd-i->textStart)==i->text))
+        if(!learningLegacyPairMode(i->mode) && i->textEnd<=static_cast<int>(text.size()) &&
+           text.substr(i->textStart,i->textEnd-i->textStart)==i->text)
             result.push_back(*i);
         i=pendingLearning_.erase(i);
     }

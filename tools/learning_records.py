@@ -68,6 +68,8 @@ def timestamp(value):
     result=int(result.timestamp())
     if result<0 or date(result)!=value:raise ValueError('无效日期')
     return result
+def legacy_pair_mode(mode):
+    return mode.startswith(('fusion-v1|','exact-correction-v1|'))
 def valid_event(e):
     try:
         for k in ('id','mode','code','text','context'):
@@ -83,7 +85,7 @@ def valid_event(e):
 def row(action,identity,when,text='',code='',context='',levels=0,mode='',target=''):
     return ('\t'.join([action,date(when),escape_text(text),escape_text(code),escape_text(context),str(levels),escape_text(mode),identity,target])+'\n').encode('utf-8')
 def event_line(e):
-    if not valid_event(e):raise ValueError('无效学习记录')
+    if not valid_event(e) or legacy_pair_mode(e['mode']):raise ValueError('无效学习记录')
     return row('学习',e['id'],e['time'],e['text'],e['code'],e['context'],e.get('levels',1),e['mode'])
 def parse(data):
     if len(data)>LIMIT:raise ValueError('自学习文件超过16 MiB')
@@ -98,7 +100,7 @@ def parse(data):
         if f[0]=='学习':
             e={'id':f[7],'time':when,'text':unescape_text(f[2]),'code':unescape_text(f[3]),'context':unescape_text(f[4]),'levels':int(f[5]),'mode':unescape_text(f[6])}
             if not valid_event(e) or f[8]:raise ValueError('无效学习字段')
-            events.append(e)
+            if not legacy_pair_mode(e['mode']):events.append(e)
         elif f[0]=='撤销' and 0<len(f[8])<=128:removed.add(f[8])
         elif f[0]=='清空' and not f[8]:events.clear();removed.clear()
         else:raise ValueError('未知的自学习操作')
@@ -125,12 +127,14 @@ def replace(path: pathlib.Path, data: bytes):
 
 
 def compact(events,seen):
+    events=[e for e in events if not legacy_pair_mode(e['mode'])]
     active={e['id'] for e in events}
     tombstones=b''.join(row('撤销',identity,0,target=identity) for identity in sorted(seen-active))
     return HEADER+tombstones+b''.join(event_line(e) for e in events)
 def summary(events):
     groups={}
     for e in events:
+        if legacy_pair_mode(e['mode']):continue
         choices=groups.setdefault((e['mode'],e['code'],e['context']),{})
         for text,weight in list(choices.items()):
             if text!=e['text']:choices[text]=weight*.25
@@ -157,10 +161,16 @@ def maintain(path,action,source=None):
         elif action=='import':
             if source is None or source.stat().st_size>LIMIT:raise ValueError('缺少备份或文件过大')
             payload=json.loads(source.read_text(encoding='utf-8'))
-            if payload.get('format')!=FORMAT or not isinstance(payload.get('events'),list) or len(payload['events'])>10000:raise ValueError('只接受新版自学习备份')
+            if payload.get('format')!=FORMAT or not isinstance(payload.get('events'),list):raise ValueError('只接受新版自学习备份')
+            ordinary_count=0
             for e in payload['events']:
                 if not valid_event(e):raise ValueError('无效记录；未写入任何内容')
-                if e['id'] not in seen:events.append(e);seen.add(e['id'])
+                ordinary_count+=not legacy_pair_mode(e['mode'])
+            if ordinary_count>10000:raise ValueError('备份中的活动片段记录超过10000条')
+            for e in payload['events']:
+                if e['id'] not in seen:
+                    if not legacy_pair_mode(e['mode']):events.append(e)
+                    seen.add(e['id'])
             events=events[-10000:]
         elif action!='compact':raise ValueError('未知操作')
         replacement=compact(events,seen);replace(path,replacement)

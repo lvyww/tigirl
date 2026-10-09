@@ -120,7 +120,7 @@ public:
     void retainCommittedHistory(std::u16string_view raw,int committedRaw);
     SentenceDecoderMemory memoryStatus() const;
     void setLearning(std::shared_ptr<const SentenceLearningSnapshot> snapshot,std::u16string mode);
-    void applyFusionOrdering(std::u16string_view raw,std::vector<SentenceCandidate>& candidates) const;
+    void applyDirectOrdering(std::vector<SentenceCandidate>& candidates) const;
     bool hasCompleteCandidate(std::u16string_view raw,std::u16string_view requiredTextPrefix={},
         std::optional<std::u16string_view> excludedText={},bool groupEligibleOnly=false,const SentenceLockedPrefix* lockedPrefix=nullptr) const;
     bool isProperCodePrefix(std::u16string_view raw) const;

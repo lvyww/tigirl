@@ -37,6 +37,46 @@ class MaintenanceTests(unittest.TestCase):
     def test_single_undo_removes_three_levels(self):
         m.maintain(self.path,'undo')
         self.assertEqual(m.summary(m.parse(self.path.read_bytes())[0])[0]['跨上下文等级'],3)
+    def legacy_events(self, count=2):
+        return [dict(self.events[0], id=f'legacy-{i}', mode=('fusion-v1|' if i%2 else 'exact-correction-v1|')+'test', text='旧项') for i in range(count)]
+    def legacy_lines(self, events):
+        return b''.join(m.row('学习', e['id'], e['time'], e['text'], e['code'], e['context'], e['levels'], e['mode']) for e in events)
+    def test_legacy_modes_ignored_without_rewriting(self):
+        legacy=self.legacy_events(); data=self.path.read_bytes()+self.legacy_lines(legacy); self.path.write_bytes(data)
+        active,seen=m.parse(data)
+        self.assertEqual(active,self.events); self.assertTrue({e['id'] for e in legacy}<=seen)
+        self.assertEqual(m.maintain(self.path,'show')['count'],3); self.assertEqual(self.path.read_bytes(),data)
+        self.assertEqual(m.maintain(self.path,'export')['events'],self.events)
+        self.assertEqual(m.summary(self.events+legacy),m.summary(self.events))
+        for e in legacy:
+            with self.assertRaises(ValueError):m.event_line(e)
+    def test_legacy_does_not_evict_ordinary_window(self):
+        legacy=self.legacy_events(10002)
+        data=m.event_line(self.events[0])+self.legacy_lines(legacy)
+        self.assertEqual(m.parse(data)[0],[self.events[0]])
+    def test_undo_skips_legacy_pairs(self):
+        self.path.write_bytes(self.path.read_bytes()+self.legacy_lines(self.legacy_events()))
+        m.maintain(self.path,'undo')
+        self.assertEqual(m.parse(self.path.read_bytes())[0],self.events[:-1])
+    def test_import_legacy_ignores_before_active_limit(self):
+        legacy=self.legacy_events(10002); source=self.root/'legacy-backup.json'
+        source.write_text(json.dumps({'format':m.FORMAT,'events':legacy+self.events}),encoding='utf-8')
+        self.assertEqual(m.maintain(self.path,'import',source)['count'],3)
+        active,seen=m.parse(self.path.read_bytes())
+        self.assertEqual(active,self.events); self.assertTrue({e['id'] for e in legacy}<=seen)
+        m.maintain(self.path,'import',source); self.assertEqual(m.parse(self.path.read_bytes())[0],self.events)
+    def test_malformed_legacy_is_still_rejected(self):
+        source=self.root/'malformed-legacy.json'; old=self.path.read_bytes()
+        legacy=dict(self.legacy_events()[0], levels=4)
+        source.write_text(json.dumps({'format':m.FORMAT,'events':[legacy]}),encoding='utf-8')
+        with self.assertRaises(ValueError):m.maintain(self.path,'import',source)
+        self.assertEqual(self.path.read_bytes(),old)
+        with self.assertRaises(ValueError):m.parse(self.legacy_lines([legacy]))
+    def test_import_ordinary_limit_preserved(self):
+        source=self.root/'over-limit.json'; old=self.path.read_bytes()
+        source.write_text(json.dumps({'format':m.FORMAT,'events':[dict(self.events[0],id=f'new-{i}') for i in range(10001)]}),encoding='utf-8')
+        with self.assertRaises(ValueError):m.maintain(self.path,'import',source)
+        self.assertEqual(self.path.read_bytes(),old)
     def test_old_format_is_rejected(self):
         with self.assertRaises(ValueError):m.parse(b'TCL1\tE\told\t123\n')
     def test_reject_code_table_name(self):

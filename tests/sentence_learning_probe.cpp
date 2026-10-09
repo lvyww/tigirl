@@ -147,7 +147,7 @@ static void sessionTests() {
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.moveSelection(1,5,true);s.appendAutomatic(u'b',false,0,{});s.backspace();
     apply(s,fixture(u"aa",{u"甲",u"乙"}));s.commitCandidate(0);check(s.takeLearning().empty(),"backspace unlock discards pending");
     s.start(u"aa",1);apply(s,fixture(u"aa",{u"甲",u"乙"}));s.moveSelection(1,5,true);s.changeResources(2);
-    apply(s,fixture(u"aa",{u"甲",u"乙"}));s.commitCandidate(1);check(s.takeLearning().empty(),"resource switch clears pending");
+    apply(s,fixture(u"aa",{u"甲",u"乙"}));s.commitCandidate(0);check(s.takeLearning().empty(),"resource switch clears pending");
     auto learned=fixture(u"aa",{u"乙",u"甲"});learned.learningAffected=true;
     s.start(u"aa",2);apply(s,learned);check(s.commitCandidate(0)==std::optional<std::u16string>(u"乙"),"learned top normal commit");
     check(s.takeLearning().empty(),"learned top normal commit never reinforces");
@@ -159,7 +159,7 @@ static void sessionTests() {
     s.clear();check(s.takeLearning().empty(),"later cancel does not repeat already drained event");
 }
 static void storageTests(const std::filesystem::path& folder) {
-    const auto path=folder/"自学习-虎娘.txt";SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
+    const auto path=folder/std::filesystem::u8path(u8"自学习-虎娘.txt");SentenceLearningStore store(path);store.refresh();check(!std::filesystem::exists(path),"read-only load does not create journal");
     auto a=event(),b=event(u"bb",u"国",u"乙");store.confirm({a});check(store.entries().size()==1,"successful confirmation persisted");
     store.confirm({a,a});check(store.entries().size()==1,"idempotent replays");
     SentenceLearningStore other(path);other.refresh();check(other.snapshot()->score(a.mode,a.code,a.text,a.context)>0,"second reader sees published record");
@@ -178,7 +178,7 @@ static void storageTests(const std::filesystem::path& folder) {
     auto bad=event();bad.text=u"{动态}";store.confirm({bad});check(store.entries().empty(),"dynamic records never persisted");
     auto fresh=event();store.confirm({fresh});check(store.entries().size()==1,"new events after clear");
     const auto blocker=folder/"not-a-directory";{std::ofstream out(blocker);out<<"x";}
-    bool failed=false;try{SentenceLearningStore fail(blocker/"自学习-虎娘.txt");fail.confirm({fresh});}catch(...){failed=true;}
+    bool failed=false;try{SentenceLearningStore fail(blocker/std::filesystem::u8path(u8"自学习-虎娘.txt"));fail.confirm({fresh});}catch(...){failed=true;}
     check(failed && store.entries().size()==1,"write failure isolated");
 }
 static void decoderTests(const std::filesystem::path& folder) {
@@ -230,6 +230,15 @@ static void decoderTests(const std::filesystem::path& folder) {
     check(first.candidates.front().text==u"甲" && (first.candidates.front().source&SentenceSourceDirect) &&
         std::all_of(first.candidates.begin(),first.candidates.end(),[](const auto& c){return c.learningScore==0;}),
         "same-code Direct correction cannot change table order");
+    confidenceDecoder.setLearning(SentenceLearningSnapshot::build({single}),single.mode);
+    const auto wideDirect=confidenceDecoder.decode(u"aa",20,true);
+    check(wideDirect.candidates.size()>=2 && wideDirect.candidates[0].text==u"甲" &&
+        wideDirect.candidates[1].text==u"乙" && wideDirect.candidates[1].learningScore==9 &&
+        wideDirect.candidates[1].earlyCommitConfidenceScore==wideDirect.candidates[1].confidenceScore,
+        "wide beam keeps Direct table ranks while exposing the actual numeric reward without early confidence");
+    const auto oneDirect=confidenceDecoder.decode(u"aa",1,true);
+    check(oneDirect.candidates.size()==1 && oneDirect.candidates[0].text==u"甲",
+        "display limit one is applied only after learned Direct rank-chain ordering");
     auto lock=std::make_shared<SentenceLockedPrefix>(SentenceLockedPrefix{u"aa",first.candidates.front().text,first.candidates.front().boundary});
     decoder.setLearning({},u"");auto locked=decoder.decode(u"aabb",20,true,u"",lock);
     check(locked.candidates.front().text==u"甲中" && locked.candidates.front().learningScore==0,"locked prefix never carries stale learning scores");
@@ -238,25 +247,29 @@ static void decoderTests(const std::filesystem::path& folder) {
     SentenceCandidate a;a.text=u"A";a.source=SentenceSourceComposed;merge.push_back(a);
     SentenceCandidate b;b.text=u"B";b.source=SentenceSourceDirect;b.directRank=1;merge.push_back(b);
     SentenceCandidate c;c.text=u"C";c.source=SentenceSourceDirect;c.directRank=2;merge.push_back(c);
-    decoder.setLearning({},u"sentence-v2|test");decoder.applyFusionOrdering(u"ii",merge);
+    decoder.setLearning({},u"sentence-v2|test");decoder.applyDirectOrdering(merge);
     check(merge[0].text==u"A" && merge[1].text==u"B" && merge[2].text==u"C","baseline cross-source order preserved");
     auto fusion=SentenceFusionPreference::event(u"sentence-v2|test",u"ii",u"C",u"A",true,2);
     decoder.setLearning(SentenceLearningSnapshot::build({fusion},fusion.time),u"sentence-v2|test");
     merge={};a={};a.text=u"A";a.source=SentenceSourceComposed;merge.push_back(a);
     b={};b.text=u"B";b.source=SentenceSourceDirect;b.directRank=1;merge.push_back(b);
     c={};c.text=u"C";c.source=SentenceSourceDirect;c.directRank=2;merge.push_back(c);
-    decoder.applyFusionOrdering(u"ii",merge);
+    decoder.applyDirectOrdering(merge);
+    check(merge[0].text==u"A" && merge[1].text==u"B" && merge[2].text==u"C",
+        "retired pair records do not alter source order");
+    merge[2].learningScore=10;merge[2].finalScore=10;
+    decoder.applyDirectOrdering(merge);
     check(merge[0].text==u"B" && merge[1].text==u"C" && merge[2].text==u"A",
-        "Direct C over Composed A promotes only Direct prefix B,C");
+        "numerical Direct reward carries the fixed table-rank prefix before Composed");
 }
-static void fusionCommitTests(const std::filesystem::path& folder) {
+static void scoreCommitTests(const std::filesystem::path& folder) {
     // Real ujkf ambiguity: two dictionary edges versus the complete single edge.
     auto prepared=prepareSentenceLexicon({{u"uj",{u"拾"}},{u"kf",{u"滑"}},
         {u"ujk",{u"捡"}},{u"ujkf",{u"捡"}}});
     auto lex=std::make_shared<SentenceLexicon>(save(prepared,folder/"fusion-ujkf.tcd"));
     SentenceDecoderOptions options;options.autoSelectMinCodeLength=1;
     options.isolationRankThreshold=0;options.emittedCharacterReward=2;
-    // Keep a composed-first ambiguity for the existing fusion-learning tests.
+    // Keep a composed-first ambiguity for the cross-source score-learning tests.
     // Production uses wholeInputSingleCharacterReward=5 and now starts with 捡.
     options.wholeInputSingleCharacterReward=0;options.canonicalCodeReward=0;
     SentenceDecoder decoder(lex,{},options);
@@ -274,34 +287,35 @@ static void fusionCommitTests(const std::filesystem::path& folder) {
     session.start(u"ujkf",1);apply(session,baseline);session.moveSelection(1,5,true);
     check(session.commitCandidate(1)==std::optional<std::u16string>(u"捡"),"ujkf Tab confirmation commits direct candidate");
     auto events=session.takeLearning();
-    check(events.size()==1 && events.front().mode==SentenceFusionPreference::mode(mode),
-        "cross-source commit generates one fusion event");
+    check(events.size()==1 && events.front().mode==mode && events.front().code==u"ujkf" && events.front().text==u"捡",
+        "cross-source commit generates one ordinary exact-code fragment");
     auto mixed=events;mixed.push_back(event());
     auto foreign=event();foreign.mode=u"another-mode";mixed.push_back(foreign);
     mixed.push_back(SentenceFusionPreference::event(foreign.mode,u"ujkf",u"捡",u"拾滑",true,4));
+    mixed.push_back(SentenceFusionPreference::event(mode,u"ujkf",u"捡",u"拾滑",true,4));
     filterSentenceLearningForMode(mixed,mode);
-    check(mixed.size()==2 && mixed[0].mode==SentenceFusionPreference::mode(mode) && mixed[1].mode==mode,
-        "commit filter accepts ordinary and fusion records only for the active mode");
+    check(mixed.size()==2 && mixed[0].mode==mode && mixed[1].mode==mode,
+        "commit filter accepts only ordinary records for the active mode");
     auto disabled=events;filterSentenceLearningForMode(disabled,u"");
     check(disabled.empty(),"empty active learning mode rejects all events");
     filterSentenceLearningForMode(events,mode);
-    check(events.size()==1,"successful commit retains fusion preference at the TSF mode gate");
-    store.confirm(events);check(store.entries().size()==1,"fusion event reaches persistent storage");
-    store.confirm(events);check(store.entries().size()==1,"replayed fusion receipt stays idempotent");
+    check(events.size()==1,"successful commit retains ordinary fragment at the TSF mode gate");
+    store.confirm(events);check(store.entries().size()==1,"ordinary cross-source event reaches persistent storage");
+    store.confirm(events);check(store.entries().size()==1,"replayed score-learning receipt stays idempotent");
     SentenceLearningStore reopened(path);reopened.refresh();
     decoder.setLearning(reopened.snapshot(),mode);
     const auto learned=decoder.decode(u"ujkf",20,true);
     check(learned.candidates.front().text==u"捡" && learned.candidates.front().source==SentenceSourceDirect,
         "reloaded ujkf preference promotes direct candidate and invalidates cached order");
     session.start(u"ujkf",1);apply(session,learned);session.commitCandidate(0);
-    check(session.takeLearning().empty(),"using learned first candidate does not reinforce fusion");
+    check(session.takeLearning().empty(),"using learned first candidate does not reinforce scores");
     decoder.setLearning(reopened.snapshot(),u"another-mode");
-    check(decoder.decode(u"ujkf",20,true).candidates.front().text==u"拾滑","reloaded fusion record remains mode isolated");
+    check(decoder.decode(u"ujkf",20,true).candidates.front().text==u"拾滑","reloaded ordinary fragment remains mode isolated");
     decoder.setLearning(reopened.snapshot(),mode);
     session.start(u"ujkf",1);apply(session,decoder.decode(u"ujkf",20,true));session.moveSelection(1,5,true);
-    check(session.commitCandidate(1)==std::optional<std::u16string>(u"拾滑"),"reverse fusion selection commits composed candidate");
+    check(session.commitCandidate(1)==std::optional<std::u16string>(u"拾滑"),"reverse score-learning selection commits composed candidate");
     events=session.takeLearning();filterSentenceLearningForMode(events,mode);
-    check(events.size()==1,"reverse fusion confirmation also passes the mode gate");
+    check(events.size()==1,"reverse score-learning confirmation also passes the mode gate");
     store.confirm(events);SentenceLearningStore reversed(path);reversed.refresh();
     decoder.setLearning(reversed.snapshot(),mode);
     check(decoder.decode(u"ujkf",20,true).candidates.front().text==u"拾滑","reloaded reverse preference restores composed first");
@@ -324,9 +338,9 @@ static void adaptiveTests(const std::filesystem::path& folder) {
     apply(session,result);session.moveSelection(1,5,true);
     check(session.commitCandidate(1)==std::optional<std::u16string>(u"设置陲机关系"),"supplement fixture commit mismatch");
     auto learned=session.takeLearning();
-    check(learned.size()==2 && std::any_of(learned.begin(),learned.end(),[](const auto& e){return e.text==u"陲机" && e.code==u"bb" && e.context==u"设置";}),
+    check(learned.size()==1 && std::any_of(learned.begin(),learned.end(),[](const auto& e){return e.text==u"陲机" && e.code==u"bb" && e.context==u"设置";}),
         "real session failed to reinforce a supplement-only inner fragment");
-    check(std::all_of(learned.begin(),learned.end(),[](const auto& e){return e.levels==3;}),"overlapping outer/inner rewards were incorrectly added");
+    check(std::all_of(learned.begin(),learned.end(),[](const auto& e){return e.levels==3;}),"local phrase reinforcement retains bounded three-level planning");
     check(session.takeLearning().empty(),"submission replay duplicated supplement learning");
     session.start(u"aabbcc",1);apply(session,result);session.commitCandidate(0);
     check(session.takeLearning().empty(),"ordinary first choice reinforced supplemental corpus");
@@ -354,6 +368,7 @@ static void adaptiveTests(const std::filesystem::path& folder) {
     check(reopened.entries()[0].levels==3 && reopened.snapshot()->confidenceScore(e.mode,e.code,e.text,e.context)==9,"restart lost real confirmation count");
     check(store.undoLast() && store.snapshot()->empty(),"single undo did not undo the entire jump");
 }
+#include "sentence_reusable_learning_probe.h"
 static void engineTests(const std::filesystem::path& folder) {
     ImportedLexicon lex;lex.main={{u"aa",{u"甲",u"乙"}}};lex.indexedMain={{u"aa",8,0}};
     auto dict=save(lex,folder/"ordinary.tcd");Engine engine(dict);engine.enableSentenceInput(true,1);
@@ -373,7 +388,7 @@ int main(int argc,char** argv) {
 #ifdef _WIN32
         fileEnumerationTests(path);
 #endif
-        pureTests();sessionTests();storageTests(path);decoderTests(path);fusionCommitTests(path);adaptiveTests(path);engineTests(path);
+        pureTests();sessionTests();storageTests(path);decoderTests(path);scoreCommitTests(path);adaptiveTests(path);reusableLearningTests(path);engineTests(path);
         checks+=learning_test::runPerformanceTests(path/"performance");
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"physical_tsf_tested\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<"check "<<checks<<": "<<e.what()<<'\n';return 1;}
