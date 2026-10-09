@@ -1,6 +1,9 @@
 // One probe compiled independently against old and new production sources.
 // Old source runs fresh each time; new source reuses its real cache. Confidence
 // fields fixed by this review are tested separately, not forced to match a bug.
+// The self-learning scoring rule also changed on purpose after this review, so a
+// `no-learning` argument skips the learning-enabled sweeps; that policy is covered
+// by sentence_review_test.py (learning/fuzz cases) and sentence_learning_test.py.
 #include "SentenceDecoder.h"
 #include "SentenceSupplement.h"
 #include "LexiconSerialize.h"
@@ -18,7 +21,7 @@ static void output(const SentenceDecodeResult& r){
     std::cout<<'\n';
 }
 int main(int argc,char** argv){try{
-    if(argc<4)return 2;std::filesystem::path root=argv[1];std::filesystem::create_directories(root);const bool fresh=std::string(argv[2])=="fresh";
+    if(argc<4)return 2;std::filesystem::path root=argv[1];std::filesystem::create_directories(root);const bool fresh=std::string(argv[2])=="fresh";const bool learningSweeps=!(argc>4 && std::string(argv[4])=="no-learning");
     std::shared_ptr<const SentenceLanguageModel> model;if(std::string(argv[3])!="-")model=SentenceNgram::Open(argv[3]);
     std::vector<ImportedLexiconEntry> entries={{u"aa",{u"甲",u"乙",u"e\u0301"}},{u"bb",{u"国",u"\U00020000"}},{u"cc",{u"中",u"丙"}},{u"abcde",{u"天",u"天地"}},{u"dd",{u"丁"}}};
     auto data=serializeImportedLexicon(prepareSentenceLexicon(entries));auto path=root/"lexicon.tcd";{std::ofstream f(path,std::ios::binary);f.write(reinterpret_cast<const char*>(data.data()),data.size());}
@@ -26,7 +29,9 @@ int main(int argc,char** argv){try{
     SentenceSupplementMatcher matcher({SentenceSupplementEntry::create(u"甲国",1000),SentenceSupplementEntry::create(u"e\u0301国",500)});
     data=serializeImportedLexicon(matcher.serializeGraph());path=root/"supplement.tcd";{std::ofstream f(path,std::ios::binary);f.write(reinterpret_cast<const char*>(data.data()),data.size());}
     auto supplement=std::make_shared<MappedSentenceSupplement>(Dictionary::Open(path));
-    std::mt19937 rng(440881);for(int beam:{1,8,64})for(bool duplicates:{false,true})for(bool learned:{false,true}){
+    int configuration=0;for(int beam:{1,8,64})for(bool duplicates:{false,true})for(bool learned:{false,true}){
+        std::mt19937 rng(440881u+static_cast<unsigned>(configuration++)); // One stream per configuration so an excluded configuration cannot perturb the others.
+        if(learned && !learningSweeps)continue;
         SentenceDecoderOptions o;o.beamWidth=beam;o.allowDuplicateSingleCharacters=duplicates;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;o.isolationRankThreshold=1;
         SentenceDecoder d(lexicon,model,o,supplement);
         if(learned){SentenceLearningEvent e;e.id="fixture";e.mode=u"m";e.code=u"aabb";e.text=u"乙国";e.time=1700000000;d.setLearning(SentenceLearningSnapshot::build({e},e.time),u"m");}

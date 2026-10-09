@@ -2,6 +2,11 @@
 
 Confidence-pool/ancestor-truncation corrections are deliberately checked by
 sentence_review_test.py instead of demanding parity with the buggy old evidence.
+
+The self-learning scoring rule is exempt for the same reason: 3c0b267 replaced the
+frequency-decayed weight with persistent manual-correction levels
+(docs/SENTENCE-LEARNING-WEIGHTS.md), so learning-enabled sweeps are excluded from
+this comparison and covered by sentence_review_test.py and sentence_learning_test.py.
 """
 import argparse
 import hashlib
@@ -43,7 +48,7 @@ def main():
             subprocess.run([cxx,*flags,str(ROOT/'tests/sentence_revision_probe.cpp'),*(str(repo/s) for s in sources),*output],cwd=folder,check=True,timeout=300)
             outputs[name]={}
             for variant,modelarg in [('none','-'),('mapped',str(model))]:
-                result=subprocess.run([str(exe),str(folder/variant),'fresh' if name=='old' else 'incremental',modelarg],cwd=folder,capture_output=True,check=True,timeout=180)
+                result=subprocess.run([str(exe),str(folder/variant),'fresh' if name=='old' else 'incremental',modelarg,'no-learning'],cwd=folder,capture_output=True,check=True,timeout=180)
                 outputs[name][variant]=result.stdout
             manifest[name]={s:hashlib.sha256((repo/s).read_bytes()).hexdigest() for s in sources+['native/SentenceDecoder.h','native/SentenceLearning.h','native/SentenceLexicon.h']}
         counts={}
@@ -56,7 +61,7 @@ def main():
                     if x!=y:raise RuntimeError(f'{variant} snapshot mismatch at {i}; raw records saved')
                 raise RuntimeError('snapshot count mismatch')
             counts[variant]=len(a)
-        report={'status':'passed','snapshots':counts,'total':sum(counts.values()),'fields':'candidate text/order, exact hexadecimal scores, rank, eligibility, segmented code, raw/text/learning boundaries, learning mode/flag','confidence_policy_compared_to_old':False,'sources':manifest,'synthetic_model_sha256':hashlib.sha256(model.read_bytes()).hexdigest(),'production_model':False,'physical_tsf':False}
+        report={'status':'passed','snapshots':counts,'total':sum(counts.values()),'fields':'candidate text/order, exact hexadecimal scores, rank, eligibility, segmented code, raw/text boundaries','confidence_policy_compared_to_old':False,'learning_policy_compared_to_old':False,'excluded_configurations':'learning-enabled sweeps (beam 1/8/64 x duplicate single characters on/off)','sources':manifest,'synthetic_model_sha256':hashlib.sha256(model.read_bytes()).hexdigest(),'production_model':False,'physical_tsf':False}
         args.report.parent.mkdir(parents=True,exist_ok=True);args.report.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'status':'passed','snapshots':counts,'total':sum(counts.values())}))
 
 if __name__=='__main__':main()
