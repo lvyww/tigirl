@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version='2026.10.9.1',
+    [string]$Version='2026.10.10.1',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
     [string]$DefaultScheme='',
     [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram-mobile.bin",
@@ -29,7 +29,7 @@ Copy-Item -LiteralPath "$PSScriptRoot\build\tests\Win32\architecture_load_probe.
 Copy-NativeTigerSentenceModel $SentenceModelPath "$stage\shared"
 Copy-NativeTigerPackageSources $sources "$stage\DefaultData"
 # First-install settings only; existing personal configuration is never merged.
-"Ctrl+空格切换中英文`t否`r`n当前码表`t$($sources.DefaultScheme)`r`n"|Set-Content -LiteralPath "$stage\default-config.txt" -Encoding UTF8
+"Ctrl+空格切换中英文`t否`r`n当前码表`t$($sources.DefaultScheme)`r`n自动选重最低码数`t3`r`n"|Set-Content -LiteralPath "$stage\default-config.txt" -Encoding UTF8
 # Generate the bundled fallback and its sentence sidecars from clean sources.
 & "$stage\shared\Tigirl.Import.exe" "$stage\DefaultData\码表\$($sources.DefaultScheme)" "$stage\DefaultData\拼音反查码表" "$stage\shared\fallback.tcd" 'zh-CN'
 if($LASTEXITCODE){throw 'Default dictionary generation failed.'}

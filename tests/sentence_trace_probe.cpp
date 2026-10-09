@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
         const int retained=argc==8?std::stoi(argv[7]):3;
         tiger::Engine engine(dictionary,config);
         const auto sentence=tiger::parseSentenceSettings(tiger::readUnicodeFile(std::filesystem::u8path(argv[4])));
-        tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=sentence.allowDuplicateSingleCharacters;
+        tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.autoSelectMinCodeLength=sentence.autoSelectMinCodeLength;
         auto resources=tiger::SentenceResources::Open(std::filesystem::u8path(argv[1]),std::filesystem::u8path(argv[5]),sentence.commonCharacterLimit,sentence.whitelist(),options);
         auto decoder=resources->createDecoder();engine.enableSentenceInput(true,1,automatic,retained);
         auto complete=[&] {if(auto ticket=engine.sentenceRequest())engine.applySentenceResult(*ticket,decoder->decode(ticket->raw,20,automatic,ticket->requiredPrefix,ticket->lockedPrefix));};

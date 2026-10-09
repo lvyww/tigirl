@@ -12,7 +12,7 @@ int wmain(int argc,wchar_t** argv) {
    for(const auto& e:entries){if(!first)std::cout<<',';first=false;std::cout<<"{\"text\":";hex(e.text);std::cout<<",\"weight\":"<<e.weight<<",\"reward\":"<<e.reward<<'}';}std::cout<<"]\n";return 0;
   }
   if(argc!=3 && argc!=5)return 2;
-  tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=true;
+  tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.autoSelectMinCodeLength=1;
   const auto overridePath=argc==5?std::filesystem::path(argv[3]):std::filesystem::path{};
   const auto revision=argc==5?std::u16string_view(reinterpret_cast<const char16_t*>(argv[4])):std::u16string_view{};
   auto resources=tiger::SentenceResources::Open(argv[1],argv[2],0,{},options,overridePath,revision);

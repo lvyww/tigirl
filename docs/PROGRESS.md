@@ -3537,3 +3537,11 @@ run against a staging directory containing `.native-tiger-staging`.
 - 记录：build/code-mask-validation.json、build/code-mask-tsf-validation.json、
   build/input-settings-arm64.json；详细行为见 docs/CODE_MASKING.md。
 - 已安装版本 `789f4a97fb336ad0`；双架构注册表、三架构已测 DLL 以及设置程序哈希核验一致，记录见 build/code-mask-installed-audit.json。
+
+## 2026-10-10 — Automatic rank selection minimum
+
+- The single numeric setting `自动选重最低码数` defaults to 3; 0 disables implicit rank selection. The former boolean key is no longer read or migrated.
+- Exact lattice expansion and complete-path queries gate each implicit non-first single by its own code length; explicit selectors and direct manual candidates remain available. Whole direct-candidate automatic-commit eligibility uses the same minimum.
+- Native settings now show one numeric field (0–128), and resource reload signatures include its value. Existing learning identities remain based on enabled/disabled status.
+- The portable review passed 176,534 assertions, including 3,267 new minimum/zero/explicit-selection/configuration/cache/locked-prefix checks. Existing short-code ambiguity fixtures explicitly use a legal minimum of 1.
+- Windows ARM64/x64/Win32 configuration parsing passed 858 cases per architecture (2,574 total); the current-source Oracle was rebuilt before comparison. Native settings controls passed default 3, saving/reopening 0, four new invalid values, cancel preservation, and four DPI layouts on a separate inactive desktop. Learning regressions passed 30,079 assertions.

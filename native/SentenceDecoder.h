@@ -96,7 +96,7 @@ struct SentenceDecoderOptions {
     // Kept for source compatibility; primary-code scoring is no longer applied.
     double canonicalCodeReward=0,canonicalIsolationFactor=1,lexicalPriorWeight=0;
     int canonicalIsolationMinCodeLength=4,lexicalCandidateLimit=5;
-    bool allowDuplicateSingleCharacters=false;
+    int autoSelectMinCodeLength=3; // 0 disables; code length excludes explicit selectors.
     bool preserveTruncatedEarlyCommitEvidence=false;
 };
 // Decoder owns composition-local lattice state. Large data resources remain

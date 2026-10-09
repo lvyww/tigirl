@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
   with Image.open(root/f'sentence-settings-{dpi}.bmp') as capture:
    capture.convert('RGB').save(ROOT/f'build/sentence-settings-{dpi}.png')
  text=config.read_text(encoding='utf-8-sig')
- for expected in ['自动启用整句模式\t否','整句自动提前上屏\t是','允许单字重码组句\t否','保留最少编码数量\t32','高频字仅使用最优码组句\t0','整句允许全码组句白名单\t\n']:
+ for expected in ['自动启用整句模式\t否','整句自动提前上屏\t是','自动选重最低码数\t0','保留最少编码数量\t32','高频字仅使用最优码组句\t0','整句允许全码组句白名单\t\n']:
   assert expected in text,(expected,text)
  request=next(line.split()[1] for line in text.splitlines() if line.startswith('_native_settings_reload\t'))
  uuid.UUID(request)
@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='input-settings-',dir=ROOT/'build') as t
                font_aliases_verified=True,missing_font_fallback_verified=True,
                font_preview_fixed_size=True,font_dropdown_captured=True,
                sentence_settings_saved_reopened=True, sentence_empty_whitelist_preserved=True,
-               sentence_invalid_values_rejected=8, sentence_cancel_preserved=True,
+               sentence_invalid_values_rejected=12, auto_select_default=3, auto_select_zero_saved_reopened=True, auto_select_invalid_values_rejected=4, sentence_cancel_preserved=True,
                malformed_unicode_repaired=4, malformed_unicode_cancel_preserves_bytes=True,
                malformed_unicode_concurrent_change_rejected=True, unreadable_selection_not_repaired=True,
                malformed_selection_cancel_preserves_file=True, concurrent_repair_rejected=True,

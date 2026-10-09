@@ -1,4 +1,4 @@
-﻿#define NOMINMAX
+#define NOMINMAX
 #include "InputSettings.h"
 #include "SettingsSkin.h"
 #include "SettingsControls.h"
@@ -53,7 +53,7 @@ constexpr int layoutIds[]={2,4,5,6,7};
 int layoutIndex(int mode){for(int i=0;i<5;++i)if(layoutIds[i]==mode)return i;return 3;}
 int layoutId(LRESULT index){return index>=0 && index<5?layoutIds[index]:6;}
 constexpr int CandidateDelay=218,AnnotationDelay=219,CodeMask=220;
-constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceDuplicate=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405,SentenceLearning=406;
+constexpr int SentencePage=217,SentenceEnabled=400,SentenceAuto=401,SentenceAutoSelectMin=402,SentenceCommon=403,SentenceRetained=404,SentenceWhitelist=405,SentenceLearning=406;
 const char16_t* pageKeys[]={u"- =",u"[ ]",u"Shift Tab/Tab",u"PageUp/PageDown"};
 const wchar_t* wide(const char16_t* s){return reinterpret_cast<const wchar_t*>(s);}
 // Read the running settings executable so this label follows release resources.
@@ -565,7 +565,8 @@ struct Dialog {
         check(SentenceAuto,L"自动提前上屏",initialSentence.autoCommit,48,12,264);
         control(0,L"STATIC",L"保留编码（0–32）",0,308,52,160,24);
         control(SentenceRetained,L"EDIT",std::to_wstring(initialSentence.minimumRetainedRaw).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,476,48,100,28);
-        check(SentenceDuplicate,L"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters,84,12,276);
+        control(0,L"STATIC",L"自动选重最低码数（0禁用）",0,12,88,228,24);
+        control(SentenceAutoSelectMin,L"EDIT",std::to_wstring(initialSentence.autoSelectMinCodeLength).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,248,84,48,28);
         check(SentenceLearning,L"Tab 锁重上屏后自学习",initialSentence.selfLearning,84,308,276);
         control(0,L"STATIC",L"仅用最优码的高频字数",0,12,128,240,24);
         control(SentenceCommon,L"EDIT",std::to_wstring(initialSentence.commonCharacterLimit).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,268,124,100,28);
@@ -607,7 +608,7 @@ struct Dialog {
         tip(SentenceEnabled,L"方案名称包含“整句”时，自动启用整句输入。");
         tip(SentenceAuto,L"将已经确定的句子前缀提前上屏，并保留指定数量的编码继续组句。");
         tip(SentenceRetained,L"提前上屏后至少保留的编码数，范围 0–32；仅在自动提前上屏开启时生效。");
-        tip(SentenceDuplicate,L"允许同一编码对应的多个单字参与组句。");
+        tip(SentenceAutoSelectMin,L"默认 3；范围 0–128，0 禁用。词条编码达到门槛才可不输入选重键参与组句；显式选重仍可使用。");
         tip(SentenceCommon,L"指定数量的高频字仅使用最优码组句。默认 1500，0 表示不限制；范围 0–2147483647。");
         tip(SentenceWhitelist,L"这里的字符例外允许使用全码组句。直接填写汉字，无需分隔；换行保存时自动合并。");
         tip(SentenceLearning,L"Tab 锁重上屏后自学习；仅本方案、本地保存。");
@@ -737,8 +738,7 @@ struct Dialog {
         if(recentValue!=hotkey(initial.recentSchemaShortcut))changes.emplace_back(u"切换最近码表快捷键",shortcut(RecentShortcut));
         for(auto entry:{std::make_pair(SentenceEnabled,std::make_pair(u"自动启用整句模式",initialSentence.autoEnableBySchema)),
                         std::make_pair(SentenceAuto,std::make_pair(u"整句自动提前上屏",initialSentence.autoCommit)),
-                        std::make_pair(SentenceLearning,std::make_pair(u"整句Tab自学习",initialSentence.selfLearning)),
-                        std::make_pair(SentenceDuplicate,std::make_pair(u"允许单字重码组句",initialSentence.allowDuplicateSingleCharacters))}) {
+                        std::make_pair(SentenceLearning,std::make_pair(u"整句Tab自学习",initialSentence.selfLearning))}) {
             const bool value=SendMessageW(item(entry.first),BM_GETCHECK,0,0)==BST_CHECKED;
             if(value!=entry.second.second)changes.emplace_back(entry.second.first,value?u"是":u"否");
         }
@@ -747,12 +747,14 @@ struct Dialog {
             if(value.empty())throw std::runtime_error("整句参数不能为空，请输入非负整数。");
             for(auto ch:value) {
                 if(ch<u'0' || ch>u'9' || result>limit/10 || (result==limit/10 && static_cast<unsigned>(ch-u'0')>limit%10))
-                    throw std::runtime_error("整句参数超出范围：保留编码为 0–32，高频字数量为 0–2147483647。");
+                    throw std::runtime_error("整句参数超出范围：自动选重最低码数为 0–128，保留编码为 0–32，高频字数量为 0–2147483647。");
                 result=result*10+ch-u'0';
             }
             return static_cast<int>(result);
         };
         const auto retained=nonnegative(SentenceRetained,32),common=nonnegative(SentenceCommon,2147483647);
+        const auto autoSelectMin=nonnegative(SentenceAutoSelectMin,128);
+        if(autoSelectMin!=initialSentence.autoSelectMinCodeLength)changes.emplace_back(u"自动选重最低码数",numberText(autoSelectMin));
         if(retained!=initialSentence.minimumRetainedRaw)changes.emplace_back(u"保留最少编码数量",numberText(retained));
         if(common!=initialSentence.commonCharacterLimit)changes.emplace_back(u"高频字仅使用最优码组句",numberText(common));
         auto whitelist=text(SentenceWhitelist);
@@ -1188,7 +1190,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             if(dialog.initialStyle.candidateDelayMs!=250 || dialog.initialStyle.annotationDelayMs!=60000)
                 throw std::runtime_error("Saved reveal delays did not reopen");
             SetWindowTextW(dialog.item(CandidateDelay),L"0");SetWindowTextW(dialog.item(AnnotationDelay),L"0");
-            if(dialog.initialSentence.autoEnableBySchema || !dialog.initialSentence.autoCommit || dialog.initialSentence.allowDuplicateSingleCharacters ||
+            if(dialog.initialSentence.autoEnableBySchema || !dialog.initialSentence.autoCommit || dialog.initialSentence.autoSelectMinCodeLength!=0 ||
                dialog.text(SentenceRetained)!=u"32" || dialog.text(SentenceCommon)!=u"0" || !dialog.text(SentenceWhitelist).empty())
                 throw std::runtime_error("Saved sentence settings did not reopen correctly");
             SetWindowTextW(dialog.item(SentenceRetained),L"5");SetWindowTextW(dialog.item(SentenceWhitelist),L"测试");
@@ -1232,6 +1234,13 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         SendMessageW(dialog.window,WM_COMMAND,SentencePage,0);
         if((GetWindowLongPtrW(dialog.item(MaxCode),GWL_STYLE)&WS_VISIBLE) || !(GetWindowLongPtrW(dialog.item(SentenceCommon),GWL_STYLE)&WS_VISIBLE))
             throw std::runtime_error("Sentence settings page switch failed");
+        if(dialog.text(SentenceAutoSelectMin)!=u"3")throw std::runtime_error("Automatic selection default must be three");
+        for(auto invalid:{L"129",L"-1",L"",L"3.5"}) {
+            SetWindowTextW(dialog.item(SentenceAutoSelectMin),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
+            if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before || dialog.errorField!=SentenceAutoSelectMin)
+                throw std::runtime_error("Invalid automatic selection minimum saved");
+        }
+        SetWindowTextW(dialog.item(SentenceAutoSelectMin),L"3");
         for(auto invalid:{L"33",L"-1",L"",L"999999999999999999999"}) {
             SetWindowTextW(dialog.item(SentenceRetained),invalid);SendMessageW(dialog.window,WM_COMMAND,Save,0);
             if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid sentence retained raw saved");
@@ -1244,7 +1253,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
         SetWindowTextW(dialog.item(SentenceCommon),L"0");SetWindowTextW(dialog.item(SentenceWhitelist),L"");
         SendMessageW(dialog.item(SentenceEnabled),BM_SETCHECK,BST_UNCHECKED,0);
         SendMessageW(dialog.item(SentenceAuto),BM_SETCHECK,BST_CHECKED,0);
-        SendMessageW(dialog.item(SentenceDuplicate),BM_SETCHECK,BST_UNCHECKED,0);
+        SetWindowTextW(dialog.item(SentenceAutoSelectMin),L"0");
         SetWindowTextW(dialog.item(PageSize),L"11");SendMessageW(dialog.window,WM_COMMAND,Save,0);
         if(dialog.saved || !IsWindow(dialog.window) || tiger::readConfiguration(path)!=before)throw std::runtime_error("Invalid settings were saved");
         if(TabCtrl_GetCurSel(dialog.item(Pages))!=1 || GetFocus()!=dialog.item(PageSize))throw std::runtime_error("Invalid number did not focus appearance field");

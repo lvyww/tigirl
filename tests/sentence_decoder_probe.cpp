@@ -28,7 +28,7 @@ int wmain(int argc,wchar_t** argv) {
     auto old=std::find_if(source.begin(),source.end(),[&](const auto& e){return e.code==entry.code;});if(old==source.end())source.push_back(std::move(entry));else old->candidates=std::move(entry.candidates);}
    if(type=="S"){std::int64_t weight;row>>v>>weight;supplements.push_back(tiger::SentenceSupplementEntry::create(token(v),weight));}
    if(type=="Q"){row>>v;auto raw=token(v);v="-";row>>v;queries.push_back({raw,token(v)});}
-   if(type=="O")row>>options.beamWidth>>options.rankPenalty>>options.isolationRankThreshold>>options.isolationLambda>>options.isolationUseLogRank>>options.scoreSentenceBoundaries>>options.emittedCharacterReward>>options.wholeInputSingleCharacterReward>>options.allowDuplicateSingleCharacters>>limit;
+   if(type=="O"){bool duplicates=false;row>>options.beamWidth>>options.rankPenalty>>options.isolationRankThreshold>>options.isolationLambda>>options.isolationUseLogRank>>options.scoreSentenceBoundaries>>options.emittedCharacterReward>>options.wholeInputSingleCharacterReward>>duplicates>>limit;options.autoSelectMinCodeLength=duplicates?1:0;}
    if(type!="X")continue;
    auto lexicon=std::make_shared<tiger::SentenceLexicon>(save(tiger::prepareSentenceLexicon(source),output/(std::to_string(id)+".tcs")),common,white);
    auto supplement=std::make_shared<tiger::MappedSentenceSupplement>(save(tiger::SentenceSupplementMatcher(supplements).serializeGraph(),output/(std::to_string(id)+".tss")));

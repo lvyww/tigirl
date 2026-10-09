@@ -27,7 +27,7 @@ inline void snapshotCacheTests(PerformanceChecks& test,const std::filesystem::pa
     auto data=serializeImportedLexicon(prepared);const auto dictionary=folder/"perf.tcd";
     {std::ofstream out(dictionary,std::ios::binary);out.write(reinterpret_cast<const char*>(data.data()),static_cast<std::streamsize>(data.size()));if(!out)throw std::runtime_error("write perf dictionary");}
     auto lex=std::make_shared<SentenceLexicon>(Dictionary::Open(dictionary));SentenceDecoderOptions options;
-    options.allowDuplicateSingleCharacters=true;options.isolationRankThreshold=0;
+    options.autoSelectMinCodeLength=1;options.isolationRankThreshold=0;
     SentenceDecoder stable(lex,{},options),refreshed(lex,{},options);int baseline=0,actual=0;
     for(int n=1;n<=8;++n) {
         const auto raw=std::u16string(n,u'a');stable.setLearning(initial,u"perf");const auto a=stable.decode(raw,20,true);

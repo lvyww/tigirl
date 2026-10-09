@@ -13,7 +13,7 @@ from work_directory import temporary_work_directory
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ['tests/sentence_review_probe.cpp', 'native/SentenceDecoder.cpp',
            'native/SentenceLexicon.cpp', 'native/SentenceNgram.cpp',
-           'native/SentenceCharacterRanks.cpp', 'native/SentenceSession.cpp',
+           'native/SentenceCharacterRanks.cpp', 'native/SentenceSession.cpp', 'native/SentenceSettings.cpp',
            'native/SentenceAutoCommit.cpp', 'native/Dictionary.cpp',
            'native/LexiconSerialize.cpp', 'native/AddWord.cpp', 'native/Text.cpp']
 
@@ -22,7 +22,7 @@ def main():
     p.add_argument('--cxx', default=os.environ.get('CXX', 'g++'))
     p.add_argument('--sanitize', action='store_true')
     p.add_argument('--keep', type=Path)
-    p.add_argument('--case', default='all', choices=['all','correctness','whole_reward','ranking','caching','fuzz','learning','journal','mapped','history','cancellation'])
+    p.add_argument('--case', default='all', choices=['all','auto_select','correctness','whole_reward','ranking','caching','fuzz','learning','journal','mapped','history','cancellation'])
     args = p.parse_args()
     cxx = shutil.which(args.cxx)
     if not cxx: p.error('compiler unavailable')

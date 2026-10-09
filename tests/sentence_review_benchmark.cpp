@@ -12,7 +12,7 @@ int main(int argc,char** argv){try{
     if(argc!=2)return 2;std::filesystem::path root=argv[1];std::filesystem::create_directories(root);
     auto data=serializeImportedLexicon(prepareSentenceLexicon({{u"aa",{u"甲"}},{u"bb",{u"乙",u"丙"}}}));auto path=root/"lex.tcd";
     {std::ofstream f(path,std::ios::binary);f.write(reinterpret_cast<const char*>(data.data()),data.size());}
-    auto lex=std::make_shared<SentenceLexicon>(Dictionary::Open(path));SentenceDecoderOptions o;o.allowDuplicateSingleCharacters=true;o.isolationLambda=0;
+    auto lex=std::make_shared<SentenceLexicon>(Dictionary::Open(path));SentenceDecoderOptions o;o.autoSelectMinCodeLength=1;o.isolationLambda=0;
     auto lock=std::make_shared<SentenceLockedPrefix>();lock->rawCode=u"aa";lock->text=u"甲";lock->boundary=std::make_shared<SentencePathBoundary>(SentencePathBoundary{nullptr,1,2,0});
     std::cout<<std::setprecision(8);
     for(int length:{80,128}) {

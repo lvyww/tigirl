@@ -27,7 +27,7 @@ int main(int argc,char** argv){try{
     data=serializeImportedLexicon(matcher.serializeGraph());path=root/"supplement.tcd";{std::ofstream f(path,std::ios::binary);f.write(reinterpret_cast<const char*>(data.data()),data.size());}
     auto supplement=std::make_shared<MappedSentenceSupplement>(Dictionary::Open(path));
     std::mt19937 rng(440881);for(int beam:{1,8,64})for(bool duplicates:{false,true})for(bool learned:{false,true}){
-        SentenceDecoderOptions o;o.beamWidth=beam;o.allowDuplicateSingleCharacters=duplicates;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;o.isolationRankThreshold=1;
+        SentenceDecoderOptions o;o.beamWidth=beam;o.autoSelectMinCodeLength=duplicates?1:0;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;o.isolationRankThreshold=1;
         SentenceDecoder d(lexicon,model,o,supplement);
         if(learned){SentenceLearningEvent e;e.id="fixture";e.mode=u"m";e.code=u"aabb";e.text=u"乙国";e.time=1700000000;d.setLearning(SentenceLearningSnapshot::build({e},e.time),u"m");}
         std::u16string raw;std::shared_ptr<SentenceLockedPrefix> lock;

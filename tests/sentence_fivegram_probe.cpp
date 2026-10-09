@@ -67,7 +67,7 @@ void tests(const std::filesystem::path& path,const std::filesystem::path& work) 
     require(hits && misses,"observed cases must cover both branches");
     ImportedLexicon data;data.main={{u"aa",{u"中",u"人",u"龘"}},{u"bb",{u"国",u"民",u"𰻞"}},{u"cc",{u"人民",u"今天"}},{u"dd",{u"学习",u"工作"}}};
     auto lexicon=std::make_shared<SentenceLexicon>(save(prepareSentenceLexicon(data.main),work/"fixture.tcd"));
-    SentenceDecoderOptions options;options.beamWidth=200;options.allowDuplicateSingleCharacters=true;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
+    SentenceDecoderOptions options;options.beamWidth=200;options.autoSelectMinCodeLength=1;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
     SentenceDecoder incremental(lexicon,model,options),full(lexicon,model,options);
     for(auto raw:{u"aabbccddaabb",u"aabbaabbccddaabb"}) {
         const std::u16string input(raw);
@@ -137,7 +137,7 @@ void evaluate(const std::filesystem::path& modelPath,const std::filesystem::path
     auto supplement=std::make_shared<MappedSentenceSupplement>(save(SentenceSupplementMatcher(entries).serializeGraph(),work/"supplement.tcd"));
     auto lexical=SentenceLexicalPrior::Open(fixture/"tiger_sentence.lexical.bin");
     auto model=SentenceFivegram::Open(modelPath);auto prior=SentenceNgram::Open(priorPath);auto old=std::make_shared<OldPrior>(model,prior);
-    SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=true;options.canonicalCodeReward=0;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
+    SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.autoSelectMinCodeLength=1;options.canonicalCodeReward=0;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
     SentenceDecoder unified(lexicon,model,options,supplement,lexical),control(lexicon,old,options,supplement,lexical);
     std::ifstream input(cases);std::ofstream out(output);require(bool(input)&&bool(out),"evaluation paths unavailable");out<<"id\tsource\tcode\ttarget\tcontrol\tunified\tcontrol_rank\tunified_rank\tcontrol_ms\tunified_ms\n";
     unsigned rows=0;

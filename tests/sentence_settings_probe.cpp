@@ -7,7 +7,7 @@ int wmain(int argc,wchar_t** argv) {
  try {
   if(argc!=2)return 2;std::ifstream input(argv[1]);if(!input)throw std::runtime_error("Missing fixtures");
   for(std::string line;std::getline(input,line);){auto c=tiger::parseSentenceSettings(token(line));
-   std::cout<<"{\"enable\":"<<(c.autoEnableBySchema?"true":"false")<<",\"automatic\":"<<(c.autoCommit?"true":"false")<<",\"duplicates\":"<<(c.allowDuplicateSingleCharacters?"true":"false")<<",\"retained\":"<<c.minimumRetainedRaw<<",\"common\":"<<c.commonCharacterLimit<<",\"white\":";hex(c.fullCodeWhitelist);
+   std::cout<<"{\"enable\":"<<(c.autoEnableBySchema?"true":"false")<<",\"automatic\":"<<(c.autoCommit?"true":"false")<<",\"duplicates\":"<<((c.autoSelectMinCodeLength>0)?"true":"false")<<",\"auto_select_minimum\":"<<c.autoSelectMinCodeLength<<",\"retained\":"<<c.minimumRetainedRaw<<",\"common\":"<<c.commonCharacterLimit<<",\"white\":";hex(c.fullCodeWhitelist);
    std::cout<<",\"characters\":[";bool first=true;for(const auto& value:c.whitelist()){if(!first)std::cout<<',';first=false;hex(value);}std::cout<<"]}\n";
   }return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

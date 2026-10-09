@@ -373,9 +373,9 @@ bool SentenceDecoder::hasCompleteCandidate(std::u16string_view input,std::u16str
             if(length>1 && consumed-position<2)continue;
             for(const auto& matched:states[position])for(const auto& c:candidates) {
                 if(firstOnly && c.rank>1 &&
-                   !(options_.allowDuplicateSingleCharacters && c.textElements.size()==1))continue;
+                   !((options_.autoSelectMinCodeLength>0) && codeLength>=options_.autoSelectMinCodeLength && c.textElements.size()==1))continue;
                 if(selected>0 ? c.rank!=static_cast<unsigned>(selected) :
-                    !(c.rank==1 || whole || (options_.allowDuplicateSingleCharacters && c.textElements.size()==1)))continue;
+                    !(c.rank==1 || whole || ((options_.autoSelectMinCodeLength>0) && codeLength>=options_.autoSelectMinCodeLength && c.textElements.size()==1)))continue;
                 int nextRequired=matched.first;
                 if(static_cast<std::size_t>(nextRequired)<required.size()) {
                     auto size=std::min(c.text.size(),required.size()-nextRequired);
@@ -408,6 +408,7 @@ SentenceDecoder::SentenceDecoder(std::shared_ptr<const SentenceLexicon> lexicon,
     if(historyModel_ && !options_.scoreSentenceBoundaries)throw std::invalid_argument("Fivegram requires BOS/EOS scoring");
     ngram_=dynamic_cast<const SentenceNgram*>(model_.get());
     options_.beamWidth=std::max(1,options_.beamWidth);
+    options_.autoSelectMinCodeLength=std::clamp(options_.autoSelectMinCodeLength,0,128);
     options_.rankPenalty=std::max(0.0,options_.rankPenalty);
     options_.emittedCharacterReward=std::max(0.0,options_.emittedCharacterReward);
     options_.wholeInputSingleCharacterReward=std::max(0.0,options_.wholeInputSingleCharacterReward);
@@ -534,7 +535,7 @@ SentenceDecodeResult SentenceDecoder::decodeFull(std::u16string_view input,int c
 int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,int minimumEnd) const {
     auto& states=lattice.states;int length=static_cast<int>(raw.size()),expanded=0;
     for(int position=from;position<length;++position) {
-        checkCancelled();auto& bucket=states[position];const bool scoreFirst=options_.allowDuplicateSingleCharacters || lattice.learningAffected;
+        checkCancelled();auto& bucket=states[position];const bool scoreFirst=(options_.autoSelectMinCodeLength>0) || lattice.learningAffected;
         bucket.limit(options_.beamWidth,[&](const State& a,const State& b){return lattice.lessState(a,b,scoreFirst);});
         if(bucket.values.empty())continue;
         for(int codeLength:lexicon_->codeLengths()) {
@@ -545,7 +546,7 @@ int SentenceDecoder::expand(std::u16string_view raw,Lattice& lattice,int from,in
             if(consumed<=minimumEnd || (length>1 && consumed-position<2))continue;
             for(const auto& item:bucket.values)for(const auto& c:candidates) {
                 if(selected>0 ? c.rank!=static_cast<unsigned>(selected) :
-                    !(c.rank==1 || whole || (options_.allowDuplicateSingleCharacters && c.textElements.size()==1)))continue;
+                    !(c.rank==1 || whole || ((options_.autoSelectMinCodeLength>0) && codeLength>=options_.autoSelectMinCodeLength && c.textElements.size()==1)))continue;
                 if((expanded&255)==0)checkCancelled();
                 State next=item;double supplementAdded=0;
                 std::size_t targetOffset=0;
@@ -654,7 +655,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
     bool includeEarlyCommitEvidence,std::u16string_view requiredTextPrefix) const {
     auto& states=lattice.states;int length=static_cast<int>(raw.size());
     SentenceDecodeResult result;result.rawCode=raw;result.expandedStates=expanded;
-    auto& completed=states[length];const bool completedScoreFirst=options_.allowDuplicateSingleCharacters || lattice.learningAffected;
+    auto& completed=states[length];const bool completedScoreFirst=(options_.autoSelectMinCodeLength>0) || lattice.learningAffected;
     completed.limit(options_.beamWidth,[&](const State& a,const State& b){return lattice.lessState(a,b,completedScoreFirst);});
     bool scoreFirst=false;
     auto evaluate=[&](const State& state) {
@@ -671,8 +672,9 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         c.earlyCommitConfidenceScore=c.confidenceScore+personalization;
         c.supplementScore=state.supplementScore;c.codeScore=state.codeScore;
         c.maxLexiconRank=std::max(1,state.rank);c.source=state.source;c.directRank=state.directRank;c.boundary=lattice.publishBoundary(state.boundary);
-        c.eligibleDuplicateSinglePath=options_.allowDuplicateSingleCharacters &&
-            ((c.boundary && c.boundary->previous) || wordTextElements(c.text).size()==1);
+        c.eligibleDuplicateSinglePath=(options_.autoSelectMinCodeLength>0) &&
+            ((c.boundary && c.boundary->previous) || (c.boundary &&
+             c.boundary->codeLength>=options_.autoSelectMinCodeLength && wordTextElements(c.text).size()==1));
         return c;
     };
     // Incomplete-tail evidence never participates in final ranking. Avoid the
@@ -693,7 +695,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
         auto all=std::make_shared<std::vector<SentenceCandidate>>();all->reserve(completed.values.size());
         for(const auto& state:completed.values) {
             checkCancelled();auto c=evaluate(state);
-            if(c.learningScore>0 || (options_.allowDuplicateSingleCharacters && c.boundary && c.boundary->previous))scoreFirst=true;
+            if(c.learningScore>0 || ((options_.autoSelectMinCodeLength>0) && c.boundary && c.boundary->previous))scoreFirst=true;
             all->push_back(std::move(c));
         }
         auto order=[=](const SentenceCandidate& a,const SentenceCandidate& b) {
@@ -721,7 +723,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             candidate.baseScore+=candidate.lexicalScore;candidate.finalScore+=candidate.lexicalScore;
         }
         const bool lexicalScoreFirst=std::any_of(all.begin(),all.end(),[&](const SentenceCandidate& candidate) {
-            return candidate.learningScore>0 || (options_.allowDuplicateSingleCharacters && candidate.boundary && candidate.boundary->previous);
+            return candidate.learningScore>0 || ((options_.autoSelectMinCodeLength>0) && candidate.boundary && candidate.boundary->previous);
         });
         std::sort(result.candidates.begin(),result.candidates.end(),[=](const SentenceCandidate& a,const SentenceCandidate& b) {
             if(lexicalScoreFirst && a.finalScore!=b.finalScore)return a.finalScore>b.finalScore;
@@ -767,7 +769,7 @@ SentenceDecodeResult SentenceDecoder::emit(std::u16string_view raw,Lattice& latt
             int consumed=length-tailLength;auto tail=std::u16string_view(raw).substr(consumed);
             if(!std::all_of(tail.begin(),tail.end(),[](char16_t c){return unicode::isLetter(c)!=0;}) ||
                 !lexicon_->isProperCodePrefix(tail) || (tailLength>=2 && !lexicon_->candidateView(tail)->empty()))continue;
-            auto& partial=states[consumed];partial.limit(options_.beamWidth,[&](const State& a,const State& b){return lattice.lessState(a,b,options_.allowDuplicateSingleCharacters);});
+            auto& partial=states[consumed];partial.limit(options_.beamWidth,[&](const State& a,const State& b){return lattice.lessState(a,b,(options_.autoSelectMinCodeLength>0));});
             bool added=false;
             auto found=lattice.evaluated.find(consumed);
             if(found==lattice.evaluated.end()) {

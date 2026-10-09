@@ -24,7 +24,7 @@ int wmain(int argc,wchar_t** argv) {
         auto lexicon=std::make_shared<SentenceLexicon>(dictionary);
         int cases=0;
         for(auto prefix:{u"xr",u"xry"})for(bool automatic:{false,true})for(bool duplicates:{false,true}) {
-            SentenceDecoderOptions options;options.beamWidth=100;options.allowDuplicateSingleCharacters=duplicates;
+            SentenceDecoderOptions options;options.beamWidth=100;options.autoSelectMinCodeLength=duplicates?1:0;
             SentenceDecoder decoder(lexicon,std::make_shared<PrefersCharacters>(),options);
             Engine engine(dictionary);engine.enableSentenceInput(true,1,automatic,0);
             SentencePathQueries queries;

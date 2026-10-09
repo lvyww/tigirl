@@ -22,12 +22,14 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;
     options.canonicalCodeReward=0;options.canonicalIsolationFactor=0;options.canonicalIsolationMinCodeLength=4;
     options.lexicalPriorWeight=.1;options.lexicalCandidateLimit=5;
-    options.allowDuplicateSingleCharacters=sentenceSettings_.allowDuplicateSingleCharacters;
+    options.autoSelectMinCodeLength=sentenceSettings_.autoSelectMinCodeLength;
     options.preserveTruncatedEarlyCommitEvidence=true;
     const auto number=std::to_string(common);
+    const auto autoSelectMinimum=std::to_string(options.autoSelectMinCodeLength);
     const auto signature=path.u16string()+u"\n"+model.u16string()+u"\n"+sentenceSettings_.fullCodeWhitelist+u"\n"+
-        std::u16string(number.begin(),number.end())+(options.allowDuplicateSingleCharacters?u"1":u"0")+
-        (sentenceSettings_.autoCommit?u"1":u"0")+(sentenceSettings_.selfLearning?u"1":u"0")+u"\n"+config_.reloadRequest;
+        std::u16string(number.begin(),number.end())+(options.autoSelectMinCodeLength>0?u"1":u"0")+
+        (sentenceSettings_.autoCommit?u"1":u"0")+(sentenceSettings_.selfLearning?u"1":u"0")+u"\n"+
+        std::u16string(autoSelectMinimum.begin(),autoSelectMinimum.end())+u"\n"+config_.reloadRequest;
     if(signature==sentenceSignature_ && sentenceRequestedSource_ &&
        (sentenceRequestedSource_==lexicon_ || sentenceRequestedSource_->equivalent(*lexicon_)))return;
     if(!sentenceWorker_)sentenceWorker_=std::make_unique<SentenceWorker>();
@@ -41,7 +43,7 @@ void Service::refreshSentenceResources(std::u16string_view settings) {
     auto helper=dictionaryPath_.parent_path()/L"Tigirl.Import.exe";auto cache=userRoot_/L"cache"/L"sentence";
     auto whitelist=sentenceSettings_.whitelist();
     auto learningPath=userRoot_/L"码表"/std::filesystem::path(schema_)/L"自学习-虎娘.txt";
-    auto learningMode=std::u16string(u"整句|单字重码=")+(options.allowDuplicateSingleCharacters?u"1":u"0")+
+    auto learningMode=std::u16string(u"整句|单字重码=")+(options.autoSelectMinCodeLength>0?u"1":u"0")+
         u"|最优码限制="+std::u16string(number.begin(),number.end())+u"|全码白名单="+sentenceSettings_.fullCodeWhitelist;
     const bool learningEnabled=sentenceSettings_.selfLearning;
     sentenceWorker_->submit(0,revision,[path,model,common,whitelist=std::move(whitelist),options,source,journal,helper,cache,learningPath,learningMode,learningEnabled] {

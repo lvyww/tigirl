@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1];BUILD=ROOT/'build'
 def win(p):return subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 def hx(s):
  b=s.encode('utf-16-le','surrogatepass');return ''.join(f'{int.from_bytes(b[i:i+2],"little"):04x}' for i in range(0,len(b),2)) or '-'
-booleans=['自动启用整句模式','整句自动提前上屏','允许单字重码组句']
+booleans=['自动启用整句模式','整句自动提前上屏']
 numbers=['保留最少编码数量','高频字仅使用最优码组句']
 white='整句允许全码组句白名单'
 values=['',' ','\t','\u00a0','是','否','TrUe','FALSE','oN','Off','1','0','unknown','-1','-0','+0','+1500','32','33','20001','2147483647','2147483648','-2147483648','-2147483649','12x','12\0','12\0\0','12 \0','12\0 ','+ 12','١٢','１２','\u00a012\u00a0','12.0','+','0000000000000000000000000000000000000012']
@@ -25,11 +25,18 @@ for _ in range(400):
   value=rng.choice(values if key!=white else ['中 国','', '一人','😀😀e\u0301'])
   lines.append(rng.choice(['',' ','\t','#'])+key+rng.choice(['\t',' ',','])+value)
  cases.append(rng.choice(['\n','\r\n','\r']).join(lines))
+minimum_start=len(cases)
+minimum_values=[('',3),('0',0),('1',1),('2',2),('3',3),('4',4),('128',128),('129',128),('-1',0),('+4',4),('bad',3),('3.5',3),('１２',3),('9999999999999999999999',128),('-9999999999999999999999',0)]
+cases.extend('自动选重最低码数\t'+value for value,_ in minimum_values)
 with tempfile.TemporaryDirectory(prefix='sentence-settings-',dir=BUILD) as tmp:
  fixture=Path(tmp)/'cases.txt';fixture.write_text('\n'.join(map(hx,cases))+'\n')
  oracle=ROOT/'tools/SentenceOracle/bin/Release/net10.0-windows/SentenceOracle.dll'
  r=run_windows(['/mnt/c/Program Files/dotnet/dotnet.exe',win(oracle),'--settings',win(fixture)],capture_output=True,text=True,timeout=60);assert r.returncode==0,r.stderr
  expected=[json.loads(line) for line in r.stdout.splitlines()];assert len(expected)==len(cases)
+ for expected_row in expected:expected_row['auto_select_minimum']=3
+ for i,(_,minimum) in enumerate(minimum_values):
+  expected[minimum_start+i]['auto_select_minimum']=minimum
+  expected[minimum_start+i]['duplicates']=minimum>0
  results={}
  for platform in ['ARM64','x64','Win32']:
   probe=BUILD/'tests'/platform/'sentence_settings_probe.exe'

@@ -13,6 +13,18 @@ bool boolean(std::u16string value,bool fallback) {
     if(value==u"否" || value==u"false" || value==u"off" || value==u"0")return false;
     return fallback;
 }
+int autoSelectMinimum(std::u16string_view text) {
+    if(text.empty())return 3;
+    bool negative=false;
+    if(text.front()==u'+' || text.front()==u'-'){negative=text.front()==u'-';text.remove_prefix(1);}
+    if(text.empty())return 3;
+    unsigned value=0;
+    for(char16_t c:text) {
+        if(c<u'0' || c>u'9')return 3;
+        value=std::min(129u,value*10+static_cast<unsigned>(c-u'0'));
+    }
+    return negative?0:static_cast<int>(std::min(128u,value));
+}
 int nonnegativeInteger(std::u16string_view text) {
     if(text.empty())return 0;
     bool negative=false;if(text.front()==u'+' || text.front()==u'-'){negative=text.front()==u'-';text.remove_prefix(1);}
@@ -42,7 +54,7 @@ SentenceSettings parseSentenceSettings(std::u16string_view text) {
         if(key==u"自动启用整句模式")result.autoEnableBySchema=boolean(value,true);
         else if(key==u"整句Tab自学习")result.selfLearning=boolean(value,true);
         else if(key==u"整句自动提前上屏")result.autoCommit=boolean(value,true);
-        else if(key==u"允许单字重码组句")result.allowDuplicateSingleCharacters=boolean(value,true);
+        else if(key==u"自动选重最低码数")result.autoSelectMinCodeLength=autoSelectMinimum(value);
         else if(key==u"保留最少编码数量")result.minimumRetainedRaw=std::min(32,nonnegativeInteger(value));
         else if(key==u"高频字仅使用最优码组句")result.commonCharacterLimit=nonnegativeInteger(value);
         else if(key==u"整句允许全码组句白名单")result.fullCodeWhitelist=value;

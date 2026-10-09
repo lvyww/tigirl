@@ -35,7 +35,7 @@ std::pair<const void*,std::uint64_t> mappedModel(const std::filesystem::path& pa
 }
 int wmain(int argc,wchar_t** argv){try{
  if(argc!=4)return 2;std::cout<<std::setprecision(10);const auto baseline=privateBytes();auto start=Clock::now();
- tiger::SentenceSettings settings;tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.allowDuplicateSingleCharacters=settings.allowDuplicateSingleCharacters;
+ tiger::SentenceSettings settings;tiger::SentenceDecoderOptions options;options.emittedCharacterReward=2;options.wholeInputSingleCharacterReward=5;options.autoSelectMinCodeLength=settings.autoSelectMinCodeLength;
  auto resources=tiger::SentenceResources::Open(argv[1],argv[2],settings.commonCharacterLimit,settings.whitelist(),options);
  double openMs=elapsed(start);const auto loaded=privateBytes();
  if(std::wstring_view(argv[3])==L"--memory"){

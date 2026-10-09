@@ -23,7 +23,7 @@ int wmain(int argc,wchar_t** argv) {
   auto dictionary=Dictionary::Open(argv[1]);auto lexicon=std::make_shared<SentenceLexicon>(dictionary);
   int cases=0;
   for(bool duplicates:{false,true})for(int beam:{1,100})for(int limit:{1,20}) {
-   SentenceDecoderOptions options;options.beamWidth=beam;options.allowDuplicateSingleCharacters=duplicates;
+   SentenceDecoderOptions options;options.beamWidth=beam;options.autoSelectMinCodeLength=duplicates?1:0;
    SentenceDecoder decoder(lexicon,std::make_shared<PrefersTopic>(),options);
    require(decoder.hasCompleteCandidate(u"ot",{},u"是",true)==duplicates,"duplicate exact ambiguity");
    require(decoder.hasCompleteCandidate(u"uv",{},u"甲",true)==duplicates,"supplementary character eligibility");

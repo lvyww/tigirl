@@ -184,7 +184,7 @@ static void storageTests(const std::filesystem::path& folder) {
 static void decoderTests(const std::filesystem::path& folder) {
     auto prepared=prepareSentenceLexicon({{u"aa",{u"甲",u"乙",u"重庆"}},{u"bb",{u"中"}},{u"cc",{u"国"}}});
     auto dict=save(prepared,folder/"sentence.tcd");auto lex=std::make_shared<SentenceLexicon>(dict);
-    SentenceDecoderOptions options;options.beamWidth=1;options.allowDuplicateSingleCharacters=true;options.isolationRankThreshold=0;
+    SentenceDecoderOptions options;options.beamWidth=1;options.autoSelectMinCodeLength=1;options.isolationRankThreshold=0;
     SentenceDecoder decoder(lex,{},options);auto plain=decoder.decode(u"aabb",20,true);
     check(!plain.candidates.empty() && plain.candidates.front().text==u"甲中","baseline beam top");
     check(std::none_of(plain.candidates.begin(),plain.candidates.end(),[](auto& c){return c.text==u"乙中";}),"beam one originally prunes learned path");
@@ -254,7 +254,7 @@ static void fusionCommitTests(const std::filesystem::path& folder) {
     auto prepared=prepareSentenceLexicon({{u"uj",{u"拾"}},{u"kf",{u"滑"}},
         {u"ujk",{u"捡"}},{u"ujkf",{u"捡"}}});
     auto lex=std::make_shared<SentenceLexicon>(save(prepared,folder/"fusion-ujkf.tcd"));
-    SentenceDecoderOptions options;options.allowDuplicateSingleCharacters=true;
+    SentenceDecoderOptions options;options.autoSelectMinCodeLength=1;
     options.isolationRankThreshold=0;options.emittedCharacterReward=2;
     // Keep a composed-first ambiguity for the existing fusion-learning tests.
     // Production uses wholeInputSingleCharacterReward=5 and now starts with 捡.

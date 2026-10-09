@@ -2,6 +2,7 @@
 // Independent synthetic resources only; not a Windows TSF / physical-key test.
 #include "SentenceDecoder.h"
 #include "SentenceSession.h"
+#include "SentenceSettings.h"
 #include "SentenceLearningStore.h"
 #include "LexiconSerialize.h"
 #include "SentenceSupplement.h"
@@ -25,8 +26,10 @@ static auto lex(std::vector<ImportedLexiconEntry> source,SentenceLexicon::Charac
     {std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
     return std::make_shared<SentenceLexicon>(Dictionary::Open(path),std::move(common),std::move(white));
 }
+// Historical two-key ambiguity fixtures explicitly use minimum 1.
+// Production default 3 and disabled 0 are covered by auto_select.
 static SentenceDecoderOptions options(int beam=2000) {
-    SentenceDecoderOptions o;o.beamWidth=beam;o.isolationLambda=0;o.rankPenalty=0;o.allowDuplicateSingleCharacters=true;return o;
+    SentenceDecoderOptions o;o.beamWidth=beam;o.isolationLambda=0;o.rankPenalty=0;o.autoSelectMinCodeLength=1;return o;
 }
 struct Model:SentenceLanguageModel {
     mutable std::size_t calls=0;
@@ -77,7 +80,7 @@ static bool equal(const SentenceDecodeResult& a,const SentenceDecodeResult& b) {
 }
 static double share(const SentenceDecodeResult& r,std::u16string_view text){for(const auto& p:r.earlyCommitEvidence.prefixes)if(p.text==text)return p.share;return -1;}
 static void correctness() {
-    {auto l=lex({{u"abcde",{u"甲",u"乙丙"}},{u"fg",{u"丁"}}});auto o=options();o.allowDuplicateSingleCharacters=false;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;
+    {auto l=lex({{u"abcde",{u"甲",u"乙丙"}},{u"fg",{u"丁"}}});auto o=options();o.autoSelectMinCodeLength=0;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;
      SentenceDecoder d(l,{},o);d.decode(u"abcde");auto a=d.decode(u"abcdefg",20,true);check(equal(a,d.decodeFull(u"abcdefg",20,true)),"C3 long code cache parity");check(a.candidates.size()==1 && a.candidates.front().finalScore==4,"C3 no whole-input reward leak");}
     {std::vector<std::u16string> tails;for(char16_t c=0x4e00;c<0x4e14;++c)tails.emplace_back(1,c);
      auto l=lex({{u"aa",{u"甲",u"乙"}},{u"bb",tails},{u"cc",{u"国"}}});auto m=std::make_shared<Model>();SentenceDecoder d(l,m,options());
@@ -259,7 +262,7 @@ static void fuzz() {
         {u"aab",{u"人",u"\U0001f469\u200d\U0001f4bb"}},{u"abcde",{u"天",u"天地"}},{u"cc",{u"中",u"e",u"\u0301"}},{u"dd",{u"文"}}};
     auto l=lex(entries);auto m=std::make_shared<Model>();std::mt19937 rng(7152026);std::size_t snapshots=0;
     for(int beam:{1,3,16,64})for(bool duplicates:{false,true})for(bool learned:{false,true}) {
-        auto o=options(beam);o.allowDuplicateSingleCharacters=duplicates;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;o.isolationLambda=2;
+        auto o=options(beam);o.autoSelectMinCodeLength=duplicates?1:0;o.emittedCharacterReward=2;o.wholeInputSingleCharacterReward=5;o.isolationLambda=2;
         SentenceDecoder d(l,m,o),oracle(l,m,o);
         if(learned){SentenceLearningEvent e;e.id="fuzz";e.time=1700000000;e.mode=u"m";e.code=u"aabb";e.text=u"乙国";
             auto learning=SentenceLearningSnapshot::build({e},e.time);d.setLearning(learning,u"m");oracle.setLearning(learning,u"m");}
@@ -326,7 +329,7 @@ static void mapped() {
     auto l=lex({{u"aa",{u"甲",u"乙"}},{u"bb",{u"国",u"\U00020000",u"e\u0301"}},{u"cc",{u"丙"}},{u"dd",{u"中",u"丁"}}});
     int snapshots=0;
     for(bool boundary:{false,true})for(bool duplicate:{false,true}) {
-        auto o=options(32);o.scoreSentenceBoundaries=boundary;o.allowDuplicateSingleCharacters=duplicate;o.isolationLambda=2;o.isolationRankThreshold=1;o.isolationUseLogRank=true;
+        auto o=options(32);o.scoreSentenceBoundaries=boundary;o.autoSelectMinCodeLength=duplicate?1:0;o.isolationLambda=2;o.isolationRankThreshold=1;o.isolationUseLogRank=true;
         SentenceDecoder decoder(l,model,o,supplement),reference(l,model,o,supplement);
         std::shared_ptr<SentenceLockedPrefix> lock;
         for(int round=0;round<4;++round) {
@@ -393,10 +396,11 @@ static void cancellation() {
     check(cancelled && m->calls<2000,"P7 in-flight cancellation at bounded expansion checkpoints");check(!d.memoryStatus().positions,"P7 cancelled partial lattice not cached");
     m->cancel.reset();flag->store(false);check(equal(d.decode(u"aaaaaa",20,true),d.decodeFull(u"aaaaaa",20,true)),"P7 next generation after cancellation");
 }
+#include "sentence_auto_select_probe.h"
 int main(int argc,char** argv) {
     try{if(argc<2)return 2;root=argv[1];lexicalPath=argc>3?fs::path(argv[3]):fs::path{};fs::create_directories(root);std::cout<<std::setprecision(17);
         const std::string selected=argc>2?argv[2]:"all";
-        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"correctness",correctness},{"whole_reward",wholeSingleReward},{"ranking",rankingPriors},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
+        for(const auto& test:std::vector<std::pair<std::string,void(*)()>>{{"auto_select",autoSelectMinimum},{"correctness",correctness},{"whole_reward",wholeSingleReward},{"ranking",rankingPriors},{"caching",caching},{"fuzz",fuzz},{"learning",learning},{"journal",journalTests},{"mapped",mapped},{"history",history},{"cancellation",cancellation}})
             if(selected=="all" || selected==test.first){test.second();std::cout<<"{\"group\":\""<<test.first<<"\",\"status\":\"passed\"}\n"<<std::flush;}
         std::cout<<"{\"status\":\"passed\",\"checks\":"<<checks<<",\"production_model\":false,\"physical_input\":false}\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
