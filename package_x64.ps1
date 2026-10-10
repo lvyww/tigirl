@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version='2026.10.10.1',
+    [string]$Version='2026.10.10.2',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
     [string]$DefaultScheme='',
     [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram-mobile.bin",

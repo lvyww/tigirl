@@ -2,7 +2,7 @@
  #error PackageDir is required
 #endif
 #ifndef ProductVersion
- #define ProductVersion "2026.10.10.1"
+ #define ProductVersion "2026.10.10.2"
 #endif
 [Setup]
 AppId=Tigirl
