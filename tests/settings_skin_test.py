@@ -28,8 +28,8 @@ with tempfile.TemporaryDirectory(prefix='skin-', dir=root/'build') as temporary:
         with Image.open(capture) as im:
             im.convert('RGB').save(output/capture.with_suffix('.png').name)
     with Image.open(fixture/'preview-fixed-before.bmp') as before_preview, Image.open(fixture/'preview-fixed-after.bmp') as after_preview:
-        # Preview child at page (332,68), content origin (18,94), at 96 DPI.
-        region=(350,162,594,310)
+        # Complete preview child at page (332,12), content origin (18,94), at 96 DPI.
+        region=(350,106,594,266)
         assert before_preview.crop(region).tobytes()==after_preview.crop(region).tobytes(), 'Font size changed the preview'
     for dpi in [96, 120, 144, 192]:
         for page in range(5):

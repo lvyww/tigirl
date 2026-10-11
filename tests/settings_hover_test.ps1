@@ -57,6 +57,7 @@ try {
  if($window -eq [IntPtr]::Zero){throw 'Settings window did not open'}
  [void][SettingsHover]::SetWindowPos($window,[IntPtr](-1),40,40,0,0,0x41)
  [void][SettingsHover]::SetForegroundWindow($window)
+ [void][SettingsHover]::SendMessage($window,0x111,[IntPtr]211,[IntPtr]::Zero)
  $content=[SettingsHover]::GetDlgItem($window,222)
  $target=[SettingsHover]::GetDlgItem($content,105)
  $windowClass=New-Object Text.StringBuilder 80

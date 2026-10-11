@@ -1,4 +1,4 @@
-#define NOMINMAX
+﻿#define NOMINMAX
 #include "InputSettings.h"
 #include "SettingsSkin.h"
 #include "SettingsControls.h"
@@ -516,7 +516,7 @@ struct Dialog {
         flag(3,L"中文状态下使用英文标点",56,24,320);flag(4,L"斜杠 / 输出顿号",56,376,320);
         edit(MaxCode,L"最大码长（1–16）",std::to_wstring(initial.maxCodeLength),96);
         flag(8,L"达到最大码长且无重码时自动上屏",132);
-        flag(7,L"空码自动清屏",168,24,320);flag(5,L"回车清屏",168,376,320);flag(6,L"Tab 清屏",204);
+        flag(7,L"空码自动清屏",168,24,320);
         control(Mascot,L"STATIC",L"",SS_OWNERDRAW,446,236,130,72);
         buildingPage=1;
         control(0,L"STATIC",L"字体",0,24,24,72,24);
@@ -552,6 +552,7 @@ struct Dialog {
         control(CodeMask,L"EDIT",wide(initialStyle.codeMask.c_str()),ES_AUTOHSCROLL|WS_TABSTOP,256,336,200,28);
         buildingPage=2;
         flag(1,L"Shift 切换中英文",20,24,280);flag(10,L"反引号 ` 键拼音反查",20,376,320);
+        flag(6,L"Tab 清屏",56,24,320);flag(5,L"回车清屏",56,376,320);
         control(0,L"STATIC",L"翻页键（上一页／下一页）",0,24,132,224,24);
         control(PageKeys,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,256,128,240,160);
         for(auto keys:pageKeys)SendMessageW(item(PageKeys),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(wide(keys)));SendMessageW(item(PageKeys),CB_SETCURSEL,initial.pageKeys,0);
@@ -570,9 +571,7 @@ struct Dialog {
         check(SentenceLearning,L"Tab 锁重上屏后自学习",initialSentence.selfLearning,84,308,276);
         control(0,L"STATIC",L"仅用最优码的高频字数",0,12,128,240,24);
         control(SentenceCommon,L"EDIT",std::to_wstring(initialSentence.commonCharacterLimit).c_str(),ES_AUTOHSCROLL|WS_TABSTOP,268,124,100,28);
-        control(0,L"STATIC",L"0：不限制",0,388,128,188,24,true);
         control(0,L"STATIC",L"全码组句例外字",0,12,168,240,24);
-        control(0,L"STATIC",L"可留空，直接填写汉字",0,268,168,308,24,true);
         control(SentenceWhitelist,L"EDIT",wide(initialSentence.fullCodeWhitelist.c_str()),ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|WS_TABSTOP,12,196,564,88);
         SendMessageW(item(SentenceWhitelist),EM_SETLIMITTEXT,4*1024*1024,0);
         buildingPage=4;title(L"感谢你对虎娘的支持",24);
@@ -617,36 +616,54 @@ struct Dialog {
         scale(GetDpiForWindow(window));page(0);baseline=values();originalFontSelection=wide(initialStyle.font.c_str());ready=true;update();
     }
     void arrange() {
-        // The five pages use fixed logical coordinates; only their viewport scrolls.
-        for(auto& c:controls)if(c.page>=0 && c.page!=1 && c.page!=3){c.x=MulDiv(c.x,584,720);c.w=MulDiv(c.w,584,720);}
-        auto place=[&](int id,int x,int y,int w,int h){for(auto& c:controls)if(GetDlgCtrlID(c.window)==id){c.x=x;c.y=y;c.w=w;c.h=h;}};
-        for(auto& c:controls)if(c.page==1){
-            const int id=GetDlgCtrlID(c.window);
-            if(id==0){
-                if(c.y==24 && c.x==24){c.x=12;c.y=12;c.w=36;}
-                else if(c.y==24 && c.x==464){c.x=220;c.y=12;c.w=32;}
-                else if(c.y==24){c.x=254;c.y=42;c.w=60;}
-                else if(c.y==64){c.x=12;c.y=48;c.w=36;}
-                else if(c.y==216){c.x=12;c.y=120;c.w=130;}
-                else if(c.y==260){c.x=c.x==24?12:332;c.y=228;c.w=138;}
-                else if(c.y==300){c.x=144;c.y=272;c.w=108;SetWindowTextW(c.window,L"时长（毫秒）");}
-                else if(c.y==340){c.x=12;c.y=268;c.w=138;SetWindowTextW(c.window,L"编码伪装");}
-                else if(c.y==376){c.x=12;c.y=316;c.w=560;c.h=32;}
-                else if(c.y==408){c.x=12;c.y=352;c.w=560;c.h=32;}
+        // Shared 16 DIP inset, aligned columns and 28 DIP controls inside the 604 DIP viewport.
+        auto place=[&](int id,int x,int y,int w,int h=28){for(auto& c:controls)if(GetDlgCtrlID(c.window)==id){c.x=x;c.y=y;c.w=w;c.h=h;}};
+        auto caption=[&](int page,const wchar_t* text,int x,int y,int w){
+            for(auto& c:controls)if(c.page==page && GetDlgCtrlID(c.window)==0){
+                wchar_t value[128]{};GetWindowTextW(c.window,value,128);
+                if(std::wstring(value)==text){c.x=x;c.y=y;c.w=w;c.h=24;}
             }
-        }
-        for(auto& c:controls)if(c.page==2 && c.y>=128)c.y-=c.y>=250?96:64;
-        place(FontName,52,8,160,240);place(FontSize,254,8,60,28);place(Theme,52,44,160,220);
-        place(SkinOpen,220,44,48,28);place(SkinRefresh,276,44,48,28);
-        place(LayoutMode,12,80,308,240);place(301,12,184,184,28);
-        place(113,212,184,164,28);place(114,412,184,164,28);place(PageSize,158,116,98,28);
-        place(Mascot,446,236,130,72);place(Preview,332,8,244,164);
-        place(CandidateDelay,158,224,98,28);place(AnnotationDelay,478,224,98,28);
-        place(CodeMask,158,264,418,28);
-        place(Donation,177,38,250,250);
-        place(VersionInfo,16,292,572,16);
-        for(auto& c:controls)if(c.page==4 && GetDlgCtrlID(c.window)==0){c.y=c.title?8:298;c.x=16;c.w=560;c.h=24;}
+        };
+        place(100,16,24,276);place(109,316,24,272);
+        place(103,16,68,276);place(104,316,68,272);
+        caption(0,L"最大码长（1–16）",16,128,156);place(MaxCode,180,124,80);
+        place(108,16,168,572);place(107,16,212,276);
+        place(Mascot,446,236,130,72);
+
+        caption(1,L"字体",16,16,32);caption(1,L"字号",224,16,32);
+        caption(1,L"皮肤",16,56,32);
+        caption(1,L"每页候选（1–10）",16,136,144);
+        caption(1,L"候选延时（毫秒）",16,236,144);
+        caption(1,L"注释／拆分延时",316,236,164);
+        caption(1,L"编码伪装（留空关闭）",16,280,144);
+        for(auto& c:controls)if(c.page==1 && GetDlgCtrlID(c.window)==0 && c.y==280)SetWindowTextW(c.window,L"编码伪装");
+        place(FontName,56,12,160,240);place(FontSize,264,12,56);
+        place(Theme,56,52,160,220);place(SkinOpen,224,52,44);place(SkinRefresh,276,52,44);
+        place(LayoutMode,16,92,304,240);place(PageSize,168,132,80);
+        place(Preview,332,12,244,160);
+        place(301,16,188,184);place(113,216,188,164);place(114,416,188,160);
+        place(CandidateDelay,168,232,80);place(AnnotationDelay,496,232,80);
+        place(CodeMask,168,276,408);
+
+        place(101,16,24,276);place(110,316,24,272);
+        place(106,16,68,276);place(105,316,68,272);
+        caption(2,L"翻页键（上一页／下一页）",16,120,228);place(PageKeys,256,116,320,160);
+        place(111,16,160,176);place(112,216,160,176);place(SelectionEditor,416,160,160);
+        place(AddEnabled,16,212,228);place(AddShortcut,256,212,320);
+        place(RecentEnabled,16,260,228);place(RecentShortcut,256,260,320);
+
+        place(SentenceEnabled,16,16,572);place(SentenceAuto,16,56,276);
+        caption(3,L"保留编码（0–32）",316,60,172);place(SentenceRetained,496,56,80);
+        caption(3,L"自动选重最低码数（0禁用）",16,104,224);place(SentenceAutoSelectMin,244,100,60);
+        place(SentenceLearning,316,100,272);
+        caption(3,L"仅用最优码的高频字数",16,148,224);place(SentenceCommon,244,144,112);
+        caption(3,L"全码组句例外字",16,196,560);place(SentenceWhitelist,16,224,560,80);
+
+        place(Donation,177,38,250,250);place(VersionInfo,16,292,572,16);
+        caption(4,L"感谢你对虎娘的支持",16,8,572);
+        for(auto& c:controls)if(c.page==4 && c.title)SetWindowLongPtrW(c.window,GWL_STYLE,GetWindowLongPtrW(c.window,GWL_STYLE)|SS_CENTER);
     }
+
     void paintFrame(HDC dc) {
         RECT r{};GetClientRect(window,&r);skin.frame(dc,r,currentDpi,highContrast());
         const int state=SaveDC(dc);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,textColor());SelectObject(dc,titleFont?titleFont:font);
@@ -1057,6 +1074,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
                 return DefSubclassProc(hwnd,message,w,l);
             };
             for(int id:{100,105,Save,Cancel}){
+                dialog.page(id==105?2:0);
                 HWND button=dialog.item(id);unsigned paints=0;
                 SetWindowSubclass(button,countPaint,31,reinterpret_cast<DWORD_PTR>(&paints));
                 SendMessageW(button,WM_MOUSEMOVE,0,MAKELPARAM(10,10));UpdateWindow(button);paints=0;
