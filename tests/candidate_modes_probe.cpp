@@ -9,7 +9,7 @@ int main(){
     require(parseCandidateStyle(u"竖排候选\t否\n隐藏候选\t是\n候选窗显示编码\t是\n").layoutMode==6);
     require(parseCandidateStyle(u"皮肤动画\t否\n跟随皮肤字体\t否").skinAnimation);
     require(parseCandidateStyle(u"候选窗动效\t否\n候选窗动效时间(毫秒)\t321").animationEnabled);
-    require(parseCandidateStyle(u"候选窗动效时间(毫秒)\t321").animationDurationMs==100);
+    require(parseCandidateStyle(u"候选窗动效时间(毫秒)\t321").animationDurationMs==70);
     for(int mode:{2,4,5,6,7}){
         auto style=parseCandidateStyle(u"候选布局\t"+std::u16string(1,char16_t(u'0'+mode)));
         require(style.layoutMode==mode);require(style.vertical==(mode==3 || mode==4 || mode==6));

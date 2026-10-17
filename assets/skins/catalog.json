@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "naming": "角色-主题",
+  "reserved": [
+    "默认.ssf"
+  ],
+  "skins": [
+    {
+      "name": "虎娘-元气",
+      "file": "虎娘-元气.ssf",
+      "previous_files": [
+        "元气虎娘.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-虎纹奶油",
+      "file": "虎娘-虎纹奶油.ssf",
+      "previous_files": [
+        "虎纹奶油.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-蜜桃",
+      "file": "虎娘-蜜桃.ssf",
+      "previous_files": [
+        "蜜桃虎娘.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-雨竹听风",
+      "file": "虎娘-雨竹听风.ssf",
+      "previous_files": [
+        "雨竹听风.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-雪夜铃兰",
+      "file": "虎娘-雪夜铃兰.ssf",
+      "previous_files": [
+        "雪夜铃兰.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-霓虹电玩",
+      "file": "虎娘-霓虹电玩.ssf",
+      "previous_files": [
+        "霓虹电玩.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-桂月团圆",
+      "file": "虎娘-桂月团圆.ssf",
+      "previous_files": [
+        "桂月团圆.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-柚光汽水",
+      "file": "虎娘-柚光汽水.ssf",
+      "previous_files": [
+        "柚光汽水.ssf"
+      ]
+    },
+    {
+      "name": "虎娘-幽焰小恶魔",
+      "file": "虎娘-幽焰小恶魔.ssf",
+      "previous_files": [
+        "幽焰小恶魔.ssf"
+      ]
+    },
+    {
+      "name": "虎兄贵-健身",
+      "file": "虎兄贵-健身.ssf",
+      "previous_files": [
+        "虎兄贵.ssf",
+        "虎兄弟-健身.ssf"
+      ]
+    },
+    {
+      "name": "鲸鱼娘-蓝鲸雪语",
+      "file": "鲸鱼娘-蓝鲸雪语.ssf",
+      "previous_files": [
+        "鲸鱼娘.ssf",
+        "蓝鲸雪语.ssf"
+      ]
+    }
+  ],
+  "archived": [
+    {
+      "name": "虎娘-绯绒小恶魔",
+      "file": "虎娘-绯绒小恶魔.ssf",
+      "previous_files": [
+        "绯绒小恶魔.ssf"
+      ],
+      "archived_on": "2026-10-18",
+      "archive_file": "皮肤/归档/20261018-小恶魔/虎娘-绯绒小恶魔.ssf"
+    },
+    {
+      "name": "虎娘-莓糖小恶魔",
+      "file": "虎娘-莓糖小恶魔.ssf",
+      "previous_files": [
+        "莓糖小恶魔.ssf"
+      ],
+      "archived_on": "2026-10-18",
+      "archive_file": "皮肤/归档/20261018-小恶魔/虎娘-莓糖小恶魔.ssf"
+    }
+  ]
+}

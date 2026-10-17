@@ -37,7 +37,10 @@ try{
  $script:registry.Registry32=Join-Path $other 'x86\Tigirl.dll'
  $record=Resolve-OwnedRecord
  Check (SamePath $record.directory $dir) 'Split registration did not prefer the x64 managed generation'
- Check ((Get-Content $log -Raw) -match 'Repairing split x64/x86 registration') 'Split registration repair was not logged'
+ Check ((Get-Content $log -Raw) -match 'Repairing split native/x86 registration') 'Split registration repair was not logged'
+ $script:registry.Registry64=Join-Path $dir 'arm64\Tigirl.dll'
+ Check (SamePath (Get-ManagedRegistrationDirectory $script:registry.Registry64 'native') $dir) 'ARM64 managed registration was not recognized'
+ Check (SamePath (Resolve-OwnedRecord).directory $dir) 'ARM64 registration was not adopted'
  $script:registry.Registry32='C:\ForeignIme\Tigirl.dll'
  $blocked=$false;try{Resolve-OwnedRecord}catch{$blocked=$true}
  Check $blocked 'Registration outside Program Files\Tigirl managed versions was adopted'

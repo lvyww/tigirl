@@ -94,6 +94,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/run_core_tests.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/sentence_digit_bindings_test.py --cxx cl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/sentence_review_test.py --cxx cl
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/SentenceWorkerProbe.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
@@ -107,6 +109,14 @@ jobs:
           python tests/candidate_orientation_test.py --cxx cl --ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/candidate_host_dpi_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/CandidateAnimationRenderProbe.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "./build/tests/$env:TIGIRL_PLATFORM/candidate_animation_render_probe.exe" resources/Skins
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" tests/SsfScalingProbe.vcxproj /nr:false /p:Configuration=Release "/p:Platform=$env:TIGIRL_PLATFORM" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/ssf_scaling_test.py --probe "build/tests/$env:TIGIRL_PLATFORM/ssf_scaling_probe.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: TSF edit-session candidate layout regression (no registration or model)
         shell: pwsh
@@ -136,6 +146,7 @@ jobs:
       - run: python -Werror tests/test_sentence_review_cleanup.py -v
       - run: python tests/setup_resilience_policy_test.py
       - run: python tests/bundled_schemas_test.py --verify-only
+      - run: python tests/sentence_digit_bindings_test.py --cxx clang++
       - run: python tests/run_core_tests.py --cxx clang++ --sanitize
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1

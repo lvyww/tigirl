@@ -1,0 +1,80 @@
+[
+  {
+    "id": "03",
+    "name": "虎娘-幽焰小恶魔",
+    "slug": "violet-ghostflame",
+    "ink": "#ECDAFF",
+    "first": "#8BF5DB",
+    "hint": "#B39BCB",
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22,
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1395,
+      "min_height": 873,
+      "stretch_horizontal": [
+        0,
+        350,
+        1044
+      ],
+      "stretch_vertical": [
+        0,
+        570,
+        302
+      ],
+      "insets": [
+        590,
+        220,
+        210,
+        230
+      ],
+      "panel_bounds": [
+        280,
+        590,
+        1500,
+        700
+      ],
+      "character_bounds": [
+        742,
+        100,
+        1760,
+        563
+      ]
+    },
+    "vertical": {
+      "file": "vertical-final.png",
+      "min_width": 1085,
+      "min_height": 1185,
+      "stretch_horizontal": [
+        0,
+        405,
+        679
+      ],
+      "stretch_vertical": [
+        0,
+        315,
+        869
+      ],
+      "insets": [
+        260,
+        280,
+        265,
+        655
+      ],
+      "panel_bounds": [
+        230,
+        300,
+        600,
+        930
+      ],
+      "character_bounds": [
+        710,
+        400,
+        1250,
+        1240
+      ]
+    }
+  }
+]

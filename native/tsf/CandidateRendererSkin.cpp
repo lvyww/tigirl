@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include "CandidateRenderer.h"
+#include "SkinRasterFilter.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -12,7 +13,10 @@ void CandidateRenderer::layoutSkin(const CandidatePresentation& presentation,flo
     const auto* next=skinResources_->definition.choose(style_.vertical,skinPart_!=2,skinPart_!=1);
     if(!next)throw std::runtime_error("Skin layout unavailable");
     const auto* image=&skinResources_->images.at(next->image);
-    if(image!=skinImage_){skinBitmap_.Reset();skinBitmapFrame_=skinRenderedFrame_=static_cast<std::size_t>(-1);}
+    if(image!=skinImage_){
+        skinBitmap_.Reset();skinBitmapFrame_=skinRenderedFrame_=static_cast<std::size_t>(-1);
+        skinRasters_.clear();skinRasterBytes_=0;
+    }
     skinLayout_=next;skinImage_=image;
     layouts_.clear();rectangles_.clear();items_.clear();inks_.clear();annotations_.clear();
     const float fontSize=static_cast<float>(style_.fontSize);
@@ -52,20 +56,69 @@ void CandidateRenderer::layoutSkin(const CandidatePresentation& presentation,flo
     if(skinPart_!=1 && presentation.items.empty() && presentation.placeholder.empty()){
         const auto& m=next->candidates;y+=static_cast<float>(m.top)+row+static_cast<float>(m.bottom);
     }
-    // Insets refer to the authored canvas. Shrinking that canvas while keeping
-    // text at its original coordinates moves text outside the painted panel.
-    // Grow for content, then apply global scaling to both art and text.
-    const float minWidth=static_cast<float>(std::max(image->width,static_cast<unsigned>(std::max(0,next->horizontal.before)+std::max(0,next->horizontal.after)+1)));
-    const float minHeight=static_cast<float>(std::max(image->height,static_cast<unsigned>(std::max(0,next->vertical.before)+std::max(0,next->vertical.after)+1)));
+    // Preserve the authored canvas unless the skin opts into smaller bounds.
+    // Never squeeze fixed end slices; content plus its insets grows the center.
+    // Text coordinates retain the original insets on both axes.
+    const unsigned authoredMinimum=next->minimumWidth>0?static_cast<unsigned>(next->minimumWidth):image->width;
+    const float minWidth=static_cast<float>(std::max(authoredMinimum,static_cast<unsigned>(std::max(0,next->horizontal.before)+std::max(0,next->horizontal.after)+1)));
+    const unsigned authoredHeight=next->minimumHeight>0?static_cast<unsigned>(next->minimumHeight):image->height;
+    const float minHeight=static_cast<float>(std::max(authoredHeight,static_cast<unsigned>(std::max(0,next->vertical.before)+std::max(0,next->vertical.after)+1)));
     width_=std::max(1.f,std::min(maxWidth,std::max(minWidth,right)));height_=std::max(minHeight,y);
 }
 void CandidateRenderer::prepareSkinBitmap(){
     if(!skinImage_)return;
     const auto index=style_.skinAnimation?skin::animationFrame(skinImage_->delays,skinImage_->plays,GetTickCount64()-skinStarted_).index:0;
-    if(skinBitmap_ && skinBitmapFrame_==index)return;
+    float dpiX=96,dpiY=96;target_->GetDpi(&dpiX,&dpiY);
+    // D2D 1.0's bilinear sampler only sees four texels, even for a 4:1 or
+    // greater reduction. Profile E prefilters at 1.5 times the user's physical
+    // font-scale/DPI resolution, capped at the original image dimensions.
+    // Keep source pixels for small reductions/enlarging; text is drawn separately.
+    const auto extent=[](UINT original,float dpi){return std::max(1u,static_cast<UINT>(std::ceil(original*std::min(1.,static_cast<double>(dpi)/96.))));};
+    const UINT width=extent(skinImage_->width,dpiX*skinRasterOversample),height=extent(skinImage_->height,dpiY*skinRasterOversample);
+    if(skinBitmap_ && skinBitmapFrame_==index && skinBitmapWidth_==width && skinBitmapHeight_==height)return;
     skinBitmap_.Reset();
-    const auto properties=D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED),96,96);
-    check(target_->CreateBitmap(D2D1::SizeU(skinImage_->width,skinImage_->height),skinImage_->frames.at(index).data(),skinImage_->width*4,properties,&skinBitmap_));skinBitmapFrame_=index;
+    const auto& original=skinImage_->frames.at(index);
+    const std::uint32_t* pixels=original.data();
+    SkinRaster filtered;
+    if(width!=skinImage_->width || height!=skinImage_->height){
+        const auto found=std::find_if(skinRasters_.begin(),skinRasters_.end(),[&](const SkinRaster& r){return r.frame==index && r.width==width && r.height==height;});
+        if(found!=skinRasters_.end()){
+            std::rotate(found,found+1,skinRasters_.end());pixels=skinRasters_.back().pixels.data();
+        }else{
+            Microsoft::WRL::ComPtr<IWICBitmap> source;
+            check(imaging_->CreateBitmapFromMemory(skinImage_->width,skinImage_->height,GUID_WICPixelFormat32bppPBGRA,
+                skinImage_->width*4,static_cast<UINT>(original.size()*4),reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(original.data())),&source));
+            Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;check(imaging_->CreateBitmapScaler(&scaler));
+            // Unlike ordinary cubic, this kernel widens with the reduction ratio.
+            // Filtering premultiplied color and alpha together avoids dark/color
+            // fringes from invisible RGB, including composited APNG frames.
+            check(scaler->Initialize(source.Get(),width,height,WICBitmapInterpolationModeHighQualityCubic));
+            filtered.frame=index;filtered.width=width;filtered.height=height;
+            filtered.pixels.resize(static_cast<std::size_t>(width)*height);
+            const auto bytes=filtered.pixels.size()*4;
+            check(scaler->CopyPixels(nullptr,width*4,static_cast<UINT>(bytes),reinterpret_cast<BYTE*>(filtered.pixels.data())));
+            // Cubic reconstruction may overshoot on translucent edges. Keep
+            // every channel within alpha before giving the surface to D2D.
+            for(auto& p:filtered.pixels){const auto a=p>>24;p=(a<<24)|(std::min((p>>16)&255,a)<<16)|(std::min((p>>8)&255,a)<<8)|std::min(p&255,a);}
+            // Sharpen once on cache miss, in straight RGB, keeping alpha and
+            // translucent edges unchanged. Text is not part of this bitmap.
+            sharpenSkinRaster(filtered.pixels,width,height);
+            pixels=filtered.pixels.data();
+            constexpr std::size_t budget=16u*1024u*1024u,entries=8;
+            if(bytes<=budget){
+                while(!skinRasters_.empty() && (skinRasterBytes_+bytes>budget || skinRasters_.size()>=entries)){
+                    skinRasterBytes_-=skinRasters_.front().pixels.size()*4;skinRasters_.erase(skinRasters_.begin());
+                }
+                skinRasterBytes_+=bytes;skinRasters_.push_back(std::move(filtered));pixels=skinRasters_.back().pixels.data();
+            } // Unusually large results are uploaded once without retaining CPU pixels.
+        }
+    }
+    // Bitmap DPI keeps source rectangles in their original authored coordinates.
+    // Stretch bands, layout bounds and hit rectangles therefore do not change.
+    const auto properties=D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED),
+        96.f*width/skinImage_->width,96.f*height/skinImage_->height);
+    check(target_->CreateBitmap(D2D1::SizeU(width,height),pixels,width*4,properties,&skinBitmap_));
+    skinBitmapFrame_=index;skinBitmapWidth_=width;skinBitmapHeight_=height;
 }
 void CandidateRenderer::drawSkinBackground(float width,float height){
     const auto horizontal=skin::sliceAxis(skinImage_->width,width,skinLayout_->horizontal);

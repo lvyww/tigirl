@@ -1,0 +1,7 @@
+{
+  "slug": "crimson-velvet",
+  "orientation": "vertical",
+  "file": "vertical-production.png",
+  "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/crimson-velvet/vertical-final.png",
+  "prompt": "Local cleanup ONLY of the upper-left bow in the supplied RGBA image. Remove ALL dangling red ribbon tails under the left bow, completely. Keep the two main bow loops and round gold bell intact, but no ribbon at all hanging below the bell. Everything in the LEFT MARGIN below the bottom of the gold bell must become transparent background, leaving only the existing straight vertical black/gold frame rail. The lower end of this simplified bow/bell is at y=220 on this 1254x1254 image. The band y=245..275 across the whole image must contain only straight left/right vertical frame rails and solid ivory paper, transparent outside. Do NOT move, reshape or resize the girl on the right, her hands, face, horns, ears, trident, wings, tail, dress, or the frame. Do not add anything. Same square canvas, opaque ivory paper interior, real transparent outside."
+}

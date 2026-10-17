@@ -1,0 +1,51 @@
+{
+  "generator": "built-in image_gen",
+  "date": "2026-10-17",
+  "kind": "visual-direction-only",
+  "images": [
+    {
+      "id": "01",
+      "name": "绯绒小恶魔",
+      "file": "01-虎娘-绯绒小恶魔.png",
+      "summary": "红黑丝绒、香槟金、蝴蝶结铃铛；奶油色候选区，俏皮哥特风。",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-6d744c1a-803b-4f1f-9d86-92d93774c82f.png",
+      "prompt_file": "prompts.json",
+      "size": [
+        1536,
+        1024
+      ],
+      "bytes": 2210087,
+      "sha256": "d3fda124db521122eee4c9c74e5dbe29318aa655a13830eabb66d86ffdd8dabb"
+    },
+    {
+      "id": "02",
+      "name": "莓糖小恶魔",
+      "file": "02-虎娘-莓糖小恶魔.png",
+      "summary": "莓粉、奶油白、淡紫；软糖小角与蝙蝠结，轻甜恶作剧风。",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-6f44c578-82db-4241-97ed-9a5ebec96ff7.png",
+      "prompt_file": "prompts.json",
+      "size": [
+        1536,
+        1024
+      ],
+      "bytes": 1862480,
+      "sha256": "2fc1049119511c00a4b7a5ec37a1b9423d2f87987552dc0bd3e9e58cb05e1b30"
+    },
+    {
+      "id": "03",
+      "name": "幽焰小恶魔",
+      "file": "03-虎娘-幽焰小恶魔.png",
+      "summary": "紫黑、青焰、银白；短披风与魔法书，夜色魔法风。",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-f9f03827-f91e-4cbf-b784-adae72ad39f7.png",
+      "prompt_file": "prompts.json",
+      "size": [
+        1536,
+        1024
+      ],
+      "bytes": 2037542,
+      "sha256": "2e08ca8c711b1675f594689ebbef647a01dccbe416766dba9fbc3cb5a66a059f"
+    }
+  ],
+  "skin_gallery": "../little-devil-skins-20261017/index.html",
+  "production_assets": "../../assets/skins/little-devil-20261017/skins.json"
+}

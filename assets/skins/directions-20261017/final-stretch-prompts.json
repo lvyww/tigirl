@@ -1,0 +1,18 @@
+[
+  {
+    "id": "03",
+    "name": "雪夜铃兰",
+    "slug": "snow-lily",
+    "variant": "vertical-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/snow-lily/vertical-stretchable.png",
+    "prompt": "Use case: precise-object-edit. Input 1 is the edit target, a transparent skin asset. Preserve its exact tiger girl identity, costume, winter lily colors and overall frame. Make one technical layout correction: put the ENTIRE girl (including ears) BELOW 40 percent canvas height, still at bottom-right. Shrink the top-left flower/bow cluster so every part of it including bow tails and snow stays ABOVE 22 percent height. The wide horizontal band between 25 and 38 percent canvas height must therefore contain ONLY the two straight blue side borders and blank white panel interior, with completely transparent area beyond the borders. No flower, snow, ribbon tail, character ear, particle or other decoration may intersect this band. This empty band will stretch vertically in software. Keep same square canvas, same upright frame dimensions and bottom ornaments. Tight clean silhouette with actual alpha transparency, no colored halo or gray noise. No words, letters, numbers, icons or layout guides. One asset only."
+  },
+  {
+    "id": "09",
+    "name": "深海舰长",
+    "slug": "sea-captain",
+    "variant": "vertical-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/sea-captain/vertical.png",
+    "prompt": "Use case: precise-object-edit. Input 1 is the edit target, a transparent skin asset. Preserve the exact adult muscular male tiger captain identity, outfit, ivory/navy/brass nautical theme and right-bottom pose. Make one technical frame layout correction: keep ALL top-left anchor and attached waves above 22 percent canvas height. Put the entire captain below 40 percent canvas height (including cap). The wide horizontal band between 25 and 38 percent canvas height must contain ONLY two straight vertical navy/brass frame borders and the plain ivory interior, transparent outside. Remove rope twists, waves, bubbles and all other ornaments from this band, replacing them with straight simple vertical lines. This band stretches vertically in software; it must be absolutely plain on both sides. Keep bottom waves, compass and rope ornaments. Keep same square upright canvas and frame size. Crisp actual RGBA transparency outside, no halo/no noise. No words, letters, numbers or guides. One asset only."
+  }
+]

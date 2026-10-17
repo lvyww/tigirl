@@ -1,0 +1,14 @@
+[
+  {
+    "orientation": "vertical",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/moon-osmanthus/vertical-production.png",
+    "file": "vertical-final.png",
+    "prompt": "Precise local edit of the supplied transparent tiger-girl skin. Repair the large unwanted transparent/dark hole inside the tall writing panel: fill the ENTIRE enclosed interior with SOLID OPAQUE pale warm ivory parchment paper, uniform light ivory from every inner rim to every other inner rim, absolutely no holes, dark stains, fades, cutouts or translucent patches. This is real physical opaque paper, not empty space. Keep alpha transparency ONLY OUTSIDE the gold frame and character. Preserve exactly the girl, mooncake, costume, moon, flowers, clouds, palette, existing positions and the straight vertical border section above the moon. Also fit the complete artwork within a 2% clear outer margin so the right and bottom of the girl are not cropped. Do not add any text, marks or extra ornaments. One square RGBA production image."
+  },
+  {
+    "orientation": "horizontal",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/moon-osmanthus/horizontal-production.png",
+    "file": "horizontal-final.png",
+    "prompt": "Precise technical cleanup of this transparent horizontal tiger-girl candidate popup. Keep the exact same large girl, face, head pose, costume, mooncake, bells, moon, palette and main top-right composition. Keep the left corner floral cluster. Clean three small regions: (1) remove all leaves and flowers hanging halfway down BOTH side edges; side flowers must end above 62% canvas height, while bottom corner ornaments stay below 80% height. The band y=65%..75% must be only straight thin gold vertical rails and opaque blank ivory paper with transparent outside, nothing else across the entire image. (2) shift the small navy clouds above the panel from the center-left to the right, so the entire vertical strip x=26%..45% contains only straight horizontal gold rails and blank opaque ivory panel, transparent above and below. No clouds or blossoms in that strip. (3) fully opaque flat ivory paper fills every part inside the frame, no transparent holes. Do not stretch or resize the character, no additional decorations, no text, no guide lines. Same wide 2:1 transparent canvas with outer alpha margin; ONE image."
+  }
+]

@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\common.ps1"
 . "$PSScriptRoot\..\data.ps1"
 . "$PSScriptRoot\..\retirement.ps1"
-Assert-X64System
+Assert-SupportedSystem
 if(!(Test-Administrator)){throw 'Administrator privileges are required.'}
 $allowed=@((Join-Path $env:ProgramFiles 'Tigirl'))
 $InstallRoot=[IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
@@ -53,7 +53,8 @@ function Get-ManagedRegistrationDirectory([string]$Dll,[string]$Architecture){
  try{$full=[IO.Path]::GetFullPath($Dll)}catch{return $null}
  if((Split-Path $full -Leaf) -ne 'Tigirl.dll'){return $null}
  $archDir=Split-Path $full -Parent
- if((Split-Path $archDir -Leaf) -ne $Architecture){return $null}
+ $allowedArchitectures=if($Architecture -eq 'native'){@('x64','arm64')}else{@($Architecture)}
+ if((Split-Path $archDir -Leaf) -notin $allowedArchitectures){return $null}
  $directory=Split-Path $archDir -Parent
  try{Assert-VersionPath $directory}catch{return $null}
  return $directory
@@ -82,7 +83,7 @@ function Get-MachineUriCommand {
  return $null
 }
 function Assert-NoForeignMachineState($Record){
- foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){
+ foreach($pair in @(@('Registry64','native'),@('Registry32','x86'))){
   $actual=Get-ComPath $pair[0]
   if($actual -and !(Get-ManagedRegistrationDirectory $actual $pair[1])){throw 'Input method registration belongs to another installation.'}
  }
@@ -97,9 +98,9 @@ function Assert-NoForeignMachineState($Record){
 function Resolve-OwnedRecord {
  $record=Read-Record
  Assert-NoForeignMachineState $record
- $d64=Get-ManagedRegistrationDirectory (Get-ComPath 'Registry64') 'x64'
+ $d64=Get-ManagedRegistrationDirectory (Get-ComPath 'Registry64') 'native'
  $d32=Get-ManagedRegistrationDirectory (Get-ComPath 'Registry32') 'x86'
- if($d64 -and $d32 -and $d64 -ne $d32){Write-SetupLog "Repairing split x64/x86 registration: x64=$d64 x86=$d32"}
+ if($d64 -and $d32 -and $d64 -ne $d32){Write-SetupLog "Repairing split native/x86 registration: native=$d64 x86=$d32"}
  $directory=if($d64){$d64}elseif($d32){$d32}elseif($record){$record.directory}else{$null}
  if(!$directory){return $null}
  if($record -and $record.directory -eq $directory){return $record}
@@ -113,11 +114,11 @@ function Test-RollbackableRecord($Record){
  # Old-identity DLLs cannot restore the new registration during rollback.
  $common=Join-Path $Record.directory 'common.ps1'
  if(!(Test-Path $common) -or !(Select-String -LiteralPath $common -SimpleMatch $NativeTigerClsid -Quiet)){return $false}
- try{Assert-VersionPath $Record.directory}catch{return $false}
- return (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'x64') -PathType Leaf) -and (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'x86') -PathType Leaf)
+ try{Assert-VersionPath $Record.directory;Assert-InstallArchitecture $Record.directory}catch{return $false}
+ return (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'native') -PathType Leaf) -and (Test-Path -LiteralPath (Get-PackageDll $Record.directory 'x86') -PathType Leaf)
 }
 function Assert-RegisteredDirectory([string]$Directory){
- if((Get-ComPath 'Registry64') -ne (Get-PackageDll $Directory 'x64') -or (Get-ComPath 'Registry32') -ne (Get-PackageDll $Directory 'x86')){throw 'COM registration verification failed.'}
+ if((Get-ComPath 'Registry64') -ne (Get-PackageDll $Directory 'native') -or (Get-ComPath 'Registry32') -ne (Get-PackageDll $Directory 'x86')){throw 'COM registration verification failed.'}
 }
 function Remove-RegistrationKeys {
  foreach($view in @('Registry64','Registry32')){
@@ -140,7 +141,7 @@ function Restore-Transaction {
  }
  if($j.previous){Assert-VersionPath $j.previous.directory}
  # Accept only the interrupted transaction's old/new COM paths, including a half registration.
- foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){
+ foreach($pair in @(@('Registry64','native'),@('Registry32','x86'))){
   $v=Get-ComPath $pair[0];$valid=@((Get-PackageDll $j.directory $pair[1]))
   if($j.previous){$valid+=(Get-PackageDll $j.previous.directory $pair[1])}
   if($v -and $v -notin $valid){throw 'Registration changed after interruption; recovery stopped.'}
@@ -215,6 +216,7 @@ try {
  }
  if($Action -in @('Preflight','Begin')){
   if($Generation -notmatch '^[a-f0-9]{32}$'){throw 'Invalid generation.'}
+  Assert-InstallArchitecture $Payload
   $manifest=Assert-Package $Payload
   New-Item $InstallRoot -ItemType Directory -Force|Out-Null
   if($record -and $record.version -match '^\d+\.\d+\.\d+\.\d+$' -and [version]$manifest.version -lt [version]$record.version){throw 'Downgrading is not supported.'}
@@ -261,12 +263,12 @@ try {
    Write-SetupLog 'Stage Unregister'
    $hasRegistration=(Get-ComPath 'Registry64') -or (Get-ComPath 'Registry32')
    if($hasRegistration){
-    $unregisterDirectory=Get-ManagedRegistrationDirectory (Get-ComPath 'Registry64') 'x64'
+    $unregisterDirectory=Get-ManagedRegistrationDirectory (Get-ComPath 'Registry64') 'native'
     if(!$unregisterDirectory -and $record){$unregisterDirectory=$record.directory}
-    if($unregisterDirectory -and (Test-Path -LiteralPath (Get-PackageDll $unregisterDirectory 'x64') -PathType Leaf)){
+    if($unregisterDirectory -and (Test-Path -LiteralPath (Get-PackageDll $unregisterDirectory 'native') -PathType Leaf)){
      try{Invoke-Registration $unregisterDirectory -Remove}catch{Write-SetupLog ('regsvr32 unregistration failed; removing Tigirl registration keys directly: '+$_.Exception.Message);Remove-RegistrationKeys}
     }else{
-     Write-SetupLog 'Registered x64 DLL is unavailable; removing Tigirl registration keys directly.'
+     Write-SetupLog 'Registered native DLL is unavailable; removing Tigirl registration keys directly.'
      Remove-RegistrationKeys
     }
    }

@@ -1,0 +1,118 @@
+{
+  "generator": "built-in image_gen",
+  "status": "complete",
+  "created": "2026-10-17",
+  "stage": "visual_directions_not_installable_skins",
+  "files": [
+    {
+      "id": "01",
+      "name": "桂月团圆",
+      "group": "虎娘",
+      "filename": "01-虎娘-桂月团圆.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-3759f418-7e52-446e-8f1d-d1ecb2925245.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "7e3b75d36fba3072f75651c9ff576a40be4718974818dcfeec7f7cdaddc033b3",
+      "bytes": 2085680
+    },
+    {
+      "id": "02",
+      "name": "雨竹听风",
+      "group": "虎娘",
+      "filename": "02-虎娘-雨竹听风.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-d968b333-8cf6-4ec0-bb12-8b827221b094.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "e1484509e25fd39f60c82cad3ca393c7a4100552c3b9ae47f5297e3d39ec6215",
+      "bytes": 1997407
+    },
+    {
+      "id": "03",
+      "name": "雪夜铃兰",
+      "group": "虎娘",
+      "filename": "03-虎娘-雪夜铃兰.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-c7d2a11d-9588-4b6d-85fd-c0f9243c37bf.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "2df0ff336642618d507ca7f052e94780d870122941d600b997497fefca7390c0",
+      "bytes": 1960004
+    },
+    {
+      "id": "04",
+      "name": "星糖魔法",
+      "group": "虎娘",
+      "filename": "04-虎娘-星糖魔法.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-174a7dc9-6d84-4779-b848-3bbf7eab5182.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "08af13e1304d1b89c14693fe51773c799af40c17d7b10eacb9cd8e19430db9c5",
+      "bytes": 1673315
+    },
+    {
+      "id": "05",
+      "name": "柚光汽水",
+      "group": "虎娘",
+      "filename": "05-虎娘-柚光汽水.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-2b54f4b4-91de-48fe-b011-a2600beed291.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "042df99595580dfe87b38b1e9babc9b08b4c1055d1ebd8cf774b39e9cfda4c5e",
+      "bytes": 1738712
+    },
+    {
+      "id": "06",
+      "name": "枫糖邮局",
+      "group": "虎娘",
+      "filename": "06-虎娘-枫糖邮局.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-35dd5a12-8607-467e-bc0e-a31c099b301f.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "5189967263e84ba6210597bb46c9322d1e0ba54a1c10c3b2ae2675b9f33c25b9",
+      "bytes": 2202836
+    },
+    {
+      "id": "07",
+      "name": "霓虹电玩",
+      "group": "虎娘",
+      "filename": "07-虎娘-霓虹电玩.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-82cf61b6-a8e1-48a7-8df9-b784be1e4c65.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "f733d87f82137c8f6b1ed2b9d3081f474e79a53b35ce6ee271ac25ee1e0c3d8d",
+      "bytes": 1515794
+    },
+    {
+      "id": "08",
+      "name": "赤焰武馆",
+      "group": "虎兄贵",
+      "filename": "08-虎兄贵-赤焰武馆.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-37260028-862a-4c17-bdb7-4ce39d10d450.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "f77d60ccf72f1d0f2aa5f9433a2ad49a610ef5aaddae285e601ee188226df98e",
+      "bytes": 2176424
+    },
+    {
+      "id": "09",
+      "name": "深海舰长",
+      "group": "虎兄贵",
+      "filename": "09-虎兄贵-深海舰长.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-54757090-d864-4973-88b1-7f9a40777f35.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "20630de818fa28e4828b382fcf69e0ac10e2a72a8c2e959fe3e096c2b21fecbb",
+      "bytes": 1931037
+    },
+    {
+      "id": "10",
+      "name": "山野露营",
+      "group": "虎兄贵",
+      "filename": "10-虎兄贵-山野露营.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-31df4498-6aef-4043-a6ff-54f7026822d2.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "e6bde94790ee68d0846c6a588d75c0ba3b5986b43b782cd9c6a9527e50893a6f",
+      "bytes": 2201015
+    }
+  ]
+}

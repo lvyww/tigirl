@@ -1,0 +1,272 @@
+[
+  {
+    "id": "02",
+    "name": "虎娘-雨竹听风",
+    "slug": "rain-bamboo",
+    "ink": "#254F49",
+    "first": "#956421",
+    "hint": "#627D72",
+    "horizontal": {
+      "file": "horizontal-production.png",
+      "min_width": 1455,
+      "insets": [
+        455,
+        175,
+        220,
+        300
+      ],
+      "stretch_horizontal": [
+        0,
+        540,
+        914
+      ],
+      "stretch_vertical": [
+        0,
+        540,
+        287
+      ],
+      "min_height": 828
+    },
+    "vertical": {
+      "file": "vertical.png",
+      "min_width": 1235,
+      "min_height": 1185,
+      "insets": [
+        275,
+        275,
+        230,
+        620
+      ],
+      "stretch_horizontal": [
+        0,
+        480,
+        754
+      ],
+      "stretch_vertical": [
+        0,
+        220,
+        964
+      ]
+    },
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22
+  },
+  {
+    "id": "03",
+    "name": "虎娘-雪夜铃兰",
+    "slug": "snow-lily",
+    "ink": "#283E59",
+    "first": "#3C6F9B",
+    "hint": "#62788D",
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1575,
+      "insets": [
+        485,
+        145,
+        225,
+        250
+      ],
+      "stretch_horizontal": [
+        0,
+        380,
+        1194
+      ],
+      "stretch_vertical": [
+        0,
+        590,
+        257
+      ],
+      "min_height": 848
+    },
+    "vertical": {
+      "file": "vertical-final.png",
+      "min_width": 1230,
+      "min_height": 1065,
+      "insets": [
+        265,
+        370,
+        320,
+        590
+      ],
+      "stretch_horizontal": [
+        0,
+        565,
+        664
+      ],
+      "stretch_vertical": [
+        0,
+        300,
+        764
+      ]
+    },
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22
+  },
+  {
+    "id": "07",
+    "name": "虎娘-霓虹电玩",
+    "slug": "neon-arcade",
+    "ink": "#E6ECF3",
+    "first": "#F68AB5",
+    "hint": "#9EBACF",
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1175,
+      "insets": [
+        395,
+        170,
+        180,
+        220
+      ],
+      "stretch_horizontal": [
+        0,
+        450,
+        724
+      ],
+      "stretch_vertical": [
+        0,
+        430,
+        285
+      ],
+      "min_height": 756
+    },
+    "vertical": {
+      "file": "vertical-opaque.png",
+      "min_width": 1225,
+      "min_height": 1205,
+      "insets": [
+        220,
+        260,
+        200,
+        610
+      ],
+      "stretch_horizontal": [
+        0,
+        385,
+        839
+      ],
+      "stretch_vertical": [
+        0,
+        200,
+        1004
+      ]
+    },
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22
+  },
+  {
+    "id": "01",
+    "name": "虎娘-桂月团圆",
+    "slug": "moon-osmanthus",
+    "ink": "#233E5B",
+    "first": "#AA681D",
+    "hint": "#687A8A",
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22,
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1555,
+      "min_height": 858,
+      "stretch_horizontal": [
+        0,
+        420,
+        1134
+      ],
+      "stretch_vertical": [
+        0,
+        575,
+        282
+      ],
+      "insets": [
+        580,
+        235,
+        180,
+        190
+      ]
+    },
+    "vertical": {
+      "file": "vertical-final.png",
+      "min_width": 1215,
+      "min_height": 1155,
+      "stretch_horizontal": [
+        0,
+        465,
+        749
+      ],
+      "stretch_vertical": [
+        0,
+        340,
+        814
+      ],
+      "insets": [
+        320,
+        300,
+        200,
+        780
+      ]
+    }
+  },
+  {
+    "id": "05",
+    "name": "虎娘-柚光汽水",
+    "slug": "grapefruit-soda",
+    "ink": "#315F58",
+    "first": "#B65137",
+    "hint": "#657F76",
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22,
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1465,
+      "min_height": 858,
+      "stretch_horizontal": [
+        0,
+        520,
+        944
+      ],
+      "stretch_vertical": [
+        0,
+        630,
+        227
+      ],
+      "insets": [
+        600,
+        210,
+        210,
+        210
+      ]
+    },
+    "vertical": {
+      "file": "vertical-production.png",
+      "min_width": 1195,
+      "min_height": 1155,
+      "stretch_horizontal": [
+        0,
+        470,
+        724
+      ],
+      "stretch_vertical": [
+        0,
+        355,
+        799
+      ],
+      "insets": [
+        290,
+        325,
+        225,
+        760
+      ]
+    }
+  }
+]

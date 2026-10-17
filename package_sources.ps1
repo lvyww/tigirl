@@ -5,7 +5,16 @@
         if($schemes.Name -contains '虎码字词'){$DefaultScheme='虎码字词'}else{$DefaultScheme=$schemes[0].Name}
     }
     if($schemes.Name -notcontains $DefaultScheme){throw "Default dictionary is not bundled: $DefaultScheme"}
-    $skins=@(Get-ChildItem -LiteralPath $SkinSource -File -ErrorAction Stop|Where-Object Extension -eq '.ssf'|Sort-Object Name)
+    # Archived names (including pre-rename aliases) must not re-enter a release
+    # if an old build or manual copy leaves an SSF in the source directory.
+    $catalog=Get-Content -LiteralPath "$PSScriptRoot\assets\skins\catalog.json" -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
+    $archived=@{}
+    foreach($skin in $catalog.archived){
+        foreach($name in @($skin.file)+@($skin.previous_files)){
+            if($name){$archived[[string]$name]=$true}
+        }
+    }
+    $skins=@(Get-ChildItem -LiteralPath $SkinSource -File -ErrorAction Stop|Where-Object {$_.Extension -eq '.ssf' -and !$archived.ContainsKey($_.Name)}|Sort-Object Name)
     $reverse=Get-Item -LiteralPath "$DataSource\拼音反查码表" -ErrorAction Stop
     if(!$reverse.PSIsContainer){throw 'Reverse lookup data must be a directory.'}
     [pscustomobject]@{Schemes=$schemes;Skins=$skins;Reverse=$reverse;DefaultScheme=$DefaultScheme}

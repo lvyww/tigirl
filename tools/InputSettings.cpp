@@ -1203,7 +1203,7 @@ bool showInputSettings(HWND owner,const std::filesystem::path& path,int testMode
             if(dialog.initialStyle.theme!=u"默认.ssf" || !dialog.initialStyle.skinAnimation)
                 throw std::runtime_error("SSF skin/font/animation choices did not reopen");
             if(dialog.initialStyle.codeMask!=u"甲😀乙")throw std::runtime_error("Mask setting did not reopen");
-            if(!dialog.initialStyle.animationEnabled || dialog.initialStyle.animationDurationMs!=100)throw std::runtime_error("Animation settings did not reopen");
+            if(!dialog.initialStyle.animationEnabled || dialog.initialStyle.animationDurationMs!=70)throw std::runtime_error("Animation settings did not reopen");
             SetWindowTextW(dialog.item(CodeMask),L"");
             if(dialog.initialStyle.candidateDelayMs!=250 || dialog.initialStyle.annotationDelayMs!=60000)
                 throw std::runtime_error("Saved reveal delays did not reopen");

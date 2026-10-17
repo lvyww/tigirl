@@ -1,16 +1,22 @@
 ﻿param(
-    [string]$Version='2026.10.10.2',
+    [string]$Version='2026.10.15.1',
     [string]$DataSource="$PSScriptRoot\resources\DefaultData",
     [string]$DefaultScheme='',
     [string]$SentenceModelPath="$PSScriptRoot\data\Models\sentence-fivegram-mobile.bin",
-    [switch]$SkipBuild
+    [switch]$IncludeArm64,
+    [switch]$SkipBuild,
+    [string]$OutputDirectory="$PSScriptRoot\build\packages",
+    [switch]$NoZip
 )
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+\.\d+$'){throw 'Version must contain four numbers.'}
 . "$PSScriptRoot\package_sources.ps1"
 $sources=Get-NativeTigerPackageSources $DataSource "$PSScriptRoot\resources\Skins" $DefaultScheme
 if(!$SkipBuild){& "$PSScriptRoot\build_x64.ps1" -SentenceModelPath $SentenceModelPath;if($LASTEXITCODE){throw 'Release build failed.'}}
-$stage="$PSScriptRoot\build\packages\Tigirl-$Version-x64"
+if($IncludeArm64 -and !$SkipBuild){& "$PSScriptRoot\build_arm64x.ps1" -SentenceModelPath $SentenceModelPath;if($LASTEXITCODE){throw 'ARM64X release build failed.'}}
+$flavor=if($IncludeArm64){'universal'}else{'x64'}
+$OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
+$stage=Join-Path $OutputDirectory "Tigirl-$Version-$flavor"
 if(Test-Path -LiteralPath $stage){throw "Package already exists; use a new version or remove the old staging directory: $stage"}
 New-Item -ItemType Directory -Force "$stage\x64","$stage\x86","$stage\shared","$stage\DefaultData"|Out-Null
 foreach($file in Get-ChildItem -LiteralPath "$PSScriptRoot\packaging" -File){Copy-Item -LiteralPath $file.FullName -Destination $stage}
@@ -25,6 +31,11 @@ Copy-Item -LiteralPath "$PSScriptRoot\build\Win32\Release\Tigirl.dll" -Destinati
 foreach($file in @('Tigirl.exe','Tigirl.Import.exe','Tigirl.Reminder.exe','tiger-v2.tcd','字体')){Copy-Item -LiteralPath "$PSScriptRoot\build\x64\Release\$file" -Destination "$stage\shared" -Recurse}
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\x64\architecture_load_probe.exe" -Destination "$stage\verify_x64.exe"
 Copy-Item -LiteralPath "$PSScriptRoot\build\tests\Win32\architecture_load_probe.exe" -Destination "$stage\verify_x86.exe"
+if($IncludeArm64){
+    New-Item -ItemType Directory "$stage\arm64"|Out-Null
+    Copy-Item -LiteralPath "$PSScriptRoot\build\ARM64X\ARM64EC\Release\Tigirl.dll" -Destination "$stage\arm64"
+    Copy-Item -LiteralPath "$PSScriptRoot\build\ARM64X\ARM64EC\Release\verify_load_arm64.exe" -Destination "$stage\verify_arm64.exe"
+}
 . "$PSScriptRoot\sentence_package.ps1"
 Copy-NativeTigerSentenceModel $SentenceModelPath "$stage\shared"
 Copy-NativeTigerPackageSources $sources "$stage\DefaultData"
@@ -37,7 +48,8 @@ foreach($suffix in @('','.sentence.tcd','.supplement.tcd')){Move-Item -LiteralPa
 $files=@(Get-ChildItem -LiteralPath $stage -Recurse -File|Sort-Object FullName|ForEach-Object{
     [ordered]@{path=$_.FullName.Substring($stage.Length+1);bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
 })
-[ordered]@{version=$Version;target='Windows x64, x64+x86 TSF';files=$files}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath "$stage\manifest.json" -Encoding UTF8
+[ordered]@{version=$Version;target=$(if($IncludeArm64){'Windows x64/ARM64, x64+ARM64X+x86 TSF'}else{'Windows x64, x64+x86 TSF'});files=$files}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath "$stage\manifest.json" -Encoding UTF8
+if($NoZip){Write-Output $stage;return}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip="$stage.zip"
 [IO.Compression.ZipFile]::CreateFromDirectory($stage,$zip,[IO.Compression.CompressionLevel]::Optimal,$true)

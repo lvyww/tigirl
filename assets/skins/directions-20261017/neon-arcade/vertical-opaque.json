@@ -1,0 +1,25 @@
+{
+  "source": "User-provided GIMP repair: C:\\Users\\yc\\Desktop\\vertical.png",
+  "source_sha256": "7905059fd39d83aeac5c603f10c84600f174c6060bdf31fb2ab42a7d282d2200",
+  "original": "vertical.png",
+  "original_sha256": "b2a95cbb4d6186d7115959a90bfaecfcb92004cfd15a9d9cae072d92c229c0fe",
+  "output": "vertical-opaque.png",
+  "size": [
+    1254,
+    1254
+  ],
+  "text_panel_rgba": [
+    9,
+    23,
+    42,
+    255
+  ],
+  "verified_panel_bounds": [
+    100,
+    200,
+    720,
+    1000
+  ],
+  "external_transparent_silhouette_unchanged": true,
+  "generated_image_used": false
+}

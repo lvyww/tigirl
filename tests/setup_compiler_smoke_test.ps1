@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Compiler)
+﻿param([Parameter(Mandatory)][string]$Compiler)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 $Compiler=(Resolve-Path -LiteralPath $Compiler).Path
@@ -14,8 +14,12 @@ try{
  Copy-Item (Join-Path $repo 'assets\Tigirl.ico') $payload
  [IO.File]::WriteAllText("$payload\setup\Tigirl.Maintenance.exe",'compile-only fixture')
  $iss=Join-Path $repo 'packaging\setup\Tigirl.iss'
- & $Compiler '/Qp' "/DPackageDir=$payload" '/DProductVersion=2026.9.20.1' "/DOutputPath=$output" "/DChineseMessages=$repo\packaging\setup\ChineseSimplified.isl" $iss
- if($LASTEXITCODE){throw 'Actual installer script did not compile.'}
+ foreach($architecture in @('universal','x64')){
+  & $Compiler '/Qp' "/DPackageDir=$payload" '/DProductVersion=2026.9.20.1' "/DPackageArchitecture=$architecture" "/DOutputPath=$output" "/DChineseMessages=$repo\packaging\setup\ChineseSimplified.isl" $iss
+  if($LASTEXITCODE){throw "Actual $architecture installer script did not compile."}
+  $label=if($architecture -eq 'universal'){'x64-ARM64-x86'}else{'x64-x86'}
+  if(!(Test-Path "$output\虎娘-2026.9.20.1-$label-安装程序.exe")){throw 'Architecture-specific output name was not used.'}
+ }
  # Separately exercise ONLY the shipping GUID generator. This probe aborts in
  # InitializeSetup, before installation, and contains no files or registry entries.
  $source=Get-Content -LiteralPath $iss -Raw -Encoding UTF8
@@ -56,5 +60,5 @@ end;
   $ids+=$id
  }
  if($ids[0] -eq $ids[1]){throw 'Two setup runs reused an installation generation.'}
- 'PASS: pinned Inno 6.7.3, full installer-source compilation, real GUID generator, two distinct runtime generations; no Tigirl installation executed.'
+ 'PASS: pinned Inno 6.7.3, both universal and x64 installer-source compilation, architecture-specific filenames, real GUID generator, two distinct runtime generations; no Tigirl installation executed.'
 }finally{if(Test-Path $fixture){Remove-Item -LiteralPath $fixture -Recurse -Force}}

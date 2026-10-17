@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "crimson-velvet",
+    "orientation": "horizontal",
+    "file": "horizontal-final.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/crimson-velvet/horizontal.png",
+    "prompt": "Precise production cleanup of the supplied transparent horizontal skin. Preserve the SAME girl, SAME face, size, horns, ears, hair, pose, wings, tail, outfit and colors. Preserve the top rail near its current height (about 58% of canvas). Lower the bottom rail to 90% canvas height to give the blank panel a little more height. Critical: create a completely CLEAN horizontal band at y=72%..79% of canvas, across the ENTIRE image: this band may contain ONLY two perfectly straight vertical side rails and solid opaque blank panel, and transparent space outside. No ribbons, candy, hearts, flames, wing tips, curved frame flourishes or glow may enter this band. Move/shorten upper-corner decorations so they END ABOVE y=70%; move any lower-corner decorations so they BEGIN BELOW y=81%. Specifically, shorten the left bow's trailing ribbon to end above the band; keep the big bow and bell intact. Keep right-corner bat wing above the band. Also preserve a clean vertical stretch strip x=24%..36%: only straight top/bottom rails, blank panel, alpha outside; no hair or ornaments in that strip. Every element stays inside the canvas with a thin alpha margin. The panel inside the frame is COMPLETELY OPAQUE flat warm ivory, no holes. Absolutely no text. Same wide 2:1 RGBA canvas, no presentation backdrop."
+  },
+  {
+    "slug": "strawberry-candy",
+    "orientation": "horizontal",
+    "file": "horizontal-final.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/strawberry-candy/horizontal.png",
+    "prompt": "Precise production cleanup of the supplied transparent horizontal skin. Preserve the SAME girl, SAME face, size, horns, ears, hair, pose, wings, tail, outfit and colors. Preserve the top rail near its current height (about 58% of canvas). Lower the bottom rail to 90% canvas height to give the blank panel a little more height. Critical: create a completely CLEAN horizontal band at y=72%..79% of canvas, across the ENTIRE image: this band may contain ONLY two perfectly straight vertical side rails and solid opaque blank panel, and transparent space outside. No ribbons, candy, hearts, flames, wing tips, curved frame flourishes or glow may enter this band. Move/shorten upper-corner decorations so they END ABOVE y=70%; move any lower-corner decorations so they BEGIN BELOW y=81%. Specifically, move the LEFT heart-candy cluster UP to the top-left so its lowest point is above the band; move the RIGHT heart cluster DOWN to the lower-right below the band. Keep the big hearts readable. Also preserve a clean vertical stretch strip x=24%..36%: only straight top/bottom rails, blank panel, alpha outside; no hair or ornaments in that strip. Every element stays inside the canvas with a thin alpha margin. The panel inside the frame is COMPLETELY OPAQUE flat warm ivory, no holes. Absolutely no text. Same wide 2:1 RGBA canvas, no presentation backdrop."
+  },
+  {
+    "slug": "violet-ghostflame",
+    "orientation": "horizontal",
+    "file": "horizontal-final.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/violet-ghostflame/horizontal.png",
+    "prompt": "Precise production cleanup of the supplied transparent horizontal skin. Preserve the SAME girl, SAME face, size, horns, ears, hair, pose, wings, tail, outfit and colors. Preserve the top rail near its current height (about 58% of canvas). Lower the bottom rail to 90% canvas height to give the blank panel a little more height. Critical: create a completely CLEAN horizontal band at y=72%..79% of canvas, across the ENTIRE image: this band may contain ONLY two perfectly straight vertical side rails and solid opaque blank panel, and transparent space outside. No ribbons, candy, hearts, flames, wing tips, curved frame flourishes or glow may enter this band. Move/shorten upper-corner decorations so they END ABOVE y=70%; move any lower-corner decorations so they BEGIN BELOW y=81%. Specifically, move all LEFT cyan flame and wing decoration to the UPPER-LEFT corner, ending above the band; move all RIGHT cyan flame decoration DOWN to the BOTTOM-RIGHT corner below the band. Replace the middle of both side borders with thin straight lilac silver rails. Also preserve a clean vertical stretch strip x=24%..36%: only straight top/bottom rails, blank panel, alpha outside; no hair or ornaments in that strip. Every element stays inside the canvas with a thin alpha margin. The panel inside the frame is COMPLETELY OPAQUE flat deep dark plum, no holes. Absolutely no text. Same wide 2:1 RGBA canvas, no presentation backdrop."
+  },
+  {
+    "slug": "crimson-velvet",
+    "orientation": "vertical",
+    "file": "vertical-final.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/crimson-velvet/vertical.png",
+    "prompt": "Precise small edit of this transparent vertical tiger-girl skin. Keep the girl's face, body, horns, ears, wings, tail, costume, position and size EXACTLY THE SAME. Keep the entire gold and black frame, the large top-left red bow with bell and top-right wing. ONLY SHORTEN the long dangling red ribbons under the top-left bow: remove their long lower tails and neatly finish them just beneath the bell, so absolutely no ribbon reaches below 19% of the canvas height. The horizontal band y=20%..22% must be only blank opaque ivory panel and straight vertical black-gold rails, transparent outside, across the full canvas. Do not move the girl upward. Do not add any other decorations or lettering. All paper within the frame remains fully opaque ivory, alpha only outside. Same square canvas. Retain the whole artwork including rightmost trident and tail inside a narrow transparent outer margin."
+  },
+  {
+    "slug": "violet-ghostflame",
+    "orientation": "vertical",
+    "file": "vertical-final.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/little-devil-20261017/violet-ghostflame/vertical.png",
+    "prompt": "Precise local repair of this transparent vertical tiger-girl skin. The dark candidate panel currently contains a large unwanted translucent/transparent patch. Fill the ENTIRE interior inside the silver-violet frame with completely SOLID OPAQUE uniform dark plum color #2B1E39. This is opaque painted material, not empty space; alpha must be 100% everywhere inside, no holes, stains, fades, gradients or see-through patches. Keep alpha transparency ONLY OUTSIDE the outer rim and character. Preserve exactly the girl, face, horns, pose, book, bell, wings, flame colors, positions and overall dimensions. Also shorten the upper-left cyan flame and its lower silver wing tip so the entire upper-left decoration ends above 27% canvas height, leaving the horizontal band y=28%..31% with ONLY straight silver vertical rails, opaque plain dark panel and transparent outside across the entire image. The girl stays below that band, do not move her upward. No text or new objects. Same square RGBA canvas, full artwork inside the edge."
+  }
+]

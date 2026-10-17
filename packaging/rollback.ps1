@@ -2,13 +2,13 @@
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\common.ps1"
 try {
-    Assert-X64System
+    Assert-SupportedSystem
     $record=Get-Content -LiteralPath $NativeTigerRecord -Raw|ConvertFrom-Json
     if(!$record.previous){throw 'No previous package is available.'}
     $previous=[IO.Path]::GetFullPath($record.previous)
     if(!$previous.StartsWith($NativeTigerInstallRoot+'\versions\',[StringComparison]::OrdinalIgnoreCase)){throw 'Invalid rollback destination.'}
     $manifest=Assert-Package $previous
-    foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){if((Get-ComPath $pair[0]) -ne (Get-PackageDll $record.directory $pair[1])){throw 'Registration ownership changed.'}}
+    foreach($pair in @(@('Registry64','native'),@('Registry32','x86'))){if((Get-ComPath $pair[0]) -ne (Get-PackageDll $record.directory $pair[1])){throw 'Registration ownership changed.'}}
     if($CheckOnly){@{status='validated';rollback_to=$previous;preserve_user_data=$true}|ConvertTo-Json;exit 0}
     if(!(Test-Administrator)){
         if($Elevated){throw 'Administrator privileges were not granted.'}

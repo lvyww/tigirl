@@ -64,6 +64,12 @@ Definition parseDefinition(Files files){
         const auto stretch=[&](const std::u16string& key){Stretch s;auto n=numbers(get(values,key),3);if(!n.empty()){s={n[0]==1?1:0,n[1],n[2]};}else if(!get(values,key).empty())result.warnings.push_back(u"已忽略无效伸缩参数："+key);return s;};
         const auto margins=[&](const char16_t* key){auto n=numbers(get(values,key),4);return n.empty()?Insets{}:Insets{n[0],n[1],n[2],n[3]};};
         layout.horizontal=stretch(prefix+u"layout_horizontal");layout.vertical=stretch(prefix+u"layout_vertical");layout.code=margins(u"pinyin_marge");layout.candidates=margins(u"zhongwen_marge");
+        const auto minimumWidth=get(values,prefix+u"min_width");
+        if(auto n=numbers(minimumWidth,1,1,8192);!n.empty())layout.minimumWidth=n[0];
+        else if(!minimumWidth.empty())result.warnings.push_back(u"已忽略无效最小宽度："+prefix+u"min_width");
+        const auto minimumHeight=get(values,prefix+u"min_height");
+        if(auto n=numbers(minimumHeight,1,1,8192);!n.empty())layout.minimumHeight=n[0];
+        else if(!minimumHeight.empty())result.warnings.push_back(u"已忽略无效最小高度："+prefix+u"min_height");
         const std::u16string customPrefix=prefix==u"zhongwen_"?u"cand_custom":prefix==u"pinyin_"?u"comp_custom":u"custom";
         auto count=numbers(get(values,customPrefix+u"_cnt"),1,0,64);
         if(!count.empty())for(int i=0;i<count[0];++i){auto number=std::to_string(i);std::u16string key=customPrefix+std::u16string(number.begin(),number.end());auto file=get(values,key);if(file.empty()){result.warnings.push_back(u"已跳过未定义装饰："+key);continue;}

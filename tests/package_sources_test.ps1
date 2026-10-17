@@ -9,6 +9,10 @@ try{
  Set-Content -LiteralPath "$root\skins\second.SSF" -Value 'skin2'
  Set-Content -LiteralPath "$root\skins\notes.txt" -Value 'not a skin'
  Set-Content -LiteralPath "$root\skins\ignored\nested.ssf" -Value 'not top level'
+ # Stale canonical and pre-rename copies must never enter a fresh release.
+ foreach($name in @('虎娘-绯绒小恶魔.ssf','虎娘-莓糖小恶魔.ssf','绯绒小恶魔.ssf','莓糖小恶魔.SSF')){
+  Set-Content -LiteralPath (Join-Path "$root\skins" $name) -Value 'archived skin'
+ }
  $plan=Get-NativeTigerPackageSources "$root\data" "$root\skins"
  Check ($plan.DefaultScheme -eq '虎码字词') 'Default preference failed'
  Copy-NativeTigerPackageSources $plan "$root\stage"
@@ -25,5 +29,5 @@ try{
  Remove-Item -LiteralPath "$root\data\码表\自选[甲]" -Recurse -Force
  $failed=$false;try{Get-NativeTigerPackageSources "$root\data" "$root\skins"|Out-Null}catch{$failed=$true}
  Check $failed 'Empty dictionaries accepted'
- 'PASS: directory discovery, recursive copy, SSF filtering, literal filenames, default selection, empty-source validation.'
+ 'PASS: directory discovery, recursive copy, SSF filtering, archived skin exclusion, literal filenames, default selection, empty-source validation.'
 }finally{if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}}

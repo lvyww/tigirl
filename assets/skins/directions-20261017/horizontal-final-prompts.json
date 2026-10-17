@@ -1,0 +1,62 @@
+[
+  {
+    "id": "02",
+    "name": "雨竹听风",
+    "group": "虎娘",
+    "slug": "rain-bamboo",
+    "board": "02-虎娘-雨竹听风.png",
+    "ink": "#254F49",
+    "first": "#956421",
+    "hint": "#627D72",
+    "panel": "#F4F4E9",
+    "details": "Keep the jade bamboo contour, mist-white opaque interior, orange-haired tiger girl in the pale jade outfit, bamboo hairpin and closed umbrella; delicate sparse watercolor foliage only at corners.",
+    "variant": "horizontal-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/rain-bamboo/horizontal-clean.png",
+    "prompt": "Use case: precise-object-edit. Input image 1 is the exact edit target, an existing transparent horizontal candidate popup skin. Preserve this character identity, expression, costume, rendering style, colors, and all themed decorations.\nTechnical production change only: make the blank text panel TALLER by extending its straight side walls downward, roughly doubling the blank panel's inner height. Aim for a wide landscape asset about 2:1 aspect ratio, rather than an extremely thin strip. Keep the entire character above the top edge of the text panel in exactly the same pose; don't stretch the character.\nThere must be a completely clear horizontal strip through the MIDDLE of the enlarged blank panel, spanning the FULL width including both side rims. This strip contains only plain straight vertical side borders, flat opaque interior fill, and alpha 0 outside. All corner ornaments, flowers, bows, anchors, paws, compass, ribbons, umbrellas, waves and foliage must sit above or below this plain strip, never intersect it. Move existing side ornaments to top/bottom corners as needed while retaining the theme. The panel's middle interior must be absolutely blank. This strip is for software nine-slice vertical stretching, so no patterned border, rope twist, diagonal edge or independent decoration can cross it.\nAlso keep a clear vertical strip in the left-of-center area (about 35 percent width) with only straight horizontal top/bottom borders and blank interior; no ornament intersects this vertical strip.\nOne complete asset on genuine transparent RGBA background. Opaque #F4F4E9 text interior. Crisp clean alpha edges, no halo/glow/noise. NO text, lettering, numbers, selection highlight or guides. Keep whole silhouette fully inside canvas with tiny clear padding."
+  },
+  {
+    "id": "03",
+    "name": "雪夜铃兰",
+    "group": "虎娘",
+    "slug": "snow-lily",
+    "board": "03-虎娘-雪夜铃兰.png",
+    "ink": "#283E59",
+    "first": "#3C6F9B",
+    "hint": "#62788D",
+    "panel": "#FFFDF6",
+    "details": "Keep the orange-haired tiger girl, cream scarf and pale blue winter cape, white lily-of-the-valley flowers, little gold bells and ice-blue ribbon border. Snow and flowers must remain attached to corners, never scatter into the text interior.",
+    "variant": "horizontal-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/snow-lily/horizontal-clean.png",
+    "prompt": "Use case: precise-object-edit. Input image 1 is the exact edit target, an existing transparent horizontal candidate popup skin. Preserve this character identity, expression, costume, rendering style, colors, and all themed decorations.\nTechnical production change only: make the blank text panel TALLER by extending its straight side walls downward, roughly doubling the blank panel's inner height. Aim for a wide landscape asset about 2:1 aspect ratio, rather than an extremely thin strip. Keep the entire character above the top edge of the text panel in exactly the same pose; don't stretch the character.\nThere must be a completely clear horizontal strip through the MIDDLE of the enlarged blank panel, spanning the FULL width including both side rims. This strip contains only plain straight vertical side borders, flat opaque interior fill, and alpha 0 outside. All corner ornaments, flowers, bows, anchors, paws, compass, ribbons, umbrellas, waves and foliage must sit above or below this plain strip, never intersect it. Move existing side ornaments to top/bottom corners as needed while retaining the theme. The panel's middle interior must be absolutely blank. This strip is for software nine-slice vertical stretching, so no patterned border, rope twist, diagonal edge or independent decoration can cross it.\nAlso keep a clear vertical strip in the left-of-center area (about 35 percent width) with only straight horizontal top/bottom borders and blank interior; no ornament intersects this vertical strip.\nOne complete asset on genuine transparent RGBA background. Opaque #FFFDF6 text interior. Crisp clean alpha edges, no halo/glow/noise. NO text, lettering, numbers, selection highlight or guides. Keep whole silhouette fully inside canvas with tiny clear padding."
+  },
+  {
+    "id": "07",
+    "name": "霓虹电玩",
+    "group": "虎娘",
+    "slug": "neon-arcade",
+    "board": "07-虎娘-霓虹电玩.png",
+    "ink": "#E6ECF3",
+    "first": "#F68AB5",
+    "hint": "#9EBACF",
+    "panel": "#172238",
+    "details": "Keep the orange-haired tiger girl with the charcoal gaming jacket and headset, midnight-navy opaque panel, turquoise and pink thin angular corner accents. Dark navy text area absolutely flat, no gradients or glare. Small generic game symbols only on fixed corner ends.",
+    "variant": "horizontal-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/neon-arcade/horizontal.png",
+    "prompt": "Use case: precise-object-edit. Input image 1 is the exact edit target, an existing transparent horizontal candidate popup skin. Preserve this character identity, expression, costume, rendering style, colors, and all themed decorations.\nTechnical production change only: make the blank text panel TALLER by extending its straight side walls downward, roughly doubling the blank panel's inner height. Aim for a wide landscape asset about 2:1 aspect ratio, rather than an extremely thin strip. Keep the entire character above the top edge of the text panel in exactly the same pose; don't stretch the character.\nThere must be a completely clear horizontal strip through the MIDDLE of the enlarged blank panel, spanning the FULL width including both side rims. This strip contains only plain straight vertical side borders, flat opaque interior fill, and alpha 0 outside. All corner ornaments, flowers, bows, anchors, paws, compass, ribbons, umbrellas, waves and foliage must sit above or below this plain strip, never intersect it. Move existing side ornaments to top/bottom corners as needed while retaining the theme. The panel's middle interior must be absolutely blank. This strip is for software nine-slice vertical stretching, so no patterned border, rope twist, diagonal edge or independent decoration can cross it.\nAlso keep a clear vertical strip in the left-of-center area (about 35 percent width) with only straight horizontal top/bottom borders and blank interior; no ornament intersects this vertical strip.\nOne complete asset on genuine transparent RGBA background. Opaque #172238 text interior. Crisp clean alpha edges, no halo/glow/noise. NO text, lettering, numbers, selection highlight or guides. Keep whole silhouette fully inside canvas with tiny clear padding."
+  },
+  {
+    "id": "09",
+    "name": "深海舰长",
+    "group": "虎兄贵",
+    "slug": "sea-captain",
+    "board": "09-虎兄贵-深海舰长.png",
+    "ink": "#223D58",
+    "first": "#97621C",
+    "hint": "#637F86",
+    "panel": "#FFF8E8",
+    "details": "Keep the same adult muscular anthropomorphic male tiger, full tiger head and broad muzzle, massive forearms, closed cream/navy captain uniform and cap. Keep the navy-and-brass nautical rim and small rope/anchor/compass ornaments only at fixed corners, ivory opaque panel interior.",
+    "variant": "horizontal-final",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/assets/skins/directions-20261017/sea-captain/horizontal.png",
+    "prompt": "Use case: precise-object-edit. Input image 1 is the exact edit target, an existing transparent horizontal candidate popup skin. Preserve this character identity, expression, costume, rendering style, colors, and all themed decorations.\nTechnical production change only: make the blank text panel TALLER by extending its straight side walls downward, roughly doubling the blank panel's inner height. Aim for a wide landscape asset about 2:1 aspect ratio, rather than an extremely thin strip. Keep the entire character above the top edge of the text panel in exactly the same pose; don't stretch the character.\nThere must be a completely clear horizontal strip through the MIDDLE of the enlarged blank panel, spanning the FULL width including both side rims. This strip contains only plain straight vertical side borders, flat opaque interior fill, and alpha 0 outside. All corner ornaments, flowers, bows, anchors, paws, compass, ribbons, umbrellas, waves and foliage must sit above or below this plain strip, never intersect it. Move existing side ornaments to top/bottom corners as needed while retaining the theme. The panel's middle interior must be absolutely blank. This strip is for software nine-slice vertical stretching, so no patterned border, rope twist, diagonal edge or independent decoration can cross it.\nAlso keep a clear vertical strip in the left-of-center area (about 35 percent width) with only straight horizontal top/bottom borders and blank interior; no ornament intersects this vertical strip.\nOne complete asset on genuine transparent RGBA background. Opaque #FFF8E8 text interior. Crisp clean alpha edges, no halo/glow/noise. NO text, lettering, numbers, selection highlight or guides. Keep whole silhouette fully inside canvas with tiny clear padding."
+  }
+]

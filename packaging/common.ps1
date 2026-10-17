@@ -3,7 +3,23 @@ $ErrorActionPreference='Stop'
 $NativeTigerClsid='{69CB1B2F-CDE7-43A2-96C9-EBF642E780EB}'
 $NativeTigerProfile='{43201C7B-F615-469D-9D54-906D9270975E}'
 $NativeTigerInstallRoot=Join-Path $env:ProgramFiles 'Tigirl'
+function Get-SystemArchitecture { return [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() }
+function Get-PackageNativeArchitecture([string]$Directory) {
+    # Select by manifest, not file presence: a missing DLL must not silently
+    # switch the identity used for repair/uninstall to another architecture.
+    if((Get-SystemArchitecture) -eq 'Arm64') {
+        $path=Join-Path $Directory 'manifest.json'
+        if(Test-Path -LiteralPath $path -PathType Leaf) {
+            try {
+                $manifest=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
+                if(@($manifest.files|Where-Object {$_.path -eq 'arm64\Tigirl.dll'}).Count){return 'arm64'}
+            } catch {}
+        }
+    }
+    return 'x64'
+}
 function Get-PackageDll([string]$Directory,[string]$Architecture) {
+    if($Architecture -eq 'native'){$Architecture=Get-PackageNativeArchitecture $Directory}
     return Join-Path $Directory ($Architecture+'\Tigirl.dll')
 }
 function Get-PackageTool([string]$Directory) {
@@ -18,9 +34,24 @@ function Get-PackageTool([string]$Directory) {
     return Join-Path $Directory 'x64\Tigirl.exe'
 }
 $NativeTigerRecord=Join-Path $NativeTigerInstallRoot 'install.json'
-function Assert-X64System {
-    if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'X64' -or ![Environment]::Is64BitProcess){throw 'This package requires x64 Windows and 64-bit PowerShell.'}
+function Assert-SupportedSystem {
+    $architecture=Get-SystemArchitecture
+    if($architecture -notin @('X64','Arm64') -or ![Environment]::Is64BitProcess){throw 'This package requires 64-bit Windows and 64-bit PowerShell.'}
     if([Environment]::OSVersion.Version.Build -lt 17763){throw 'Windows 10 version 1809 or later is required.'}
+    if($architecture -eq 'Arm64' -and [Environment]::OSVersion.Version.Build -lt 22000){throw 'Windows 11 or later is required on ARM64 for the shared x64 desktop tools.'}
+}
+function Assert-InstallArchitecture([string]$Directory) {
+    Assert-SupportedSystem
+    if((Get-SystemArchitecture) -eq 'Arm64' -and (Get-PackageNativeArchitecture $Directory) -ne 'arm64'){
+        throw 'The package is missing its ARM64X input-method component.'
+    }
+}
+function Get-PackageLoadChecks([string]$Directory) {
+    @('x64','x86')|ForEach-Object {[pscustomobject]@{probe=$_;dll=$_}}
+    if((Get-SystemArchitecture) -eq 'Arm64' -and (Get-PackageNativeArchitecture $Directory) -eq 'arm64'){
+        # Both native ARM64 and emulated x64 applications must load ARM64X.
+        @('arm64','x64')|ForEach-Object {[pscustomobject]@{probe=$_;dll='arm64'}}
+    }
 }
 function Test-Administrator { return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
 function Get-ComPath([string]$View) {
@@ -32,14 +63,15 @@ function Invoke-Registration([string]$Directory,[switch]$Remove) {
     if($Remove){
         $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::Registry32)
         try{$base.DeleteSubKeyTree("SOFTWARE\Classes\CLSID\$NativeTigerClsid",$false)}finally{$base.Dispose()}
-        $p=Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList @('/s','/u',('"'+(Get-PackageDll $Directory 'x64')+'"')) -Wait -PassThru
+        $p=Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList @('/s','/u',('"'+(Get-PackageDll $Directory 'native')+'"')) -Wait -PassThru
         if($p.ExitCode){throw 'TSF unregistration failed.'};return
     }
-    foreach($pair in @(@('System32','x64'),@('SysWOW64','x86'))){
+    Assert-InstallArchitecture $Directory
+    foreach($pair in @(@('System32','native'),@('SysWOW64','x86'))){
         $p=Start-Process "$env:windir\$($pair[0])\regsvr32.exe" -ArgumentList @('/s',('"'+(Get-PackageDll $Directory $pair[1])+'"')) -Wait -PassThru
         if($p.ExitCode){throw "TSF registration failed: $($pair[1])"}
     }
-    if((Get-ComPath 'Registry64') -ne (Get-PackageDll $Directory 'x64') -or (Get-ComPath 'Registry32') -ne (Get-PackageDll $Directory 'x86')){throw 'COM registration verification failed.'}
+    if((Get-ComPath 'Registry64') -ne (Get-PackageDll $Directory 'native') -or (Get-ComPath 'Registry32') -ne (Get-PackageDll $Directory 'x86')){throw 'COM registration verification failed.'}
 }
 function Assert-Package([string]$Directory) {
     . (Join-Path $Directory 'data.ps1')
@@ -50,8 +82,9 @@ function Assert-Package([string]$Directory) {
         if($file.path -match '(^[\\/]|:|(^|[\\/])\.\.([\\/]|$))'){throw 'Invalid package path.'}
         if((Get-FileHash -LiteralPath (Join-Path $Directory $file.path) -Algorithm SHA256).Hash -ne $file.sha256){throw "Package hash mismatch: $($file.path)"}
     }
-    foreach($arch in @('x64','x86')){
-        $dll=Get-PackageDll $Directory $arch;$probe="$Directory\verify_$arch.exe"
+    foreach($check in (Get-PackageLoadChecks $Directory)){
+        $arch=$check.probe+'->'+$check.dll
+        $dll=Get-PackageDll $Directory $check.dll;$probe=Join-Path $Directory ('verify_'+$check.probe+'.exe')
         $process=[Diagnostics.Process]::new()
         try{
             $process.StartInfo.FileName=$probe

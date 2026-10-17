@@ -1,0 +1,180 @@
+{
+  "generator": "built-in image_gen",
+  "images": [
+    {
+      "slug": "crimson-velvet",
+      "orientation": "horizontal",
+      "file": "horizontal.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-1f34fb49-b259-4f56-9381-a2c3f74d7bd7.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "4e1fcc35df7eb49a3ab9f3ac3990acb227290217e10884ce37f434c0d9cf6a73",
+      "bytes": 1347415,
+      "selected": false
+    },
+    {
+      "slug": "crimson-velvet",
+      "orientation": "vertical",
+      "file": "vertical.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-4a38ee62-4e00-4194-b869-a1c85888da7a.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "c4108bece79474fa1929c377f6baa671c2db66fbea0706e88e2f0800058bf754",
+      "bytes": 1717762,
+      "selected": false
+    },
+    {
+      "slug": "strawberry-candy",
+      "orientation": "horizontal",
+      "file": "horizontal.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-8bbea0e5-5665-4610-9f1e-f27c6ae77a4a.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "c48f5c0db5722af6cbbdeca5465356379e7a2d4fbe929b5f1fe109e2708976c8",
+      "bytes": 1289641,
+      "selected": false
+    },
+    {
+      "slug": "strawberry-candy",
+      "orientation": "vertical",
+      "file": "vertical.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-88cee10e-cef5-418f-a1cb-0ad1cc70a0de.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "78ca34f77a10e6cf09de2d64f6a8d2e9a8b9e0e975ddb0b81cfbea91bec21c3a",
+      "bytes": 1548137,
+      "selected": true
+    },
+    {
+      "slug": "violet-ghostflame",
+      "orientation": "horizontal",
+      "file": "horizontal.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-51a644b0-155e-4ea6-a3c9-316fa83105a4.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "89ba662a7d35c15122c2778f8aaa79fa5848d1c094b1877ea65830915591ea6c",
+      "bytes": 1240667,
+      "selected": false
+    },
+    {
+      "slug": "violet-ghostflame",
+      "orientation": "vertical",
+      "file": "vertical.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-4b95b084-343a-4e5d-9783-c7904e8f1737.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "2b93870e31560d10d13b5b8d0aa0078eae40b99c0688f652fa1ffe5d29c92297",
+      "bytes": 1724709,
+      "selected": false,
+      "rejection_reason": "Transparent hole in the dark panel; repaired in vertical-final.png."
+    },
+    {
+      "slug": "crimson-velvet",
+      "orientation": "horizontal",
+      "file": "horizontal-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-e0f61f93-0958-4076-acdd-4c2bc7940a47.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "c4fe64513a3927ed38d564c02d94315a47d75542e0cd3928500ded6d41fc1727",
+      "bytes": 1353236,
+      "selected": true
+    },
+    {
+      "slug": "strawberry-candy",
+      "orientation": "horizontal",
+      "file": "horizontal-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-c21c6363-798d-4bcc-80cd-19d117e1eeac.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "7652e1101392e08eccdf847f8b81050d4f5d46f9a2f255240a9c24538ec9ac15",
+      "bytes": 1331351,
+      "selected": true
+    },
+    {
+      "slug": "violet-ghostflame",
+      "orientation": "horizontal",
+      "file": "horizontal-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-d5422074-8b38-4a2f-82bb-2db9114fab5f.png",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "2df9cdde796a2dae204da374db146e7cc50525e87c3e59611c5414c8f2da7ac9",
+      "bytes": 1261723,
+      "selected": true
+    },
+    {
+      "slug": "crimson-velvet",
+      "orientation": "vertical",
+      "file": "vertical-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-a303a9a2-b8e4-43a9-9e36-242ff3335950.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "a02225da2810e3bf9ac83ac9966125fbfeff0e635dc4ef5c6f5a35d8881fdd6c",
+      "bytes": 1800144,
+      "selected": false
+    },
+    {
+      "slug": "violet-ghostflame",
+      "orientation": "vertical",
+      "file": "vertical-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-369feeb1-0507-48b9-8424-3cb00ecccad3.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "474fc1e9b0b53b76d6a21b8a9b3fc528c9009469a35371751ee541f488f519f8",
+      "bytes": 1540912,
+      "selected": true
+    },
+    {
+      "slug": "crimson-velvet",
+      "orientation": "vertical",
+      "file": "vertical-production.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-639b608b-92df-42cc-93a5-cd6b3e2ce650.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "92e7a14cacbf7282bb0571a4a13289451db97795921607ead6c8fc5c585e8e9a",
+      "bytes": 1739530,
+      "selected": true
+    }
+  ],
+  "fallback_used": false,
+  "prompts": [
+    "prompts.json",
+    "refinement-prompts.json",
+    "crimson-velvet/ribbon-cleanup-prompt.json"
+  ]
+}

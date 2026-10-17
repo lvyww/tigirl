@@ -1,9 +1,9 @@
 虎娘 / Tigirl 图形安装程序
 
-分发文件：虎娘-版本号-x64-x86-安装程序.exe。
+分发文件：虎娘-版本号-x64-ARM64-x86-安装程序.exe。
 双击单文件安装程序，按中文向导操作，无需手工解压。
-只支持 Intel/AMD x64 Windows 10 1809（含 LTSC 2019） 及以上，包含 x86 程序支持。
-不适用于 ARM64 和 32 位 Windows。
+支持 Intel/AMD x64 Windows 10 1809（含 LTSC 2019）及以上，以及 ARM64 Windows 11；包含 x86 程序支持。
+安装时自动选择本机输入法组件：x64 系统使用 x64 DLL，ARM64 系统使用 ARM64X DLL，兼容 ARM64 和 x64 应用。桌面工具使用共享的 x64 版本。不支持 32 位 Windows。
 
 用户数据固定在 %LOCALAPPDATA%\Tigirl：
 码表（含方案内的用户调整和学习 TSV）、拼音反查码表、config.txt、schemas 和 backups。

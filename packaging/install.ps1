@@ -10,13 +10,14 @@ function Initialize-InstalledUser([string]$Directory) {
     return $true
 }
 try {
-    Assert-X64System
+    Assert-SupportedSystem
+    Assert-InstallArchitecture $PSScriptRoot
     $manifest=Assert-Package $PSScriptRoot
     $generation=(Get-FileHash -LiteralPath "$PSScriptRoot\manifest.json").Hash.Substring(0,16).ToLowerInvariant()
     $destination=Join-Path $NativeTigerInstallRoot "versions\$generation"
     $previous=$null
     if(Test-Path -LiteralPath $NativeTigerRecord){$previous=Get-Content -LiteralPath $NativeTigerRecord -Raw|ConvertFrom-Json;Assert-Package $previous.directory|Out-Null}
-    foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){
+    foreach($pair in @(@('Registry64','native'),@('Registry32','x86'))){
         $registered=Get-ComPath $pair[0]
         if($registered -and (!$previous -or $registered -ne (Get-PackageDll $previous.directory $pair[1]))){throw 'An installation outside this package owns the input-method registration. Uninstall it first.'}
     }

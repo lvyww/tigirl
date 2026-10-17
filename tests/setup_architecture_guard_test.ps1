@@ -1,40 +1,52 @@
-﻿param([Parameter(Mandatory)][string]$Installer)
+﻿param([Parameter(Mandatory)][string]$Compiler,[ValidateSet('universal','x64')][string]$Architecture='universal')
 $ErrorActionPreference='Stop'
-if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'Arm64'){throw 'This negative test requires ARM64 Windows.'}
-. "$PSScriptRoot\..\packaging\common.ps1"
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-$before=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'))
-function Get-ConfigSnapshot {
- @('Tigirl','NativeTiger')|ForEach-Object {
-  $file=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ($_+'\config.txt')
-  if(Test-Path -LiteralPath $file){$file+':'+(Get-FileHash -LiteralPath $file).Hash}else{$file+':absent'}
- }
+$repo=Split-Path $PSScriptRoot -Parent
+. "$repo\packaging\common.ps1"
+$before=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'),(Test-Path "$env:LOCALAPPDATA\Tigirl"),(Test-Path "$env:ProgramFiles\Tigirl")) -join '|'
+$source=Get-Content "$repo\packaging\setup\Tigirl.iss" -Raw -Encoding UTF8
+$preamble=$source.Substring(0,$source.IndexOf('[Setup]'))
+$directives=@('ArchitecturesAllowed','ArchitecturesInstallIn64BitMode','MinVersion')|ForEach-Object {
+ $value=[regex]::Match($source,'(?m)^'+$_+'=(.+)$').Value
+ if(!$value){throw "Missing architecture policy: $_"};$value
 }
-$configBefore=(Get-ConfigSnapshot) -join '|'
-$existed=Test-Path (Join-Path $env:ProgramFiles 'Tigirl')
-$launch=Get-Date;$p=Start-Process $Installer -PassThru
-$window=$null;$button=$null;$dialog=''
-try{
- $name=[IO.Path]::GetFileNameWithoutExtension($Installer)+'*'
- for($i=0;$i -lt 20;$i++){
-  Start-Sleep -Milliseconds 250
-  $ui=Get-Process|Where-Object {$_.ProcessName -like $name -and $_.StartTime -ge $launch.AddSeconds(-1) -and $_.MainWindowHandle -ne 0}|Select-Object -First 1
-  if($ui){$window=[Windows.Automation.AutomationElement]::FromHandle($ui.MainWindowHandle);break}
- }
- if(!$window){throw 'No architecture error window.'}
- $items=$window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
- $names=@()
- foreach($item in $items){$names+=$item.Current.Name;if($item.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and $item.Current.Name -match '确定|OK'){$button=$item}}
- $dialog=$names -join ' '
- # Inno rejects this OS before SetupLogging starts; verify the actual error window.
- if($dialog -notmatch 'Intel/AMD x64' -or $dialog -notmatch 'ARM64'){throw "Unexpected rejection: $dialog"}
-}finally{if($ui){[void]$ui.CloseMainWindow()}}
-if(!$p.WaitForExit(5000)){throw 'Architecture rejection did not terminate.'}
-if($p.ExitCode -eq 0){throw 'Installer accepted ARM64.'}
-$after=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'))
-if(($before -join '|') -ne ($after -join '|') -or ((Get-ConfigSnapshot) -join '|') -ne $configBefore){throw 'Rejected installer changed live registration or configuration.'}
-if((Test-Path (Join-Path $env:ProgramFiles 'Tigirl')) -ne $existed){throw 'Rejected installer created a program directory.'}
-$result=@{status='passed';exit_code=$p.ExitCode;dialog=$dialog;live_registration_preserved=$true;configuration_preserved=$true;program_directory_preserved=$true}
-$result|ConvertTo-Json|Set-Content "$PSScriptRoot\..\build\setup-arm64-rejection.json" -Encoding UTF8
-$result|ConvertTo-Json
+$type=[regex]::Match($source,'(?s)type\s+(TInstallationGuid\s*=\s*record.*?end;)').Groups[1].Value
+$helpers=[regex]::Match($source,'(?s)(function CoCreateGuid.*?)(?=function VersionDirectory)').Groups[1].Value
+$entry=[regex]::Match($source,'(?s)function InitializeSetup: Boolean;.*?\nend;').Value.Replace('function InitializeSetup:', 'function ShippingInitializeSetup:')
+if(!$type -or !$helpers -or !$entry){throw 'Shipping setup initialization was not found.'}
+$fixture=Join-Path $env:TEMP ('Tigirl-architecture-entry-'+[guid]::NewGuid().ToString('N'))
+New-Item $fixture -ItemType Directory|Out-Null
+try {
+ # Compile the shipping architecture directives and InitializeSetup, then abort
+ # before any installer pages/files/registration; lowest privileges, no UAC.
+ $text=@'
+[Setup]
+AppName=Tigirl architecture entry probe
+AppVersion=1
+DefaultDirName={tmp}\unused-architecture-probe
+CreateAppDir=no
+Uninstallable=no
+PrivilegesRequired=lowest
+OutputBaseFilename=architecture-probe
+Compression=none
+'@
+ $text=$preamble+$text+"`r`n"+($directives -join "`r`n")+"`r`n[Code]`r`ntype`r`n"+$type+"`r`nvar InstallGeneration: String;`r`n"+$helpers+"`r`n"+$entry+@'
+
+function InitializeSetup: Boolean;
+begin
+  if ShippingInitializeSetup then
+    SaveStringToFile(ExpandConstant('{param:Output}'),InstallGeneration,False);
+  Result:=False;
+end;
+'@
+ $script=Join-Path $fixture 'architecture.iss';$output=Join-Path $fixture 'accepted.txt'
+ $text|Set-Content $script -Encoding UTF8
+ & $Compiler '/Qp' "/O$fixture" "/DPackageDir=$fixture" "/DPackageArchitecture=$Architecture" $script
+ if($LASTEXITCODE){throw 'Architecture entry probe did not compile.'}
+ $p=Start-Process (Join-Path $fixture 'architecture-probe.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/SP-',('/Output="'+$output+'"')) -Wait -PassThru
+ $expectedAccepted=$Architecture -eq 'universal' -or (Get-SystemArchitecture) -eq 'X64'
+ if($p.ExitCode -ne 1 -or (Test-Path $output) -ne $expectedAccepted){throw 'Shipping setup entry did not enforce the selected package architecture.'}
+ if($expectedAccepted -and (Get-Content $output -Raw) -cnotmatch '^[a-f0-9]{32}$'){throw 'Setup did not initialize a valid generation.'}
+ $after=@((Get-ComPath 'Registry64'),(Get-ComPath 'Registry32'),(Test-Path "$env:LOCALAPPDATA\Tigirl"),(Test-Path "$env:ProgramFiles\Tigirl")) -join '|'
+ if($before -ne $after){throw 'Architecture entry probe changed live installation state.'}
+ @{status='passed';architecture=(Get-SystemArchitecture);package_architecture=$Architecture;shipping_architecture_policy_accepted=$expectedAccepted;shipping_initialize_setup_accepted=$expectedAccepted;live_installation_unchanged=$true}|ConvertTo-Json
+} finally {Remove-Item -LiteralPath $fixture -Recurse -Force}

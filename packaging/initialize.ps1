@@ -4,7 +4,6 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot\data.ps1"
 . "$PSScriptRoot\appcontainer_data.ps1"
 . "$PSScriptRoot\user_transaction.ps1"
-if($RequireStandardUser -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){exit 20}
 $root=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tigirl'
 if($env:NATIVE_TIGER_USER_ROOT){if(!$NoEnable){throw 'A test user-root override cannot enable a production profile.'};$root=[IO.Path]::GetFullPath($env:NATIVE_TIGER_USER_ROOT)}
 Assert-PlainTree $root
@@ -32,6 +31,20 @@ function Write-InitializeLog([string]$Message) {
         Add-Content -LiteralPath (Join-Path $root 'setup-initialize.log') -Encoding UTF8
     }catch{}
 }
+# UAC-disabled/built-in administrator desktops are still the correct user.
+# Reject another administrator account in this session, not all elevated tokens.
+if($RequireStandardUser){
+    . "$PSScriptRoot\user_identity.ps1"
+    $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+    $elevated=([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $sessionSid=''
+    if($elevated){try{$sessionSid=Get-TigirlSessionUserSid}catch{Write-InitializeLog ('Session identity unavailable: '+$_)}}
+    Write-InitializeLog "Identity: elevated=$elevated current=$($identity.User.Value) session=$sessionSid"
+    if(!(Test-TigirlInitializationIdentity $elevated $identity.User.Value $sessionSid)){
+        Write-InitializeLog 'Deferred: cannot confirm that the elevated account owns this interactive session.'
+        exit 20
+    }
+}
 $lock=$null;$changes=@();$snapshots=@();$compilationStarted=$false;$config=Join-Path $root 'config.txt'
 try {
     Write-InitializeLog "Begin $TransactionAction"
@@ -49,7 +62,17 @@ try {
         # a prepared journal means the user step was interrupted and must be restored.
         if($committed -and $pending.state -eq 'initialized'){Remove-Item $userJournal}else{Restore-UserJournal $root}
     }
-    $version=(Get-Content -LiteralPath "$PSScriptRoot\manifest.json" -Raw|ConvertFrom-Json).version
+    $manifest=Get-Content -LiteralPath "$PSScriptRoot\manifest.json" -Raw|ConvertFrom-Json
+    $version=$manifest.version
+    # A fallback-only compiler run is not a successful first install. Validate the
+    # actual default sources before trusting even a same-version completion marker.
+    $dataFiles=@($manifest.files|Where-Object {$_.path -like 'DefaultData\*'})
+    if(!$dataFiles.Count){throw '安装清单中没有默认码表和皮肤，请重新下载安装程序。'}
+    foreach($entry in $dataFiles){
+        if($entry.path -match '(^[\\/]|:|(^|[\\/])\.\.([\\/]|$))'){throw 'Invalid default-data manifest path.'}
+        $source=Join-Path $PSScriptRoot $entry.path
+        if(!(Test-Path -LiteralPath $source -PathType Leaf) -or (Get-FileHash -LiteralPath $source).Hash -ne $entry.sha256){throw "安装文件缺失或损坏：$($entry.path)。请重新下载安装程序。"}
+    }
     $marker=Join-Path $root 'installed-data-version.txt'
     $baselinePath=Join-Path $root 'installed-data-baseline.json'
     if($Quiet -and !$Transaction -and (Test-Path -LiteralPath $marker) -and (Get-Content -LiteralPath $marker -Raw).Trim() -eq $version){exit 0}

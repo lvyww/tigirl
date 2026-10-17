@@ -1,6 +1,8 @@
 {
-  "source": "Tigirl-2026.9.10.4-x64/DefaultData release snapshot plus sentence annotations from commit 5f39d84",
+  "source": "Bundled workspace sources as of 2026-10-18; Tiger and Wubi 86 schemas with shared pinyin and annotations",
   "schemes": [
+    "五笔86",
+    "五笔86整句",
     "虎整句",
     "虎码字词"
   ],
@@ -9,6 +11,30 @@
     "拼音反查码表/拼音.txt": {
       "bytes": 1262289,
       "sha256": "8b8a0ecfcae5b7b85f5a98c78615163c5d9cbdf28561aa2ee88fc44be508ad2b"
+    },
+    "码表/五笔86/1拼音.注释": {
+      "bytes": 475915,
+      "sha256": "0d44f9289e71cd9d5f32a2df64364298740a289bb4d518b349db02192991b721"
+    },
+    "码表/五笔86/unicode.注释": {
+      "bytes": 1170378,
+      "sha256": "1f82bddfbb8a67eb449a882de3cdc74c1b4bcc32064bec743738b166ab83d8d3"
+    },
+    "码表/五笔86/五笔86.txt": {
+      "bytes": 1227173,
+      "sha256": "d97271b90292e5f41618d86cf0c34131e4c604e8493980a81bf13274fcefcedc"
+    },
+    "码表/五笔86整句/1拼音.注释": {
+      "bytes": 475915,
+      "sha256": "0d44f9289e71cd9d5f32a2df64364298740a289bb4d518b349db02192991b721"
+    },
+    "码表/五笔86整句/unicode.注释": {
+      "bytes": 1170378,
+      "sha256": "1f82bddfbb8a67eb449a882de3cdc74c1b4bcc32064bec743738b166ab83d8d3"
+    },
+    "码表/五笔86整句/五笔86整句.txt": {
+      "bytes": 245766,
+      "sha256": "89eb1cb3015cbbe2820b77f6e349eab1c050c8e0e0fd5adbda4e117bbf437bbc"
     },
     "码表/虎整句/1拼音.注释": {
       "bytes": 475915,
@@ -23,8 +49,8 @@
       "sha256": "5c3b2a8516a7e25d02bdbdd22f2ece30ffe5235315e80606f92695c4d0a1fedd"
     },
     "码表/虎整句/虎整句.txt": {
-      "bytes": 145994,
-      "sha256": "5a1de92ccebfe82cbba91de9ddd671f2587f4ca0436f443abf5416e8bb8c5db5"
+      "bytes": 144685,
+      "sha256": "ab882074208240671c273c821da5ee7ec5e53714086a47c6b69341500045d2f7"
     },
     "码表/虎整句/虎码.拆分": {
       "bytes": 1838854,

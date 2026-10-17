@@ -16,7 +16,7 @@ def build(destination=None):
     horizontal = f'0,260,{width - 261}'
     vertical = f'0,855,{height - 856}'
     top, bottom, left, right = 890, height - 900 + 90, 250, 180
-    lines = ['[General]', 'skin_name=虎兄贵', 'skin_author=虎娘',
+    lines = ['[General]', 'skin_name=虎兄贵-健身', 'skin_author=虎娘',
              'preview_comp=panel.png', '[Display]', 'font_size=200',
              'font_ch=Microsoft YaHei UI', 'font_en=Microsoft YaHei UI',
              'pinyin_color=0x343434', 'zhongwen_first_color=0x1069a8',
@@ -34,7 +34,7 @@ def build(destination=None):
                       f'{prefix}_layout_horizontal={horizontal}',
                       f'{prefix}_layout_vertical={vertical}',
                       f'{prefix}_marge={top},{bottom},{left},{right}']
-    output = directory / '虎兄贵.ssf'
+    output = directory / '虎兄贵-健身.ssf'
     with zipfile.ZipFile(output, 'w') as archive:
         for name, content in [('skin.ini', ('\n'.join(lines)+'\n').encode('utf-8-sig')),
                               ('panel.png', artwork)]:

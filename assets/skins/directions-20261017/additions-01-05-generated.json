@@ -1,0 +1,155 @@
+{
+  "generator": "built-in image_gen",
+  "fallback_used": false,
+  "prompts": [
+    "additions-01-05-prompts.json",
+    "additions-01-05-refinement-prompts.json",
+    "grapefruit-soda/horizontal-cleanup-prompt.txt",
+    "moon-osmanthus/final-prompts.json"
+  ],
+  "images": [
+    {
+      "file": "grapefruit-soda/horizontal.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-3509ebad-ad79-47fe-9759-fbde613922ab.png",
+      "stage": "initial",
+      "selected": false,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1222836,
+      "sha256": "895f7653197371efce04df095853c14795d68c40a04294cda0c995738bd89c80"
+    },
+    {
+      "file": "grapefruit-soda/vertical.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-81738ea2-e24b-41fa-9afe-1e1e2ba821f0.png",
+      "stage": "initial",
+      "selected": false,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "bytes": 1808722,
+      "sha256": "86f603e90afbf087567735b0e762773ef99eee674dc7f9b7e651353e5a9e1d6d"
+    },
+    {
+      "file": "moon-osmanthus/horizontal.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-3373243e-8208-4997-a052-49b3a8890c6e.png",
+      "stage": "initial",
+      "selected": false,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1250255,
+      "sha256": "1ece452d65d16ff4d2c59c44c1c649925eb7bad029917e2fecafb3a5a015ddb0"
+    },
+    {
+      "file": "moon-osmanthus/vertical.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-8c0f55d9-3612-4c51-816e-7968ff6536f6.png",
+      "stage": "initial",
+      "selected": false,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "bytes": 2041010,
+      "sha256": "a24a7e02eba5199298b42f95fde0a4adfdf074b51dc6e78d21f648b18d133346"
+    },
+    {
+      "file": "grapefruit-soda/horizontal-production.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-19c6f725-5c19-4460-b8e8-9d34dc9d2a89.png",
+      "stage": "stretch refinement",
+      "selected": false,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1505651,
+      "sha256": "13469efd36b0e82781a9f4e6d5434e7d1e674c13f9d0c3a2885a632ebde8219c"
+    },
+    {
+      "file": "grapefruit-soda/vertical-production.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-acae9574-8652-40ee-b804-4f3da9aa9173.png",
+      "stage": "stretch refinement",
+      "selected": true,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "bytes": 1777464,
+      "sha256": "20c0316c942572ad1b745b73277043dd5f7b3624c96407732a41469214b32b32"
+    },
+    {
+      "file": "moon-osmanthus/horizontal-production.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-edfbf737-1a4d-47a5-ac63-0587e861b22c.png",
+      "stage": "stretch refinement",
+      "selected": false,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1290902,
+      "sha256": "52c898dd5cfbef62297abdbca5849a9782993decae5453f787f99a89e25b9f62"
+    },
+    {
+      "file": "moon-osmanthus/vertical-production.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-52fd2570-d2d6-43e1-ad8d-53cf81ef2ee3.png",
+      "stage": "rejected: transparent panel hole",
+      "selected": false,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "bytes": 2024312,
+      "sha256": "710d8ef15610531d34c538c039cf9ec8022d7ddf45ce23efe381e730f098fa10"
+    },
+    {
+      "file": "grapefruit-soda/horizontal-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-e3d5be7f-6b43-47a1-a352-06788874feff.png",
+      "stage": "final stretch cleanup",
+      "selected": true,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1418152,
+      "sha256": "c6e6db2805faf2ae7e3faae40983ed51f2d68c9d246375c7fd110ad252c0c8a0"
+    },
+    {
+      "file": "moon-osmanthus/horizontal-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-48e86dbf-beb2-4ed2-8f85-c9034f743729.png",
+      "stage": "final stretch cleanup",
+      "selected": true,
+      "dimensions": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "bytes": 1143067,
+      "sha256": "7b257d1c77cc3f05e9ef865cd098204e942d9b362bd94f7fe3104f8d61f60162"
+    },
+    {
+      "file": "moon-osmanthus/vertical-final.png",
+      "source": "/home/yc/.codex/generated_images/01a1076e-8a1a-79a1-ba78-029f074368e2/exec-2c488096-f06a-40fe-ba14-f75663d1f264.png",
+      "stage": "opaque panel repair",
+      "selected": true,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "bytes": 1989395,
+      "sha256": "9d7134248cba59148610d9a4b83b3cffccad96f1c90176798386a8af2cfff32f"
+    }
+  ]
+}

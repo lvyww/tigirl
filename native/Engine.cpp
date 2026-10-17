@@ -430,6 +430,11 @@ KeyResult Engine::sentence(const KeyEvent& key,const SentencePathQueries& querie
             KeyResult pending;pending.handled=true;pending.awaitSentenceDecode=true;return pending;
         }
         char16_t c=letter(vk)?static_cast<char16_t>(vk+32):vk==Semi?u';':vk==Quote?u'\'':static_cast<char16_t>(vk>=96?'0'+vk-96:vk);
+        if(digitKey(vk)) {
+            // Normalize the physical key once, using the current ordinary-mode
+            // bindings. Unbound digits keep their original sentence rank.
+            if(const int rank=selection(vk))c=static_cast<char16_t>(u'0'+rank%10);
+        }
         auto commit=sentence_.appendAutomatic(c,sentenceAutomatic_,sentenceRetainedRaw_,queries);
         syncSentenceRaw();KeyResult result{true,false,commit?std::move(*commit):std::u16string{}};
         result.learning=sentence_.takeLearning();return result;

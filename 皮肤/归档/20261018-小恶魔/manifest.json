@@ -1,0 +1,16 @@
+{
+  "archived_on": "2026-10-18",
+  "reason": "按用户要求从正式包体移除，保留成品与可重建素材。",
+  "files": [
+    {
+      "file": "虎娘-绯绒小恶魔.ssf",
+      "sha256": "a27fefea200d26601bb88895b426923aad738dd5ee3ecd7c732ebbdb85f1c13d",
+      "bytes": 2896455
+    },
+    {
+      "file": "虎娘-莓糖小恶魔.ssf",
+      "sha256": "18c042e9de1c85fffc85aa9959211ac028c98727e32bfaf64c346b2c0a3c8185",
+      "bytes": 2679849
+    }
+  ]
+}

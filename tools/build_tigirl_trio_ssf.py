@@ -8,9 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # Compact, single-row backgrounds expand for code and additional candidates.
 # A 200 px baseline reduces the illustration without changing runtime text size.
 SKINS = (
-    ('虎纹奶油', 'tiger-cream', 670, 204, 155, 200, '0x246dcc', '0x303b50', '0x626e80'),
-    ('蜜桃虎娘', 'peach-tigirl', 650, 154, 210, 240, '0x7545be', '0x48405c', '0x847388'),
-    ('元气虎娘', 'energetic-tigirl', 640, 274, 170, 220, '0x1978be', '0x202e41', '0x5f7069'),
+    ('虎娘-虎纹奶油', 'tiger-cream', 670, 204, 155, 200, '0x246dcc', '0x303b50', '0x626e80'),
+    ('虎娘-蜜桃', 'peach-tigirl', 650, 154, 210, 240, '0x7545be', '0x48405c', '0x847388'),
+    ('虎娘-元气', 'energetic-tigirl', 640, 274, 170, 220, '0x1978be', '0x202e41', '0x5f7069'),
 )
 
 

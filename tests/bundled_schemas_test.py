@@ -1,4 +1,4 @@
-"""Verify bundled source bytes and import both real schemas without a model.
+"""Verify bundled source bytes and import all real schemas without a model.
 
 Run build_native.ps1 first on Windows, then pass --platform x64 or Win32.
 WSL can use the matching Windows executables. --verify-only also works on Linux.
@@ -80,7 +80,8 @@ def main():
             imported = json.loads(completed.stdout)
             assert imported['published'] and imported['main_records'] > 1000 and imported['pinyin_records'] > 1000, imported
             ordinary = sections(output)
-            assert '交' in ordinary[1]['ab'], (scheme, 'ab')
+            expected = '节' if scheme in ('五笔86', '五笔86整句') else '交'
+            assert expected in ordinary[1]['ab'], (scheme, 'ab', expected)
             assert '你' in ordinary[2]['ni'], (scheme, 'ni')
             if scheme == '虎码字词':
                 assert ordinary[3].get('你') and ordinary[4].get('你'), 'Missing comments/splits'

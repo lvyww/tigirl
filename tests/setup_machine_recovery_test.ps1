@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference='Stop'
+﻿param([ValidateSet('x64','arm64')][string]$NativeArchitecture='x64')
+$ErrorActionPreference='Stop'
 function Check($Value,$Message){if(!$Value){throw $Message}}
 # Load function definitions only; never execute the elevated entry point or real registry calls.
 $tokens=$null;$errors=$null
@@ -8,10 +9,11 @@ foreach($fn in $ast.FindAll({param($node)$node -is [Management.Automation.Langua
  Invoke-Expression $fn.Extent.Text
 }
 . "$PSScriptRoot\..\packaging\data.ps1"
-function Get-PackageDll($Dir,$Arch){Join-Path $Dir "$Arch\Tigirl.dll"}
+function Get-PackageDll($Dir,$Arch){if($Arch -eq 'native'){$Arch=$script:nativeArchitecture};Join-Path $Dir "$Arch\Tigirl.dll"}
+$script:nativeArchitecture=$NativeArchitecture
 function Get-PackageTool($Dir){Join-Path $Dir 'shared\Tigirl.exe'}
 function Get-ComPath($View){$script:registry[$View]}
-function Invoke-Registration($Dir,[switch]$Remove){foreach($pair in @(@('Registry64','x64'),@('Registry32','x86'))){$script:registry[$pair[0]]=if($Remove){$null}else{Get-PackageDll $Dir $pair[1]}}}
+function Invoke-Registration($Dir,[switch]$Remove){foreach($pair in @(@('Registry64','native'),@('Registry32','x86'))){$script:registry[$pair[0]]=if($Remove){$null}else{Get-PackageDll $Dir $pair[1]}}}
 function Set-MachineEntries($Dir,$Version){}
 function Remove-MachineEntries(){}
 $InstallRoot=Join-Path $env:TEMP ('Tigirl-machine-fixture-'+[guid]::NewGuid().ToString('N'))
@@ -20,20 +22,20 @@ $old=Join-Path $InstallRoot 'versions\1111111111111111';$new=Join-Path $InstallR
 New-Item $old,$new -ItemType Directory -Force|Out-Null
 $previous=[pscustomobject]@{directory=$old;version='2026.9.9.5'}
 try{
- $script:registry=@{Registry64=(Get-PackageDll $new 'x64');Registry32=(Get-PackageDll $old 'x86')}
+ $script:registry=@{Registry64=(Get-PackageDll $new 'native');Registry32=(Get-PackageDll $old 'x86')}
  Save-Json @{id='mixed';directory=$new;previous=$previous;state='registering'} $journal
  Restore-Transaction
- Check ($script:registry.Registry64 -eq (Get-PackageDll $old 'x64')) 'Native registration not restored'
+ Check ($script:registry.Registry64 -eq (Get-PackageDll $old 'native')) 'Native registration not restored'
  Check ($script:registry.Registry32 -eq (Get-PackageDll $old 'x86')) 'x86 registration not restored'
  Check ((Get-Content $NativeTigerRecord -Raw|ConvertFrom-Json).directory -eq $old) 'Install record not restored'
  Check (!(Test-Path $journal)) 'Recovery was not committed'
  Restore-Transaction
  # A crash after atomic commit must not reactivate a now-retired previous version.
- $script:registry=@{Registry64=(Get-PackageDll $new 'x64');Registry32=(Get-PackageDll $new 'x86')}
+ $script:registry=@{Registry64=(Get-PackageDll $new 'native');Registry32=(Get-PackageDll $new 'x86')}
  Save-Json @{directory=$new;version='2026.9.20.1';transaction='published';previous=$null} $NativeTigerRecord
  Save-Json @{id='published';directory=$new;previous=$previous;state='registered'} $journal
  Restore-Transaction
- Check ($script:registry.Registry64 -eq (Get-PackageDll $new 'x64')) 'Published commit rolled back'
+ Check ($script:registry.Registry64 -eq (Get-PackageDll $new 'native')) 'Published commit rolled back'
  Check ((Get-Content $NativeTigerRecord -Raw|ConvertFrom-Json).directory -eq $new) 'Published install record replaced'
  Check (Test-Path (Join-Path $InstallRoot 'committed-published.json')) 'Published journal not finalized'
  Save-Json @{id='foreign';directory=$new;previous=$previous;state='registering'} $journal

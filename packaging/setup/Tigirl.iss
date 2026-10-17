@@ -2,7 +2,25 @@
  #error PackageDir is required
 #endif
 #ifndef ProductVersion
- #define ProductVersion "2026.10.10.2"
+ #define ProductVersion "2026.10.15.1"
+#endif
+#ifndef PackageArchitecture
+ #define PackageArchitecture "universal"
+#endif
+#if PackageArchitecture == "x64"
+ #define ArchitectureLabel "x64-x86"
+ #define AllowedArchitectures "x64os"
+ #define Install64Architectures "x64os"
+ #define PlatformRequirement "需要 Intel/AMD x64 Windows 10 1809 或更新版本；ARM64 设备请使用通用安装包，不支持 32 位 Windows。"
+ #define PlatformDescription "支持 Intel/AMD x64 系统上的 x64 和 x86 应用。"
+#elif PackageArchitecture == "universal"
+ #define ArchitectureLabel "x64-ARM64-x86"
+ #define AllowedArchitectures "x64compatible and x86compatible"
+ #define Install64Architectures "x64compatible"
+ #define PlatformRequirement "需要 x64 Windows 10 1809 或更新版本，或 ARM64 Windows 11；不支持 32 位 Windows。"
+ #define PlatformDescription "自动适配 x64 和 ARM64 系统，支持 x64、ARM64 和 x86 应用。"
+#else
+ #error Unsupported PackageArchitecture
 #endif
 [Setup]
 AppId=Tigirl
@@ -15,8 +33,8 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 UsePreviousAppDir=no
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64os
-ArchitecturesInstallIn64BitMode=x64os
+ArchitecturesAllowed={#AllowedArchitectures}
+ArchitecturesInstallIn64BitMode={#Install64Architectures}
 MinVersion=10.0.17763
 WizardStyle=modern
 WizardSizePercent=110
@@ -25,7 +43,7 @@ WizardImageFile=..\..\assets\Tigirl-wizard.bmp
 WizardSmallImageFile=..\..\assets\Tigirl-wizard-small.bmp
 UninstallDisplayIcon={app}\Tigirl.Maintenance.exe
 OutputDir={#OutputPath}
-OutputBaseFilename=虎娘-{#ProductVersion}-x64-x86-安装程序
+OutputBaseFilename=虎娘-{#ProductVersion}-{#ArchitectureLabel}-安装程序
 ; Highest standard preset; leave payload extraction and installation unchanged.
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -46,8 +64,8 @@ DisableWelcomePage=no
 [Languages]
 Name: "chinesesimp"; MessagesFile: "{#ChineseMessages}"
 [Messages]
-WindowsVersionNotSupported=此安装程序仅支持 Intel/AMD x64 Windows 10 1809 或更新版本，不支持 ARM64 和 32 位 Windows。
-OnlyOnTheseArchitectures=此安装程序仅支持 Intel/AMD x64 Windows，包含 x86 程序支持；不支持 ARM64 和 32 位 Windows。
+WindowsVersionNotSupported={#PlatformRequirement}
+OnlyOnTheseArchitectures={#PlatformRequirement}
 [LangOptions]
 DialogFontName=Microsoft YaHei UI
 DialogFontSize=9
@@ -64,6 +82,7 @@ Source: "{#PackageDir}\data.ps1"; DestDir: "{app}\maintenance"; Flags: ignorever
 Source: "{#PackageDir}\retirement.ps1"; DestDir: "{app}\maintenance"; Flags: ignoreversion uninsrestartdelete
 Source: "{#PackageDir}\setup\deploy.ps1"; DestDir: "{app}\maintenance\setup"; Flags: ignoreversion uninsrestartdelete
 [Icons]
+Name: "{commonprograms}\虎娘\修复皮肤和码表"; Filename: "{code:VersionDirectory}\repair-user-data.cmd"
 Name: "{commonprograms}\虎娘\输入设置"; Filename: "{code:VersionDirectory}\shared\Tigirl.exe"
 [Run]
 Filename: "{code:VersionDirectory}\shared\Tigirl.exe"; Description: "打开输入设置"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: CanOpenSettings
@@ -111,6 +130,23 @@ function StableLogDirectory: String;
 begin Result := ExpandConstant('{commonappdata}\Tigirl\Logs'); end;
 function StableLogPath: String;
 begin Result := StableLogDirectory+'\setup.log'; end;
+function IsWindowEnabled(Wnd: HWND): BOOL;
+  external 'IsWindowEnabled@user32.dll stdcall setuponly';
+function EnableWindow(Wnd: HWND; Enable: BOOL): BOOL;
+  external 'EnableWindow@user32.dll stdcall setuponly';
+procedure RestoreFinishedWizard;
+begin
+  { All synchronous install/user steps and their dialogs have returned before
+    wpFinished. Repair a leftover native WS_DISABLED state only at this boundary;
+    never enable the wizard while a child process or modal dialog is running.
+    VCL's Enabled property may still be True, so its setter alone is insufficient. }
+  if not IsWindowEnabled(WizardForm.Handle) then begin
+    Log('Finished page: restoring disabled wizard window.');
+    WizardForm.Enabled:=True;
+    EnableWindow(WizardForm.Handle,True);
+  end;
+  Log('Finished page: window enabled='+IntToStr(Ord(IsWindowEnabled(WizardForm.Handle))));
+end;
 function Deploy(Action, ScriptRoot: String): Boolean;
 var Code: Integer; Params: String;
 begin
@@ -118,6 +154,8 @@ begin
   if InstallGeneration<>'' then Params:=Params+' -Generation '+InstallGeneration;
   Result := Exec(PowerShell, Params, '', SW_HIDE, ewWaitUntilTerminated, Code);
   Log('Deploy '+Action+': '+IntToStr(Code));
+  if not IsUninstaller then
+    Log('Deploy '+Action+': wizard enabled='+IntToStr(Ord(IsWindowEnabled(WizardForm.Handle))));
   if Code=3010 then begin RestartCleanup:=True; Code:=0; end;
   Result := Result and (Code=0);
 end;
@@ -127,14 +165,16 @@ begin
   { This hidden original-user step must never wait for a secondary modal UI. }
   { Conflicting user files are therefore preserved during graphical setup. }
   Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{code:VersionDirectory}\initialize.ps1')+'" -Quiet -RequireStandardUser -NoDialogs -SkipConflicts -Transaction "'+TxId+'" -TransactionAction '+Action;
-  if not ExecAsOriginalUser(PowerShell,Params,'',SW_HIDE,ewWaitUntilTerminated,Code) then Code:=1;
+  if not ExecAsOriginalUser(PowerShell,Params,'',SW_HIDE,ewWaitUntilTerminated,Code) then begin
+    Log('UserStep '+Action+' launch failed: '+IntToStr(Code)); Code:=1;
+  end else Log('UserStep '+Action+' exit: '+IntToStr(Code));
+  Log('UserStep '+Action+': wizard enabled='+IntToStr(Ord(IsWindowEnabled(WizardForm.Handle))));
   Result:=Code;
 end;
 function InitializeSetup: Boolean;
 begin
-  Result := not IsArm64;
-  if Result then InstallGeneration:=NewInstallGeneration;
-  if not Result then SuppressibleMsgBox('此安装程序仅支持 Intel/AMD x64 Windows。ARM64 系统请使用对应版本。',mbError,MB_OK,IDOK);
+  InstallGeneration:=NewInstallGeneration;
+  Result := True;
 end;
 procedure OpenLog(Sender: TObject);
 var Code: Integer; Path: String;
@@ -153,7 +193,7 @@ end;
 procedure InitializeWizard;
 begin
   Info:=CreateOutputMsgPage(wpWelcome,'安装说明','将安装完整的虎娘输入法',
-    '支持 x64 和 x86 应用。'+#13#10+#13#10+
+    '{#PlatformDescription}'+#13#10+#13#10+
     '程序安装到 Program Files，码表、设置和个人词条保存在当前用户的 %LOCALAPPDATA%\Tigirl。'+#13#10+#13#10+
     '已有设置将保留。未修改的默认码表会更新；用户修改或来源未知时保留现有文件，不阻塞安装。'+#13#10+#13#10+
     '安装完成后请重新打开需要输入的程序。');
@@ -188,7 +228,7 @@ var Code: Integer; Text: AnsiString;
 begin
   if CurStep=ssPostInstall then begin
     try
-      WizardForm.StatusLabel.Caption:='正在切换到新版 x64 / x86 输入法……';
+      WizardForm.StatusLabel.Caption:='正在注册适合本机架构的新版输入法……';
       if not Deploy('Apply',ExpandConstant('{code:VersionDirectory}')) then RaiseException('输入法注册失败。');
       Applied:=True;
       { Backend writes a plain transaction-id file for the original-user handoff. }
@@ -220,11 +260,12 @@ begin
       WizardForm.FinishedLabel.Caption:='新版输入法注册或提交失败，已尝试恢复原注册。请点击“打开日志”后重试。';
     end else if UserInitFailed then begin
       WizardForm.FinishedHeadingLabel.Caption:='程序更新完成';
-      WizardForm.FinishedLabel.Caption:='新版输入法已经安装并启用，但当前用户的码表初始化未完成；原用户数据已恢复。可重新登录后重试初始化，程序更新不会因此回退。';
+      WizardForm.FinishedLabel.Caption:='新版输入法已经安装并启用，但当前用户的码表初始化未完成；原用户数据已恢复。请从开始菜单“虎娘 → 修复皮肤和码表”补齐当前用户数据，程序更新不会因此回退。';
     end else if Deferred then
-      WizardForm.FinishedLabel.Caption:='程序已安装并切换到新版。请用日常使用的 Windows 账号重新登录，完成码表初始化。'
+      WizardForm.FinishedLabel.Caption:='程序已安装并切换到新版。请回到日常使用的 Windows 账号，从开始菜单“虎娘 → 修复皮肤和码表”完成初始化。'
     else WizardForm.FinishedLabel.Caption:='虎娘已安装。请重开微信、Word 等正在使用的程序。'+#13#10+'可以从开始菜单“虎娘 → 输入设置”调整选项。';
     if RestartCleanup and not Failed then WizardForm.FinishedLabel.Caption:=WizardForm.FinishedLabel.Caption+#13#10+#13#10+'旧版文件将在重启后清理；无法登记的文件已记录日志，下次维护时重试。';
+    RestoreFinishedWizard;
   end;
 end;
 function NeedRestart: Boolean;

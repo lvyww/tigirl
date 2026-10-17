@@ -21,7 +21,7 @@ struct CandidateStyle {
     double fontSize=17;
     int candidateDelayMs=0,annotationDelayMs=0;
     bool animationEnabled=true;
-    int animationDurationMs=100;
+    int animationDurationMs=70;
     bool operator==(const CandidateStyle& other) const {
         return layoutMode==other.layoutMode && skinRevision==other.skinRevision && skinFont==other.skinFont && skinAnimation==other.skinAnimation && skinEnabled==other.skinEnabled && animationEnabled==other.animationEnabled && animationDurationMs==other.animationDurationMs && codeMask==other.codeMask && vertical==other.vertical && showIndex==other.showIndex && showCode==other.showCode &&
             candidateDelayMs==other.candidateDelayMs && annotationDelayMs==other.annotationDelayMs &&

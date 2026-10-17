@@ -1,6 +1,6 @@
-虎娘 x64 安装包（含 x86 程序支持）
+虎娘安装包（含 x86 程序支持）
 
-目标：Intel/AMD x64 Windows 10 1809（含 LTSC 2019） 及更新版本。不适用于 ARM64 或 32 位 Windows。
+x64 包适用于 Intel/AMD x64 Windows 10 1809（含 LTSC 2019）及更新版本。universal 包另含 ARM64X 输入法组件，可在 ARM64 Windows 11 上安装。两者均支持 x86 应用，不支持 32 位 Windows。
 
 完整解压后双击 install.cmd。允许 UAC 提权；码表初始化仍由原来的 Windows 用户执行。
 同名同内容文件自动跳过；内容不同时集中选择覆盖或跳过。覆盖的原文件保存在用户目录 backups 中，files.json 记录对应关系。
@@ -27,7 +27,7 @@
 
 程序：%ProgramFiles%\Tigirl\versions\版本标识
 安装记录：%ProgramFiles%\Tigirl\install.json
-x64 与 x86 目录只保存各自的 TSF DLL；模型、词库、字体及桌面工具只在 shared 目录保存一份。
+x64、x86 与 universal 包中的 arm64 目录只保存各自的 TSF DLL；模型、词库、字体及桌面工具只在 shared 目录保存一份。
 UWP 的设置和词条操作需要 Tigirl 用户数据目录的 AppContainer 修改权限及低完整性标签；安装器会设置。
 UWP 菜单通过 nativetiger URI 启动按需工具；Windows 可能显示打开应用的确认提示。没有常驻 Core。
 

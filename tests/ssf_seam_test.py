@@ -28,9 +28,11 @@ def main():
                    png_chunk(b'IDAT', zlib.compress(pixels)) + png_chunk(b'IEND', b''))
             ini = (f'[Scheme_H1]\npic=bg.png\nlayout_horizontal={mode},5,7\n'
                    f'layout_vertical={mode},3,5\n')
-            with zipfile.ZipFile(fixtures / f'flat-{alpha}-{mode}.ssf', 'w', zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr('skin.ini', ini)
-                archive.writestr('bg.png', png)
+            # Exercise original pixels and the strongly reduced texture path.
+            for suffix, display in (('', ''), ('-scaled', '[Display]\nfont_size=100\n')):
+                with zipfile.ZipFile(fixtures / f'flat-{alpha}-{mode}{suffix}.ssf', 'w', zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr('skin.ini', display + ini)
+                    archive.writestr('bg.png', png)
     if args.probe:
         subprocess.run([str(args.probe.resolve()), str(fixtures.resolve()),
                         str((args.work / 'output').resolve())], check=True, timeout=60)

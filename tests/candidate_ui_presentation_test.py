@@ -22,7 +22,7 @@ COMMON = [
     "native/tsf/PrivateFonts.cpp",
 ]
 LIBS = ["ole32.lib", "oleaut32.lib", "uuid.lib", "user32.lib", "gdi32.lib",
-        "shcore.lib", "d2d1.lib", "dwrite.lib", "windowscodecs.lib"]
+        "shell32.lib", "shcore.lib", "d2d1.lib", "dwrite.lib", "windowscodecs.lib"]
 
 
 def main() -> None:

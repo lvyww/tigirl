@@ -1,0 +1,158 @@
+[
+  {
+    "id": "01",
+    "name": "虎娘-绯绒小恶魔",
+    "slug": "crimson-velvet",
+    "ink": "#38252D",
+    "first": "#A01D39",
+    "hint": "#816B70",
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22,
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1455,
+      "min_height": 868,
+      "stretch_horizontal": [
+        0,
+        350,
+        1104
+      ],
+      "stretch_vertical": [
+        0,
+        700,
+        167
+      ],
+      "insets": [
+        610,
+        150,
+        200,
+        200
+      ],
+      "panel_bounds": [
+        280,
+        590,
+        1500,
+        720
+      ],
+      "character_bounds": [
+        680,
+        30,
+        1770,
+        574
+      ]
+    },
+    "vertical": {
+      "file": "vertical-production.png",
+      "min_width": 1085,
+      "min_height": 1230,
+      "stretch_horizontal": [
+        0,
+        445,
+        639
+      ],
+      "stretch_vertical": [
+        0,
+        245,
+        984
+      ],
+      "insets": [
+        285,
+        180,
+        300,
+        640
+      ],
+      "panel_bounds": [
+        300,
+        320,
+        650,
+        950
+      ],
+      "character_bounds": [
+        720,
+        282,
+        1250,
+        1232
+      ]
+    }
+  },
+  {
+    "id": "02",
+    "name": "虎娘-莓糖小恶魔",
+    "slug": "strawberry-candy",
+    "ink": "#642535",
+    "first": "#D02A68",
+    "hint": "#98727E",
+    "font_size": 140,
+    "candidate_spacing": 84,
+    "line_spacing": 17,
+    "code_gap": 22,
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "min_width": 1495,
+      "min_height": 878,
+      "stretch_horizontal": [
+        0,
+        385,
+        1109
+      ],
+      "stretch_vertical": [
+        0,
+        667,
+        210
+      ],
+      "insets": [
+        610,
+        225,
+        250,
+        230
+      ],
+      "panel_bounds": [
+        280,
+        590,
+        1500,
+        700
+      ],
+      "character_bounds": [
+        674,
+        65,
+        1760,
+        563
+      ]
+    },
+    "vertical": {
+      "file": "vertical.png",
+      "min_width": 1195,
+      "min_height": 1215,
+      "stretch_horizontal": [
+        0,
+        490,
+        704
+      ],
+      "stretch_vertical": [
+        0,
+        350,
+        864
+      ],
+      "insets": [
+        340,
+        230,
+        210,
+        650
+      ],
+      "panel_bounds": [
+        250,
+        350,
+        600,
+        980
+      ],
+      "character_bounds": [
+        704,
+        407,
+        1250,
+        1240
+      ]
+    }
+  }
+]

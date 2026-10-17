@@ -39,6 +39,16 @@ private:
     const skin::Layout* skinLayout_=nullptr;
     const skin::Image* skinImage_=nullptr;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> skinBitmap_;
+    // CPU-only LRU survives WIC render-target recreation during size animation.
+    // It belongs to this renderer/image; no apartment-bound COM objects escape.
+    struct SkinRaster {
+        std::size_t frame=0;
+        UINT width=0,height=0;
+        std::vector<std::uint32_t> pixels;
+    };
+    std::vector<SkinRaster> skinRasters_;
+    std::size_t skinRasterBytes_=0;
+    UINT skinBitmapWidth_=0,skinBitmapHeight_=0;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> annotationBrush_;
     std::vector<std::uint32_t> inks_;
     std::vector<DWRITE_TEXT_RANGE> annotations_;

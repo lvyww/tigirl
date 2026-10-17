@@ -82,6 +82,17 @@ def main():
         check('candidate malformed field remains rejected', archive(ini=background+'残留文本\n'), False)
         check('candidate after unused section still validated', archive(ini='[StatusBar]\n残留文本\n'+background+'broken'), False)
         check('authored typography', archive(ini='[Display]\nfont_size=23\ncandidate_spacing=5\nline_spacing=7\ncharacter_spacing=2\n'+background), True, 'metrics 23 5 7 2')
+        check('compact width opt-in', archive(ini=background+'min_width=1455\n'), True, 'minimum_width 0 1455')
+        check('legacy canvas minimum', archive(ini=background), True, 'minimum_width 0 0')
+        for value in ('0', '-1', '8193', 'abc', '999999999999999999999999'):
+            check('invalid minimum width '+value, archive(ini=background+f'min_width={value}\n'), True, 'minimum_width 0 0')
+        check('independent candidate minimum', archive(ini='[Scheme_H2]\npinyin_pic=bg.png\npinyin_min_width=1500\nzhongwen_pic=bg.png\nzhongwen_min_width=1455\n'), True, 'minimum_width 3 1455')
+        check('compact height opt-in', archive(ini=background+'min_height=1065\n'), True, 'minimum_height 0 1065')
+        check('legacy canvas height', archive(ini=background), True, 'minimum_height 0 0')
+        for value in ('0', '-1', '8193', 'abc', '999999999999999999999999'):
+            check('invalid minimum height '+value, archive(ini=background+f'min_height={value}\n'), True, 'minimum_height 0 0')
+        check('independent vertical code height', archive(ini='[Scheme_V2]\npinyin_pic=bg.png\npinyin_min_height=1185\nzhongwen_pic=bg.png\nzhongwen_min_height=1065\n'), True, 'minimum_height 4 1185')
+        check('independent vertical candidate height', archive(ini='[Scheme_V2]\nzhongwen_pic=bg.png\nzhongwen_min_height=1065\n'), True, 'minimum_height 5 1065')
         check('APNG sequence/clock', archive(image=png(True)), True, '2 2 2 1 20 300')
         check('APNG wrong sequence', archive(image=png(True, sequence=2)), False)
         check('APNG wrong count', archive(image=png(True, frame_count=3)), False)

@@ -8,3 +8,32 @@ __pycache__/
 # Local readable learning records and per-process Rime lock directories.
 自学习*.txt*
 自学习锁-*/
+
+# Keep skin comparison captures and experimental derivatives locally.
+/assets/skins/directions-20261017-recut/
+/assets/skins/directions-20261017-v2/
+/design/little-devil-skins-20261017/
+/design/neon-horizontal-spacing-20261018/
+/design/neon-panel-repair-20261017/
+/design/rain-compact-20261017/
+/design/skin-catalog-rename-20261017/
+/design/skin-directions-20261017.zip
+/design/skin-ini-study-20261017/
+/design/skin-pack-20261017/
+/design/skin-pack-20261017-original-2x/
+/design/skin-pack-20261017-recut/
+/design/skin-pack-20261017-v1-tuned/
+/design/skin-pack-20261017-v2/
+/design/skin-sampling-review-20261017/
+/design/skin-scaling-20261017/
+/design/skins-01-05-20261017/
+/design/skins-compact-20261017/
+/design/skins-font140-20261017/
+/design/skins-vertical-compact-20261017/
+/皮肤/旧稿放大2倍/
+/皮肤/旧稿裁切重排/
+/皮肤/虎娘新皮肤-02-03-07-09-20261017.zip
+/皮肤/虎娘新皮肤-02-03-07-09-大角色v2-20261017.zip
+/皮肤/虎娘旧稿放大2倍-02-03-07-09-20261017.zip
+/皮肤/虎娘旧稿裁切重排-02-03-07-09-20261017.zip
+/皮肤/虎娘首版100调参-02-03-07-20261017.zip

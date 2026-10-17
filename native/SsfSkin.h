@@ -13,6 +13,8 @@ struct Layout {
     std::u16string image;
     Stretch horizontal,vertical;
     Insets code,candidates;
+    int minimumWidth=0; // Optional Tigirl min_width; 0 preserves the authored canvas.
+    int minimumHeight=0; // Optional min_height with the same authored-coordinate units.
     std::vector<Decoration> decorations;
 };
 enum class Variant { Horizontal,Vertical,HorizontalCode,HorizontalCandidates,VerticalCode,VerticalCandidates };

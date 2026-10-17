@@ -15,7 +15,7 @@ $config="码表存储位置`t$legacy\码表`r`n拼音反查目录`t$legacy\拼�
 $hash=(Get-FileHash "$root\config.txt").Hash
 function Check($Value,$Message){if(!$Value){throw $Message}}
 function Run($Action){
- $p=Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$Package+'\initialize.ps1"'),'-NoEnable','-Quiet','-NoDialogs','-SkipConflicts','-Transaction','test-transaction','-TransactionAction',$Action) -RedirectStandardOutput "$fixture\$Action.out" -RedirectStandardError "$fixture\$Action.err" -PassThru -Wait
+ $p=Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$Package+'\initialize.ps1"'),'-NoEnable','-Quiet','-NoDialogs','-SkipConflicts','-Transaction','test-transaction','-TransactionAction',$Action) -NoNewWindow -RedirectStandardOutput "$fixture\$Action.out" -RedirectStandardError "$fixture\$Action.err" -PassThru -Wait
  Check ($p.ExitCode -eq 0) "User transaction action failed: $Action / $(Get-Content "$fixture\$Action.err" -Raw)"
 }
 try{

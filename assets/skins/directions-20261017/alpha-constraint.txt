@@ -1,0 +1,1 @@
+Production refinement for all remaining edits: Absolutely NO glow, blurred fog, colored haze, broad shadow or color-wash anywhere outside the opaque artwork. All surrounding empty space must be alpha zero right up to the crisp anti-aliased contour. Use a tight composition with the complete frame and mascot occupying most of the canvas; no extra padding beyond edge safety.

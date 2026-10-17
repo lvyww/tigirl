@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NativeProbeName>sentence_digit_bindings_probe</NativeProbeName></PropertyGroup>
+  <Import Project="..\msbuild\NativeApp.props" />
+  <Import Project="..\msbuild\EngineSources.props" />
+  <ItemGroup>
+    <ClCompile Include="sentence_digit_bindings_probe.cpp" />
+    <ClCompile Include="..\native\SentenceLexicon.cpp" />
+    <!-- MSVC diagnoses the decoder's existing 32-bit hash fallback on 64-bit builds. -->
+    <ClCompile Include="..\native\SentenceDecoder.cpp"><DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings></ClCompile>
+    <ClCompile Include="..\native\SentenceCharacterRanks.cpp" />
+    <ClCompile Include="..\native\SentenceNgram.cpp" />
+    <ClCompile Include="..\native\SentenceFivegram.cpp" />
+    <ClCompile Include="..\native\AddWord.cpp" />
+    <ClCompile Include="..\native\LexiconSerialize.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup><ClCompile><MultiProcessorCompilation>true</MultiProcessorCompilation></ClCompile></ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

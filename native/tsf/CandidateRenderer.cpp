@@ -158,8 +158,14 @@ Microsoft::WRL::ComPtr<ID2D1PathGeometry> CandidateRenderer::outline(float inset
 }
 void CandidateRenderer::render(UINT dpi,UINT selected,std::vector<std::uint32_t>& pixels,const SIZE* frameSize) {
     if(dpi<48 || dpi>960)throw std::invalid_argument("Invalid candidate DPI");
-    const UINT width=frameSize?static_cast<UINT>(std::max(1L,frameSize->cx)):pixelWidth(dpi),height=frameSize?static_cast<UINT>(std::max(1L,frameSize->cy)):pixelHeight(dpi);
-    const float frameWidth=frameSize?width*96.f/(dpi*scale_):width_,frameHeight=frameSize?height*96.f/(dpi*scale_):height_;
+    const UINT finalWidth=pixelWidth(dpi),finalHeight=pixelHeight(dpi);
+    const UINT width=frameSize?static_cast<UINT>(std::max(1L,frameSize->cx)):finalWidth,height=frameSize?static_cast<UINT>(std::max(1L,frameSize->cy)):finalHeight;
+    // Pixel surfaces round up, but the painted layout retains its fractional
+    // extent. Animate relative to that same extent: converting the whole rounded
+    // surface back to DIPs stretched even an unchanged axis, then snapped the
+    // skin's bottom/right slices back when publishing the cached final frame.
+    const float frameWidth=width_+(static_cast<float>(width)-finalWidth)*96.f/(dpi*scale_);
+    const float frameHeight=height_+(static_cast<float>(height)-finalHeight)*96.f/(dpi*scale_);
     if(static_cast<std::uint64_t>(width)*height>16000000)throw std::length_error("Candidate surface exceeds limit");
     if(codePane_){
         pixels.assign(static_cast<std::size_t>(width)*height,0);

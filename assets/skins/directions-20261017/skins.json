@@ -1,0 +1,138 @@
+[
+  {
+    "id": "02",
+    "name": "雨竹听风",
+    "slug": "rain-bamboo",
+    "ink": "#254F49",
+    "first": "#956421",
+    "hint": "#627D72",
+    "horizontal": {
+      "file": "horizontal-production.png",
+      "stretch": [
+        650,
+        580
+      ],
+      "insets": [
+        500,
+        220,
+        240,
+        400
+      ]
+    },
+    "vertical": {
+      "file": "vertical.png",
+      "stretch": [
+        450,
+        260
+      ],
+      "insets": [
+        260,
+        240,
+        230,
+        540
+      ]
+    }
+  },
+  {
+    "id": "03",
+    "name": "雪夜铃兰",
+    "slug": "snow-lily",
+    "ink": "#283E59",
+    "first": "#3C6F9B",
+    "hint": "#62788D",
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "stretch": [
+        500,
+        620
+      ],
+      "insets": [
+        500,
+        200,
+        240,
+        280
+      ]
+    },
+    "vertical": {
+      "file": "vertical-final.png",
+      "stretch": [
+        580,
+        400
+      ],
+      "insets": [
+        280,
+        330,
+        290,
+        560
+      ]
+    }
+  },
+  {
+    "id": "07",
+    "name": "霓虹电玩",
+    "slug": "neon-arcade",
+    "ink": "#E6ECF3",
+    "first": "#F68AB5",
+    "hint": "#9EBACF",
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "stretch": [
+        700,
+        540
+      ],
+      "insets": [
+        440,
+        220,
+        150,
+        260
+      ]
+    },
+    "vertical": {
+      "file": "vertical.png",
+      "stretch": [
+        380,
+        195
+      ],
+      "insets": [
+        240,
+        280,
+        150,
+        580
+      ]
+    }
+  },
+  {
+    "id": "09",
+    "name": "深海舰长",
+    "slug": "sea-captain",
+    "ink": "#223D58",
+    "first": "#97621C",
+    "hint": "#637F86",
+    "horizontal": {
+      "file": "horizontal-final.png",
+      "stretch": [
+        700,
+        550
+      ],
+      "insets": [
+        470,
+        220,
+        220,
+        300
+      ]
+    },
+    "vertical": {
+      "file": "vertical-final.png",
+      "stretch": [
+        560,
+        390
+      ],
+      "insets": [
+        280,
+        280,
+        260,
+        550
+      ]
+    }
+  }
+]

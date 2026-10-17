@@ -1,0 +1,34 @@
+[
+  {
+    "id": "07",
+    "name": "霓虹电玩",
+    "group": "虎娘",
+    "slug": "neon-arcade",
+    "board": "07-虎娘-霓虹电玩.png",
+    "ink": "#E6ECF3",
+    "first": "#F68AB5",
+    "hint": "#9EBACF",
+    "panel": "#172238",
+    "details": "Keep the orange-haired tiger girl with the charcoal gaming jacket and headset, midnight-navy opaque panel, turquoise and pink thin angular corner accents. Dark navy text area absolutely flat, no gradients or glare. Small generic game symbols only on fixed corner ends.",
+    "variant": "horizontal",
+    "filename": "horizontal.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/design/skin-directions-20261017/07-虎娘-霓虹电玩.png",
+    "prompt": "Use case: background-extraction / precise-object-edit. From the approved reference board extract ONLY the TOP HORIZONTAL candidate-window skin with its mascot. Keep the same character, costume, colors, material and shape language. Keep the orange-haired tiger girl with the charcoal gaming jacket and headset, midnight-navy opaque panel, turquoise and pink thin angular corner accents. Dark navy text area absolutely flat, no gradients or glare. Small generic game symbols only on fixed corner ends.\nDelete all words, numbers, ab text, cursors, selected-candidate highlight, separators and background scenery. The text-bar interior must be entirely blank, a uniform opaque #172238 fill with no designs. Output only the isolated complete illustration: the long bar and the character leaning over its top-right edge. Tight landscape cutout, roughly 3:1 overall aspect ratio, small safety padding, character ears and decorations fully in frame.\nThe middle of the bar should consist only of straight top/bottom rims with a plain fill; keep mascot and ornaments confined to the ends so the center can stretch. Keep side edges straight through the empty text row. Genuine alpha=0 TRANSPARENCY immediately outside the hard illustrated silhouette. NO halo, NO bloom, NO cast shadow, NO blurry glow, NO mist, NO background color wash. No board, no swatches, no white/black background, no second asset, no text anywhere."
+  },
+  {
+    "id": "09",
+    "name": "深海舰长",
+    "group": "虎兄贵",
+    "slug": "sea-captain",
+    "board": "09-虎兄贵-深海舰长.png",
+    "ink": "#223D58",
+    "first": "#97621C",
+    "hint": "#637F86",
+    "panel": "#FFF8E8",
+    "details": "Keep the same adult muscular anthropomorphic male tiger, full tiger head and broad muzzle, massive forearms, closed cream/navy captain uniform and cap. Keep the navy-and-brass nautical rim and small rope/anchor/compass ornaments only at fixed corners, ivory opaque panel interior.",
+    "variant": "horizontal",
+    "filename": "horizontal.png",
+    "reference": "/mnt/c/Users/yc/Desktop/ime/design/skin-directions-20261017/09-虎兄贵-深海舰长.png",
+    "prompt": "Use case: background-extraction / precise-object-edit. From the approved reference board extract ONLY the TOP HORIZONTAL candidate-window skin with its mascot. Keep the same character, costume, colors, material and shape language. Keep the same adult muscular anthropomorphic male tiger, full tiger head and broad muzzle, massive forearms, closed cream/navy captain uniform and cap. Keep the navy-and-brass nautical rim and small rope/anchor/compass ornaments only at fixed corners, ivory opaque panel interior.\nDelete all words, numbers, ab text, cursors, selected-candidate highlight, separators and background scenery. The text-bar interior must be entirely blank, a uniform opaque #FFF8E8 fill with no designs. Output only the isolated complete illustration: the long bar and the character leaning over its top-right edge. Tight landscape cutout, roughly 3:1 overall aspect ratio, small safety padding, character ears and decorations fully in frame.\nThe middle of the bar should consist only of straight top/bottom rims with a plain fill; keep mascot and ornaments confined to the ends so the center can stretch. Keep side edges straight through the empty text row. Genuine alpha=0 TRANSPARENCY immediately outside the hard illustrated silhouette. NO halo, NO bloom, NO cast shadow, NO blurry glow, NO mist, NO background color wash. No board, no swatches, no white/black background, no second asset, no text anywhere."
+  }
+]
